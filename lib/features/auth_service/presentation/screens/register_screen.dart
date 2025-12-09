@@ -32,36 +32,31 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Lấy chiều rộng màn hình hiện tại
     final width = MediaQuery.of(context).size.width;
-    // Quy ước: Lớn hơn 800px thì coi là Desktop/Tablet ngang
-    final isDesktop = width > 800;
+    final isDesktop = width > 900;
 
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
         child: isDesktop
-            // --- GIAO DIỆN DESKTOP (Split View) ---
+            // --- DESKTOP: Split View ---
             ? Row(
                 children: [
-                  // CỘT TRÁI: Logo + Text (Chiếm 50% màn hình)
                   Expanded(
                     flex: 1,
                     child: Container(
-                      color: AppColors.primary.withOpacity(
-                        0.05,
-                      ), // Nền nhẹ cho sang
+                      color: AppColors.primary.withOpacity(0.05),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          _buildLogo(),
+                          // Truyền isDesktop = true để logo to ra
+                          _buildLogo(isDesktop: true),
                           const SizedBox(height: 20),
-                          _buildText(),
+                          _buildText(isDesktop: true),
                         ],
                       ),
                     ),
                   ),
-                  // CỘT PHẢI: Buttons (Chiếm 50% màn hình)
                   Expanded(
                     flex: 1,
                     child: Center(
@@ -73,16 +68,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                 ],
               )
-            // --- GIAO DIỆN MOBILE (Như cũ) ---
+            // --- MOBILE: Giữ nguyên Spacer để bố cục thoáng ---
             : SizedBox(
                 width: double.infinity,
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     const Spacer(flex: 2),
-                    _buildLogo(),
+                    // Truyền isDesktop = false để giữ kích thước chuẩn mobile
+                    _buildLogo(isDesktop: false),
                     const SizedBox(height: 20),
-                    _buildText(),
+                    _buildText(isDesktop: false),
                     const Spacer(flex: 3),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 40),
@@ -96,9 +92,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
-  // --- TÁCH CÁC WIDGET RA ĐỂ TÁI SỬ DỤNG ---
+  // --- SỬA: Thêm tham số isDesktop để chỉnh kích thước ---
+  Widget _buildLogo({required bool isDesktop}) {
+    // Nếu Desktop: 400px (cho khớp Splash). Nếu Mobile: 279px.
+    final double size = isDesktop ? 400 : 279;
 
-  Widget _buildLogo() {
     return AnimatedScale(
       scale: _isLogoVisible ? 1.0 : 0.5,
       duration: const Duration(milliseconds: 800),
@@ -107,15 +105,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
         opacity: _isLogoVisible ? 1.0 : 0.0,
         duration: const Duration(milliseconds: 800),
         child: SizedBox(
-          width: 279,
-          height: 291,
+          width: size,
+          height: size, // Giữ tỷ lệ vuông hoặc chỉnh theo ảnh gốc
           child: Image.asset('assets/images/logo2.png', fit: BoxFit.contain),
         ),
       ),
     );
   }
 
-  Widget _buildText() {
+  Widget _buildText({required bool isDesktop}) {
+    // Nếu Desktop: Font to hơn để lấp đầy khoảng trống
+    final double titleSize = isDesktop ? 90 : 55;
+    final double sloganSize = isDesktop ? 30 : 18;
+
     return AnimatedSlide(
       offset: _isTextVisible ? Offset.zero : const Offset(0, 0.5),
       duration: const Duration(milliseconds: 800),
@@ -124,26 +126,26 @@ class _RegisterScreenState extends State<RegisterScreen> {
         opacity: _isTextVisible ? 1.0 : 0.0,
         duration: const Duration(milliseconds: 800),
         child: Column(
-          children: const [
+          children: [
             Text(
               'OfficeSync',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: AppColors.primary,
-                fontSize: 55,
+                fontSize: titleSize, // Responsive Font
                 fontStyle: FontStyle.italic,
                 fontFamily: 'Inter',
                 fontWeight: FontWeight.w800,
                 height: 1.0,
               ),
             ),
-            SizedBox(height: 10),
+            const SizedBox(height: 10),
             Text(
               'The Pulse of Business',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: AppColors.primary,
-                fontSize: 18,
+                fontSize: sloganSize, // Responsive Font
                 fontFamily: 'Inter',
                 fontWeight: FontWeight.w700,
                 letterSpacing: 0.5,

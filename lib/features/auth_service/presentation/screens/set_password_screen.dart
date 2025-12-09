@@ -80,16 +80,15 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
   Widget build(BuildContext context) {
     // 1. Kiểm tra kích thước màn hình
     final width = MediaQuery.of(context).size.width;
-    final isDesktop = width > 900; // Coi là Desktop nếu rộng hơn 900px
+    final isDesktop = width > 900;
 
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
         child: isDesktop
-            // --- GIAO DIỆN DESKTOP (2 Cột) ---
+            // --- GIAO DIỆN DESKTOP (Giữ nguyên Split View) ---
             ? Row(
                 children: [
-                  // CỘT TRÁI: Security Panel (Màu xanh)
                   Expanded(
                     flex: 4,
                     child: Container(
@@ -97,7 +96,6 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          // Icon Ổ khóa to
                           Container(
                             padding: const EdgeInsets.all(25),
                             decoration: BoxDecoration(
@@ -105,7 +103,7 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
                               shape: BoxShape.circle,
                             ),
                             child: const Icon(
-                              Icons.lock_outline_rounded, // Icon ổ khóa
+                              Icons.lock_outline_rounded,
                               size: 80,
                               color: Colors.white,
                             ),
@@ -138,24 +136,24 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
                       ),
                     ),
                   ),
-
-                  // CỘT PHẢI: Form (Màu trắng)
                   Expanded(
                     flex: 6,
                     child: Center(
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 500),
-                        child: _buildFormContent(), // Tái sử dụng form
+                        child: _buildFormContent(),
                       ),
                     ),
                   ),
                 ],
               )
-            // --- GIAO DIỆN MOBILE (1 Cột giữa) ---
-            : Center(
+            // --- GIAO DIỆN MOBILE (ĐÃ SỬA) ---
+            : Align(
+                // SỬA: Dùng Align + topCenter để nội dung bắt đầu từ trên cùng
+                alignment: Alignment.topCenter,
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 500),
-                  child: _buildFormContent(), // Tái sử dụng form
+                  child: _buildFormContent(),
                 ),
               ),
       ),

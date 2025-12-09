@@ -111,10 +111,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       backgroundColor: Colors.white,
       body: SafeArea(
         child: isDesktop
-            // --- GIAO DIỆN DESKTOP ---
+            // --- GIAO DIỆN DESKTOP (Giữ nguyên Split View) ---
             ? Row(
                 children: [
-                  // CỘT TRÁI: Verification Panel (Màu xanh)
                   Expanded(
                     flex: 4,
                     child: Container(
@@ -122,7 +121,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          // Icon Xác thực
                           Container(
                             padding: const EdgeInsets.all(25),
                             decoration: BoxDecoration(
@@ -130,8 +128,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                               shape: BoxShape.circle,
                             ),
                             child: const Icon(
-                              Icons
-                                  .mark_email_read_rounded, // Icon tin nhắn/OTP
+                              Icons.mark_email_read_rounded,
                               size: 80,
                               color: Colors.white,
                             ),
@@ -164,24 +161,25 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                       ),
                     ),
                   ),
-
-                  // CỘT PHẢI: Form OTP (Màu trắng)
                   Expanded(
                     flex: 6,
                     child: Center(
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 500),
-                        child: _buildFormContent(), // Tái sử dụng form
+                        child: _buildFormContent(),
                       ),
                     ),
                   ),
                 ],
               )
-            // --- GIAO DIỆN MOBILE ---
-            : Center(
+            // --- GIAO DIỆN MOBILE (ĐÃ SỬA) ---
+            : Align(
+                // SỬA: Dùng Align + topCenter thay vì Center
+                // Giúp form nằm gọn ở trên cùng, tiện cho việc nhập số
+                alignment: Alignment.topCenter,
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 500),
-                  child: _buildFormContent(), // Tái sử dụng form
+                  child: _buildFormContent(),
                 ),
               ),
       ),

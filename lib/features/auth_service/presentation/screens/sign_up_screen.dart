@@ -77,24 +77,22 @@ class _SignUpScreenState extends State<SignUpScreen> {
   Widget build(BuildContext context) {
     // 1. Kiểm tra kích thước màn hình
     final width = MediaQuery.of(context).size.width;
-    final isDesktop = width > 900; // Desktop nếu rộng hơn 900px
+    final isDesktop = width > 900;
 
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
         child: isDesktop
-            // --- GIAO DIỆN DESKTOP (Split View) ---
+            // --- GIAO DIỆN DESKTOP (Giữ nguyên Split View) ---
             ? Row(
                 children: [
-                  // CỘT TRÁI: Branding Panel (Màu xanh)
                   Expanded(
-                    flex: 4, // Chiếm 40% màn hình
+                    flex: 4,
                     child: Container(
                       color: AppColors.primary,
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          // Logo trắng (hoặc ảnh minh họa)
                           Container(
                             padding: const EdgeInsets.all(20),
                             decoration: BoxDecoration(
@@ -102,8 +100,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                               shape: BoxShape.circle,
                             ),
                             child: const Icon(
-                              Icons
-                                  .business_center_rounded, // Hoặc Image.asset('assets/images/logo1.png')
+                              Icons.business_center_rounded,
                               size: 80,
                               color: Colors.white,
                             ),
@@ -136,21 +133,21 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       ),
                     ),
                   ),
-
-                  // CỘT PHẢI: Form đăng ký (Màu trắng)
                   Expanded(
-                    flex: 6, // Chiếm 60% màn hình
+                    flex: 6,
                     child: Center(
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 550),
-                        child: _buildFormContent(context), // Tách code form ra
+                        child: _buildFormContent(context),
                       ),
                     ),
                   ),
                 ],
               )
-            // --- GIAO DIỆN MOBILE (Như cũ) ---
-            : Center(
+            // --- GIAO DIỆN MOBILE (ĐÃ SỬA) ---
+            : Align(
+                // SỬA: Dùng Align + topCenter để form bắt đầu từ trên cùng
+                alignment: Alignment.topCenter,
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 500),
                   child: _buildFormContent(context),

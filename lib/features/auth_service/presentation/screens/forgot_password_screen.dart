@@ -73,10 +73,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       backgroundColor: Colors.white,
       body: SafeArea(
         child: isDesktop
-            // --- GIAO DIỆN DESKTOP ---
+            // --- GIAO DIỆN DESKTOP (Giữ nguyên Split View) ---
             ? Row(
                 children: [
-                  // CỘT TRÁI: Recovery Panel (Màu xanh)
                   Expanded(
                     flex: 4,
                     child: Container(
@@ -84,7 +83,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          // Icon Khôi phục
                           Container(
                             padding: const EdgeInsets.all(25),
                             decoration: BoxDecoration(
@@ -92,7 +90,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                               shape: BoxShape.circle,
                             ),
                             child: const Icon(
-                              Icons.lock_reset_rounded, // Icon reset mật khẩu
+                              Icons.lock_reset_rounded,
                               size: 80,
                               color: Colors.white,
                             ),
@@ -125,24 +123,24 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       ),
                     ),
                   ),
-
-                  // CỘT PHẢI: Form Nhập Email (Màu trắng)
                   Expanded(
                     flex: 6,
                     child: Center(
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 500),
-                        child: _buildFormContent(), // Tái sử dụng form
+                        child: _buildFormContent(),
                       ),
                     ),
                   ),
                 ],
               )
-            // --- GIAO DIỆN MOBILE ---
-            : Center(
+            // --- GIAO DIỆN MOBILE (ĐÃ SỬA) ---
+            : Align(
+                // SỬA: Thay Center bằng Align + topCenter
+                alignment: Alignment.topCenter,
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 500),
-                  child: _buildFormContent(), // Tái sử dụng form
+                  child: _buildFormContent(),
                 ),
               ),
       ),

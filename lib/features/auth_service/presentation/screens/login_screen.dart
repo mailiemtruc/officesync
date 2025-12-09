@@ -51,16 +51,15 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     // 1. Kiểm tra kích thước màn hình
     final width = MediaQuery.of(context).size.width;
-    final isDesktop = width > 900; // Desktop nếu > 900px
+    final isDesktop = width > 900;
 
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
         child: isDesktop
-            // --- GIAO DIỆN DESKTOP ---
+            // --- GIAO DIỆN DESKTOP (Giữ nguyên Split View) ---
             ? Row(
                 children: [
-                  // CỘT TRÁI: Welcome Back Panel (Màu xanh)
                   Expanded(
                     flex: 4,
                     child: Container(
@@ -68,7 +67,6 @@ class _LoginScreenState extends State<LoginScreen> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          // Icon Vẫy tay chào
                           Container(
                             padding: const EdgeInsets.all(20),
                             decoration: BoxDecoration(
@@ -76,7 +74,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               shape: BoxShape.circle,
                             ),
                             child: const Icon(
-                              Icons.waving_hand_rounded, // Icon vẫy tay
+                              Icons.waving_hand_rounded,
                               size: 80,
                               color: Colors.white,
                             ),
@@ -109,24 +107,24 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                   ),
-
-                  // CỘT PHẢI: Form Login (Màu trắng)
                   Expanded(
                     flex: 6,
                     child: Center(
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 500),
-                        child: _buildLoginForm(), // Tái sử dụng form
+                        child: _buildLoginForm(),
                       ),
                     ),
                   ),
                 ],
               )
-            // --- GIAO DIỆN MOBILE ---
-            : Center(
+            // --- GIAO DIỆN MOBILE (ĐÃ SỬA) ---
+            : Align(
+                // SỬA Ở ĐÂY: Thay Center bằng Align + topCenter
+                alignment: Alignment.topCenter,
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 500),
-                  child: _buildLoginForm(), // Tái sử dụng form
+                  child: _buildLoginForm(),
                 ),
               ),
       ),
