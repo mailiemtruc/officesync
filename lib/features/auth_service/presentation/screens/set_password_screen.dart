@@ -48,7 +48,7 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
     super.dispose();
   }
 
-  // --- 3. LOGIC KIỂM TRA MẬT KHẨU ---
+  // --- 3. LOGIC KIỂM TRA MẬT KHẨU (Giữ nguyên) ---
   List<String> _validatePasswordErrors(String password) {
     List<String> errors = [];
     if (password.length < 8) errors.add("Minimum 8 characters");
@@ -63,7 +63,6 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
     return errors;
   }
 
-  // Hàm hiện thông báo
   void _showError(String message) {
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
@@ -76,185 +75,266 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
     );
   }
 
+  // --- 4. GIAO DIỆN CHÍNH (Đã nâng cấp Split View) ---
   @override
   Widget build(BuildContext context) {
+    // 1. Kiểm tra kích thước màn hình
+    final width = MediaQuery.of(context).size.width;
+    final isDesktop = width > 900; // Coi là Desktop nếu rộng hơn 900px
+
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 10),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // --- HEADER (Stack: Back + Title) ---
-              SizedBox(
-                height: 50,
-                child: Stack(
-                  children: [
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: IconButton(
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                        icon: const Icon(
-                          Icons.arrow_back_ios,
-                          color: AppColors.primary,
-                        ),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                    ),
-                    Align(
-                      alignment: Alignment.center,
-                      child: AnimatedSlide(
-                        offset: _isTitleVisible
-                            ? Offset.zero
-                            : const Offset(0, -0.5),
-                        duration: const Duration(milliseconds: 800),
-                        curve: Curves.easeOut,
-                        child: AnimatedOpacity(
-                          opacity: _isTitleVisible ? 1.0 : 0.0,
-                          duration: const Duration(milliseconds: 800),
-                          child: const Text(
-                            'Set Password',
-                            style: TextStyle(
-                              color: AppColors.primary,
-                              fontSize: 26,
-                              fontFamily: 'Inter',
-                              fontWeight: FontWeight.w700,
+        child: isDesktop
+            // --- GIAO DIỆN DESKTOP (2 Cột) ---
+            ? Row(
+                children: [
+                  // CỘT TRÁI: Security Panel (Màu xanh)
+                  Expanded(
+                    flex: 4,
+                    child: Container(
+                      color: AppColors.primary,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          // Icon Ổ khóa to
+                          Container(
+                            padding: const EdgeInsets.all(25),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.lock_outline_rounded, // Icon ổ khóa
+                              size: 80,
+                              color: Colors.white,
                             ),
                           ),
+                          const SizedBox(height: 30),
+                          const Text(
+                            'Secure Account',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 32,
+                              fontFamily: 'Inter',
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 15),
+                          const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 40),
+                            child: Text(
+                              'Create a strong password to protect your business data and privacy.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 16,
+                                fontFamily: 'Inter',
+                                height: 1.5,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  // CỘT PHẢI: Form (Màu trắng)
+                  Expanded(
+                    flex: 6,
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 500),
+                        child: _buildFormContent(), // Tái sử dụng form
+                      ),
+                    ),
+                  ),
+                ],
+              )
+            // --- GIAO DIỆN MOBILE (1 Cột giữa) ---
+            : Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 500),
+                  child: _buildFormContent(), // Tái sử dụng form
+                ),
+              ),
+      ),
+    );
+  }
+
+  // --- 5. TÁCH RIÊNG NỘI DUNG FORM ---
+  // Để dùng chung cho cả Mobile và Desktop
+  Widget _buildFormContent() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // --- HEADER (Stack: Back + Title) ---
+          SizedBox(
+            height: 50,
+            child: Stack(
+              children: [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: IconButton(
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    icon: const Icon(
+                      Icons.arrow_back_ios,
+                      color: AppColors.primary,
+                    ),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ),
+                Align(
+                  alignment: Alignment.center,
+                  child: AnimatedSlide(
+                    offset: _isTitleVisible
+                        ? Offset.zero
+                        : const Offset(0, -0.5),
+                    duration: const Duration(milliseconds: 800),
+                    curve: Curves.easeOut,
+                    child: AnimatedOpacity(
+                      opacity: _isTitleVisible ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 800),
+                      child: const Text(
+                        'Set Password',
+                        style: TextStyle(
+                          color: AppColors.primary,
+                          fontSize: 26,
+                          fontFamily: 'Inter',
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 30),
-
-              // --- FORM ---
-              AnimatedSlide(
-                offset: _isFormVisible ? Offset.zero : const Offset(0, 0.2),
-                duration: const Duration(milliseconds: 800),
-                curve: Curves.easeOut,
-                child: AnimatedOpacity(
-                  opacity: _isFormVisible ? 1.0 : 0.0,
-                  duration: const Duration(milliseconds: 800),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // 1. Password
-                      _buildLabel("Password"),
-                      CustomTextField(
-                        controller: _passwordController,
-                        hintText: "*************",
-                        isPassword: !_isPasswordVisible,
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _isPasswordVisible
-                                ? Icons.visibility
-                                : Icons.visibility_off,
-                            color: AppColors.primary,
-                          ),
-                          onPressed: () => setState(
-                            () => _isPasswordVisible = !_isPasswordVisible,
-                          ),
-                        ),
-                      ),
-
-                      // 2. Rules Box
-                      const SizedBox(height: 15),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: const Color(
-                            0xFFF5F7FF,
-                          ), // Màu nền nhạt riêng biệt cho box này
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(
-                          '• Minimum 8 characters\n'
-                          '• At least 1 uppercase letter (A-Z)\n'
-                          '• At least 1 lowercase letter (a-z)\n'
-                          '• At least 1 number (0-9)\n'
-                          '• At least 1 special character (@, #, _, - ...)',
-                          style: TextStyle(
-                            color: Colors.black.withOpacity(0.6),
-                            fontSize: 12,
-                            fontFamily: 'Inter',
-                            height: 1.6,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-
-                      // 3. Confirm Password
-                      _buildLabel("Confirm Password"),
-                      CustomTextField(
-                        controller: _confirmPasswordController,
-                        hintText: "*************",
-                        isPassword: !_isConfirmPasswordVisible,
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _isConfirmPasswordVisible
-                                ? Icons.visibility
-                                : Icons.visibility_off,
-                            color: AppColors.primary,
-                          ),
-                          onPressed: () => setState(
-                            () => _isConfirmPasswordVisible =
-                                !_isConfirmPasswordVisible,
-                          ),
-                        ),
-                      ),
-                    ],
                   ),
                 ),
-              ),
-
-              const SizedBox(height: 40),
-
-              // --- BUTTON ---
-              AnimatedSlide(
-                offset: _isButtonVisible ? Offset.zero : const Offset(0, 1.0),
-                duration: const Duration(milliseconds: 800),
-                curve: Curves.easeOutBack,
-                child: AnimatedOpacity(
-                  opacity: _isButtonVisible ? 1.0 : 0.0,
-                  duration: const Duration(milliseconds: 800),
-                  child: CustomButton(
-                    text: 'Create new password',
-                    onPressed: () {
-                      String pass = _passwordController.text;
-                      String confirm = _confirmPasswordController.text;
-
-                      if (pass.isEmpty || confirm.isEmpty) {
-                        _showError("Please enter complete information!");
-                        return;
-                      }
-
-                      if (pass != confirm) {
-                        _showError("Confirmation password does not match!");
-                        return;
-                      }
-
-                      List<String> errors = _validatePasswordErrors(pass);
-                      if (errors.isNotEmpty) {
-                        String errorMsg =
-                            "Invalid password:\n- ${errors.join("\n- ")}";
-                        _showError(errorMsg);
-                        return;
-                      }
-
-                      _showSuccessDialog();
-                    },
-                  ),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
+
+          const SizedBox(height: 30),
+
+          // --- FORM ---
+          AnimatedSlide(
+            offset: _isFormVisible ? Offset.zero : const Offset(0, 0.2),
+            duration: const Duration(milliseconds: 800),
+            curve: Curves.easeOut,
+            child: AnimatedOpacity(
+              opacity: _isFormVisible ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 800),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 1. Password
+                  _buildLabel("Password"),
+                  CustomTextField(
+                    controller: _passwordController,
+                    hintText: "*************",
+                    isPassword: !_isPasswordVisible,
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _isPasswordVisible
+                            ? Icons.visibility
+                            : Icons.visibility_off,
+                        color: AppColors.primary,
+                      ),
+                      onPressed: () => setState(
+                        () => _isPasswordVisible = !_isPasswordVisible,
+                      ),
+                    ),
+                  ),
+
+                  // 2. Rules Box
+                  const SizedBox(height: 15),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF5F7FF),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      '• Minimum 8 characters\n'
+                      '• At least 1 uppercase letter (A-Z)\n'
+                      '• At least 1 lowercase letter (a-z)\n'
+                      '• At least 1 number (0-9)\n'
+                      '• At least 1 special character (@, #, _, - ...)',
+                      style: TextStyle(
+                        color: Colors.black.withOpacity(0.6),
+                        fontSize: 12,
+                        fontFamily: 'Inter',
+                        height: 1.6,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // 3. Confirm Password
+                  _buildLabel("Confirm Password"),
+                  CustomTextField(
+                    controller: _confirmPasswordController,
+                    hintText: "*************",
+                    isPassword: !_isConfirmPasswordVisible,
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _isConfirmPasswordVisible
+                            ? Icons.visibility
+                            : Icons.visibility_off,
+                        color: AppColors.primary,
+                      ),
+                      onPressed: () => setState(
+                        () => _isConfirmPasswordVisible =
+                            !_isConfirmPasswordVisible,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 40),
+
+          // --- BUTTON ---
+          AnimatedSlide(
+            offset: _isButtonVisible ? Offset.zero : const Offset(0, 1.0),
+            duration: const Duration(milliseconds: 800),
+            curve: Curves.easeOutBack,
+            child: AnimatedOpacity(
+              opacity: _isButtonVisible ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 800),
+              child: CustomButton(
+                text: 'Create new password',
+                onPressed: () {
+                  String pass = _passwordController.text;
+                  String confirm = _confirmPasswordController.text;
+
+                  if (pass.isEmpty || confirm.isEmpty) {
+                    _showError("Please enter complete information!");
+                    return;
+                  }
+
+                  if (pass != confirm) {
+                    _showError("Confirmation password does not match!");
+                    return;
+                  }
+
+                  List<String> errors = _validatePasswordErrors(pass);
+                  if (errors.isNotEmpty) {
+                    String errorMsg =
+                        "Invalid password:\n- ${errors.join("\n- ")}";
+                    _showError(errorMsg);
+                    return;
+                  }
+
+                  _showSuccessDialog();
+                },
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

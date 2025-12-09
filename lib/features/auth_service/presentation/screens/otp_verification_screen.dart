@@ -60,7 +60,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     super.dispose();
   }
 
-  // --- HÀM THÔNG BÁO ---
+  // --- HÀM LOGIC (Giữ nguyên) ---
   void _showMessage(String message, Color color) {
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
@@ -73,7 +73,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     );
   }
 
-  // Hàm đếm ngược
   void _startTimer() {
     const oneSec = Duration(seconds: 1);
     _timer = Timer.periodic(oneSec, (Timer timer) {
@@ -90,7 +89,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     });
   }
 
-  // Hàm gửi lại mã
   void _resendCode() {
     if (_canResend) {
       setState(() {
@@ -102,173 +100,252 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     }
   }
 
+  // --- GIAO DIỆN CHÍNH (SPLIT VIEW) ---
   @override
   Widget build(BuildContext context) {
-    String timerText = "00:${_start.toString().padLeft(2, '0')}";
+    // 1. Kiểm tra kích thước màn hình
+    final width = MediaQuery.of(context).size.width;
+    final isDesktop = width > 900; // Desktop nếu > 900px
 
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 10),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              // --- HEADER (Stack: Back + Title) ---
-              SizedBox(
-                height: 50,
-                child: Stack(
-                  children: [
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: IconButton(
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                        icon: const Icon(
-                          Icons.arrow_back_ios,
-                          color: AppColors.primary,
-                        ),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                    ),
-                    Align(
-                      alignment: Alignment.center,
-                      child: AnimatedSlide(
-                        offset: _isTitleVisible
-                            ? Offset.zero
-                            : const Offset(0, -0.5),
-                        duration: const Duration(milliseconds: 800),
-                        curve: Curves.easeOut,
-                        child: AnimatedOpacity(
-                          opacity: _isTitleVisible ? 1.0 : 0.0,
-                          duration: const Duration(milliseconds: 800),
-                          child: const Text(
-                            'Verification',
-                            style: TextStyle(
-                              color: AppColors.primary,
-                              fontSize: 30,
-                              fontFamily: 'Inter',
-                              fontWeight: FontWeight.w700,
+        child: isDesktop
+            // --- GIAO DIỆN DESKTOP ---
+            ? Row(
+                children: [
+                  // CỘT TRÁI: Verification Panel (Màu xanh)
+                  Expanded(
+                    flex: 4,
+                    child: Container(
+                      color: AppColors.primary,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          // Icon Xác thực
+                          Container(
+                            padding: const EdgeInsets.all(25),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons
+                                  .mark_email_read_rounded, // Icon tin nhắn/OTP
+                              size: 80,
+                              color: Colors.white,
                             ),
                           ),
-                        ),
+                          const SizedBox(height: 30),
+                          const Text(
+                            'Verify Identity',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 32,
+                              fontFamily: 'Inter',
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 15),
+                          const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 40),
+                            child: Text(
+                              'Enter the 4-digit code sent to your device to verify your identity.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 16,
+                                fontFamily: 'Inter',
+                                height: 1.5,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 50),
-
-              // --- CONTENT ---
-              AnimatedSlide(
-                offset: _isContentVisible ? Offset.zero : const Offset(0, 0.2),
-                duration: const Duration(milliseconds: 800),
-                curve: Curves.easeOut,
-                child: AnimatedOpacity(
-                  opacity: _isContentVisible ? 1.0 : 0.0,
-                  duration: const Duration(milliseconds: 800),
-                  child: Column(
-                    children: [
-                      // 4 Ô OTP
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: List.generate(4, (index) {
-                          return Container(
-                            margin: const EdgeInsets.symmetric(horizontal: 8),
-                            width: 60,
-                            height: 60,
-                            child: _buildOtpBox(index),
-                          );
-                        }),
-                      ),
-
-                      const SizedBox(height: 30),
-
-                      // TIMER & RESEND TEXT
-                      if (!_canResend)
-                        Text(
-                          'Resend code in $timerText',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: Colors.black,
-                            fontSize: 16,
-                            fontFamily: 'Inter',
-                            fontWeight: FontWeight.w300,
-                          ),
-                        ),
-
-                      TextButton(
-                        onPressed: _canResend ? _resendCode : null,
-                        child: Text(
-                          'Resend Code',
-                          style: TextStyle(
-                            color: _canResend ? AppColors.primary : Colors.grey,
-                            fontSize: 16,
-                            fontFamily: 'Inter',
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(height: 20),
-
-                      // DESCRIPTION
-                      Text(
-                        'Please enter the correct code we sent you to complete the verification.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.black.withOpacity(0.56),
-                          fontSize: 14,
-                          fontFamily: 'Inter',
-                          fontWeight: FontWeight.w400,
-                          height: 1.5,
-                        ),
-                      ),
-                    ],
                   ),
-                ),
-              ),
 
-              const SizedBox(height: 40),
-
-              // --- BUTTON (Dùng CustomButton) ---
-              AnimatedSlide(
-                offset: _isButtonVisible ? Offset.zero : const Offset(0, 1.0),
-                duration: const Duration(milliseconds: 800),
-                curve: Curves.easeOutBack,
-                child: AnimatedOpacity(
-                  opacity: _isButtonVisible ? 1.0 : 0.0,
-                  duration: const Duration(milliseconds: 800),
-                  child: CustomButton(
-                    text: 'Continue',
-                    onPressed: () {
-                      FocusScope.of(context).unfocus(); // Ẩn bàn phím
-
-                      String otp = _controllers.map((c) => c.text).join();
-
-                      if (otp.length < 4) {
-                        _showMessage("Please enter 4 digits!", Colors.red);
-                      } else {
-                        // Thành công -> Chuyển trang tạo mật khẩu
-                        Navigator.pushNamed(context, '/set_password');
-                      }
-                    },
+                  // CỘT PHẢI: Form OTP (Màu trắng)
+                  Expanded(
+                    flex: 6,
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 500),
+                        child: _buildFormContent(), // Tái sử dụng form
+                      ),
+                    ),
                   ),
+                ],
+              )
+            // --- GIAO DIỆN MOBILE ---
+            : Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 500),
+                  child: _buildFormContent(), // Tái sử dụng form
                 ),
               ),
-            ],
-          ),
-        ),
       ),
     );
   }
 
-  // --- WIDGET OTP BOX ---
+  // --- TÁCH RIÊNG NỘI DUNG FORM OTP ---
+  Widget _buildFormContent() {
+    String timerText = "00:${_start.toString().padLeft(2, '0')}";
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // --- HEADER (Stack: Back + Title) ---
+          SizedBox(
+            height: 50,
+            child: Stack(
+              children: [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: IconButton(
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    icon: const Icon(
+                      Icons.arrow_back_ios,
+                      color: AppColors.primary,
+                    ),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ),
+                Align(
+                  alignment: Alignment.center,
+                  child: AnimatedSlide(
+                    offset: _isTitleVisible
+                        ? Offset.zero
+                        : const Offset(0, -0.5),
+                    duration: const Duration(milliseconds: 800),
+                    curve: Curves.easeOut,
+                    child: AnimatedOpacity(
+                      opacity: _isTitleVisible ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 800),
+                      child: const Text(
+                        'Verification',
+                        style: TextStyle(
+                          color: AppColors.primary,
+                          fontSize: 30,
+                          fontFamily: 'Inter',
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 50),
+
+          // --- CONTENT (OTP Box + Timer + Text) ---
+          AnimatedSlide(
+            offset: _isContentVisible ? Offset.zero : const Offset(0, 0.2),
+            duration: const Duration(milliseconds: 800),
+            curve: Curves.easeOut,
+            child: AnimatedOpacity(
+              opacity: _isContentVisible ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 800),
+              child: Column(
+                children: [
+                  // 4 Ô OTP
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(4, (index) {
+                      return Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 8),
+                        width: 60,
+                        height: 60,
+                        child: _buildOtpBox(index),
+                      );
+                    }),
+                  ),
+
+                  const SizedBox(height: 30),
+
+                  // TIMER & RESEND TEXT
+                  if (!_canResend)
+                    Text(
+                      'Resend code in $timerText',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.black,
+                        fontSize: 16,
+                        fontFamily: 'Inter',
+                        fontWeight: FontWeight.w300,
+                      ),
+                    ),
+
+                  TextButton(
+                    onPressed: _canResend ? _resendCode : null,
+                    child: Text(
+                      'Resend Code',
+                      style: TextStyle(
+                        color: _canResend ? AppColors.primary : Colors.grey,
+                        fontSize: 16,
+                        fontFamily: 'Inter',
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // DESCRIPTION
+                  Text(
+                    'Please enter the correct code we sent you to complete the verification.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.black.withOpacity(0.56),
+                      fontSize: 14,
+                      fontFamily: 'Inter',
+                      fontWeight: FontWeight.w400,
+                      height: 1.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 40),
+
+          // --- BUTTON ---
+          AnimatedSlide(
+            offset: _isButtonVisible ? Offset.zero : const Offset(0, 1.0),
+            duration: const Duration(milliseconds: 800),
+            curve: Curves.easeOutBack,
+            child: AnimatedOpacity(
+              opacity: _isButtonVisible ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 800),
+              child: CustomButton(
+                text: 'Continue',
+                onPressed: () {
+                  FocusScope.of(context).unfocus(); // Ẩn bàn phím
+                  String otp = _controllers.map((c) => c.text).join();
+                  if (otp.length < 4) {
+                    _showMessage("Please enter 4 digits!", Colors.red);
+                  } else {
+                    Navigator.pushNamed(context, '/set_password');
+                  }
+                },
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- HELPER: Ô NHẬP OTP ---
   Widget _buildOtpBox(int index) {
     return Container(
       decoration: ShapeDecoration(
-        // Dùng màu nền inputFill từ AppColors cho đồng bộ
         color: AppColors.inputFill,
         shape: RoundedRectangleBorder(
           side: const BorderSide(width: 1, color: Colors.transparent),
@@ -287,7 +364,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         style: const TextStyle(
           fontSize: 24,
           fontWeight: FontWeight.bold,
-          color: AppColors.primary, // Chữ màu xanh chủ đạo
+          color: AppColors.primary,
         ),
         decoration: const InputDecoration(
           border: InputBorder.none,

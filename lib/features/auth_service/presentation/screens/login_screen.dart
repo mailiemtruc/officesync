@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 
-// Import các Widget và Constants dùng chung từ Core
+// Import Core
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/widgets/custom_button.dart';
 import '../../../../core/widgets/custom_text_field.dart';
@@ -27,7 +27,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
-    // Hiệu ứng xuất hiện lần lượt
+    // Hiệu ứng xuất hiện
     Future.delayed(const Duration(milliseconds: 100), () {
       if (mounted) setState(() => _isHeaderVisible = true);
     });
@@ -40,213 +40,295 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  // --- GIAO DIỆN CHÍNH (SPLIT VIEW) ---
+  @override
   Widget build(BuildContext context) {
+    // 1. Kiểm tra kích thước màn hình
+    final width = MediaQuery.of(context).size.width;
+    final isDesktop = width > 900; // Desktop nếu > 900px
+
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 10),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // --- PHẦN HEADER (Back + Hello) ---
-              SizedBox(
-                height: 50,
-                child: Stack(
-                  children: [
-                    // Nút Back
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: IconButton(
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                        icon: const Icon(
-                          Icons.arrow_back_ios,
-                          color: AppColors.primary, // Dùng màu chuẩn
-                        ),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                    ),
-                    // Chữ "Hello!"
-                    Align(
-                      alignment: Alignment.center,
-                      child: AnimatedSlide(
-                        offset: _isHeaderVisible
-                            ? Offset.zero
-                            : const Offset(0, -0.5),
-                        duration: const Duration(milliseconds: 800),
-                        curve: Curves.easeOut,
-                        child: AnimatedOpacity(
-                          opacity: _isHeaderVisible ? 1.0 : 0.0,
-                          duration: const Duration(milliseconds: 800),
-                          child: const Text(
-                            'Hello!',
-                            style: TextStyle(
-                              color: AppColors.primary,
-                              fontSize: 30,
-                              fontFamily: 'Inter',
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // --- CHỮ "WELCOME" (Nằm dưới, căn trái) ---
-              const SizedBox(height: 40),
-              AnimatedSlide(
-                offset: _isHeaderVisible ? Offset.zero : const Offset(0, -0.5),
-                duration: const Duration(milliseconds: 800),
-                curve: Curves.easeOut,
-                child: AnimatedOpacity(
-                  opacity: _isHeaderVisible ? 1.0 : 0.0,
-                  duration: const Duration(milliseconds: 800),
-                  child: const Text(
-                    'Welcome',
-                    style: TextStyle(
+        child: isDesktop
+            // --- GIAO DIỆN DESKTOP ---
+            ? Row(
+                children: [
+                  // CỘT TRÁI: Welcome Back Panel (Màu xanh)
+                  Expanded(
+                    flex: 4,
+                    child: Container(
                       color: AppColors.primary,
-                      fontSize: 35,
-                      fontFamily: 'Inter',
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 40),
-
-              // --- FORM NHẬP LIỆU (Dùng CustomTextField) ---
-              AnimatedSlide(
-                offset: _isInputVisible ? Offset.zero : const Offset(0, 0.2),
-                duration: const Duration(milliseconds: 800),
-                curve: Curves.easeOut,
-                child: AnimatedOpacity(
-                  opacity: _isInputVisible ? 1.0 : 0.0,
-                  duration: const Duration(milliseconds: 800),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildLabel('Email or Mobile Number'),
-                      // Dùng Widget chung
-                      CustomTextField(
-                        controller: _emailController,
-                        hintText: 'example@example.com',
-                      ),
-
-                      const SizedBox(height: 25),
-
-                      _buildLabel('Password'),
-                      // Dùng Widget chung (có nút ẩn hiện mật khẩu)
-                      CustomTextField(
-                        controller: _passwordController,
-                        hintText: '*************',
-                        isPassword: !_isPasswordVisible,
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _isPasswordVisible
-                                ? Icons.visibility
-                                : Icons.visibility_off,
-                            color: AppColors.primary,
-                          ),
-                          onPressed: () => setState(
-                            () => _isPasswordVisible = !_isPasswordVisible,
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(height: 10),
-
-                      // Nút Quên mật khẩu
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton(
-                          onPressed: () {
-                            Navigator.pushNamed(context, '/forgot_password');
-                          },
-                          child: const Text(
-                            'Forgot Password',
-                            style: TextStyle(
-                              color: AppColors.primary,
-                              fontSize: 16,
-                              fontFamily: 'Inter',
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 30),
-
-              // --- NÚT LOG IN (Dùng CustomButton) ---
-              AnimatedSlide(
-                offset: _isButtonVisible ? Offset.zero : const Offset(0, 1.0),
-                duration: const Duration(milliseconds: 800),
-                curve: Curves.easeOutBack,
-                child: AnimatedOpacity(
-                  opacity: _isButtonVisible ? 1.0 : 0.0,
-                  duration: const Duration(milliseconds: 800),
-                  child: Column(
-                    children: [
-                      CustomButton(
-                        text: 'Log In',
-                        onPressed: () {
-                          // Logic đăng nhập sau này sẽ viết ở đây
-                          print("Đã nhấn nút Log In: ${_emailController.text}");
-                          // Navigator.pushNamed(context, '/home');
-                        },
-                      ),
-
-                      const SizedBox(height: 25),
-
-                      // Dòng chuyển sang đăng ký
-                      Row(
+                      child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Text(
-                            "Don’t have an account? ",
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w300,
-                              fontFamily: 'Inter',
+                          // Icon Vẫy tay chào
+                          Container(
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.waving_hand_rounded, // Icon vẫy tay
+                              size: 80,
+                              color: Colors.white,
                             ),
                           ),
-                          GestureDetector(
-                            onTap: () => Navigator.pushReplacementNamed(
-                              context,
-                              '/signup',
+                          const SizedBox(height: 30),
+                          const Text(
+                            'Welcome Back!',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 32,
+                              fontFamily: 'Inter',
+                              fontWeight: FontWeight.bold,
                             ),
-                            child: const Text(
-                              'Create Company',
+                          ),
+                          const SizedBox(height: 15),
+                          const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 40),
+                            child: Text(
+                              'To keep connected with us please login with your personal info.',
+                              textAlign: TextAlign.center,
                               style: TextStyle(
-                                color: AppColors.primary,
+                                color: Colors.white70,
                                 fontSize: 16,
-                                fontWeight: FontWeight.w600,
                                 fontFamily: 'Inter',
+                                height: 1.5,
                               ),
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 30),
-                    ],
+                    ),
                   ),
+
+                  // CỘT PHẢI: Form Login (Màu trắng)
+                  Expanded(
+                    flex: 6,
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 500),
+                        child: _buildLoginForm(), // Tái sử dụng form
+                      ),
+                    ),
+                  ),
+                ],
+              )
+            // --- GIAO DIỆN MOBILE ---
+            : Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 500),
+                  child: _buildLoginForm(), // Tái sử dụng form
                 ),
               ),
-            ],
-          ),
-        ),
       ),
     );
   }
 
-  // Widget nội bộ để hiển thị Label (Tiêu đề nhỏ trên ô input)
+  // --- TÁCH RIÊNG NỘI DUNG FORM LOGIN ---
+  Widget _buildLoginForm() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // --- HEADER (Back + Hello) ---
+          SizedBox(
+            height: 50,
+            child: Stack(
+              children: [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: IconButton(
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    icon: const Icon(
+                      Icons.arrow_back_ios,
+                      color: AppColors.primary,
+                    ),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ),
+                Align(
+                  alignment: Alignment.center,
+                  child: AnimatedSlide(
+                    offset: _isHeaderVisible
+                        ? Offset.zero
+                        : const Offset(0, -0.5),
+                    duration: const Duration(milliseconds: 800),
+                    curve: Curves.easeOut,
+                    child: AnimatedOpacity(
+                      opacity: _isHeaderVisible ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 800),
+                      child: const Text(
+                        'Hello!',
+                        style: TextStyle(
+                          color: AppColors.primary,
+                          fontSize: 30,
+                          fontFamily: 'Inter',
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // --- CHỮ "WELCOME" ---
+          const SizedBox(height: 40),
+          AnimatedSlide(
+            offset: _isHeaderVisible ? Offset.zero : const Offset(0, -0.5),
+            duration: const Duration(milliseconds: 800),
+            curve: Curves.easeOut,
+            child: AnimatedOpacity(
+              opacity: _isHeaderVisible ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 800),
+              child: const Text(
+                'Welcome',
+                style: TextStyle(
+                  color: AppColors.primary,
+                  fontSize: 35,
+                  fontFamily: 'Inter',
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 40),
+
+          // --- FORM NHẬP LIỆU ---
+          AnimatedSlide(
+            offset: _isInputVisible ? Offset.zero : const Offset(0, 0.2),
+            duration: const Duration(milliseconds: 800),
+            curve: Curves.easeOut,
+            child: AnimatedOpacity(
+              opacity: _isInputVisible ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 800),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildLabel('Email or Mobile Number'),
+                  CustomTextField(
+                    controller: _emailController,
+                    hintText: 'example@example.com',
+                  ),
+
+                  const SizedBox(height: 25),
+
+                  _buildLabel('Password'),
+                  CustomTextField(
+                    controller: _passwordController,
+                    hintText: '*************',
+                    isPassword: !_isPasswordVisible,
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _isPasswordVisible
+                            ? Icons.visibility
+                            : Icons.visibility_off,
+                        color: AppColors.primary,
+                      ),
+                      onPressed: () => setState(
+                        () => _isPasswordVisible = !_isPasswordVisible,
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  // Nút Quên mật khẩu
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: () {
+                        Navigator.pushNamed(context, '/forgot_password');
+                      },
+                      child: const Text(
+                        'Forgot Password',
+                        style: TextStyle(
+                          color: AppColors.primary,
+                          fontSize: 16,
+                          fontFamily: 'Inter',
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 30),
+
+          // --- NÚT LOG IN & FOOTER ---
+          AnimatedSlide(
+            offset: _isButtonVisible ? Offset.zero : const Offset(0, 1.0),
+            duration: const Duration(milliseconds: 800),
+            curve: Curves.easeOutBack,
+            child: AnimatedOpacity(
+              opacity: _isButtonVisible ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 800),
+              child: Column(
+                children: [
+                  CustomButton(
+                    text: 'Log In',
+                    onPressed: () {
+                      // Logic Login
+                      print("Login: ${_emailController.text}");
+                      // Navigator.pushNamed(context, '/home');
+                    },
+                  ),
+
+                  const SizedBox(height: 25),
+
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text(
+                        "Don’t have an account? ",
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w300,
+                          fontFamily: 'Inter',
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () =>
+                            Navigator.pushReplacementNamed(context, '/signup'),
+                        child: const Text(
+                          'Create Company',
+                          style: TextStyle(
+                            color: AppColors.primary,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            fontFamily: 'Inter',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 30),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Widget Helper
   Widget _buildLabel(String text) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
