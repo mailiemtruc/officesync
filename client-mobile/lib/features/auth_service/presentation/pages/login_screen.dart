@@ -2,37 +2,39 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 
 // Import Core
-import '../../../../core/constants/app_colors.dart';
+import '../../../../core/config/app_colors.dart';
 import '../../../../core/widgets/custom_button.dart';
 import '../../../../core/widgets/custom_text_field.dart';
 
-class ForgotPasswordScreen extends StatefulWidget {
-  const ForgotPasswordScreen({super.key});
+class LoginScreen extends StatefulWidget {
+  const LoginScreen({super.key});
 
   @override
-  State<ForgotPasswordScreen> createState() => _ForgotPasswordScreenState();
+  State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
+class _LoginScreenState extends State<LoginScreen> {
   // --- 1. Biến trạng thái hiệu ứng ---
-  bool _isTitleVisible = false;
-  bool _isFormVisible = false;
+  bool _isHeaderVisible = false;
+  bool _isInputVisible = false;
   bool _isButtonVisible = false;
 
   // --- 2. Controller ---
   final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  bool _isPasswordVisible = false;
 
   @override
   void initState() {
     super.initState();
-    // KỊCH BẢN HIỆU ỨNG
+    // Hiệu ứng xuất hiện
     Future.delayed(const Duration(milliseconds: 100), () {
-      if (mounted) setState(() => _isTitleVisible = true);
+      if (mounted) setState(() => _isHeaderVisible = true);
     });
-    Future.delayed(const Duration(milliseconds: 400), () {
-      if (mounted) setState(() => _isFormVisible = true);
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (mounted) setState(() => _isInputVisible = true);
     });
-    Future.delayed(const Duration(milliseconds: 800), () {
+    Future.delayed(const Duration(milliseconds: 900), () {
       if (mounted) setState(() => _isButtonVisible = true);
     });
   }
@@ -40,26 +42,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   @override
   void dispose() {
     _emailController.dispose();
+    _passwordController.dispose();
     super.dispose();
-  }
-
-  // --- 3. HÀM LOGIC (Giữ nguyên) ---
-  bool _isValidEmail(String email) {
-    return RegExp(
-      r"^[a-zA-Z0-9.a-zA-Z0-9.!#$%&'*+-/=?^_`{|}~]+@[a-zA-Z0-9]+\.[a-zA-Z]+",
-    ).hasMatch(email);
-  }
-
-  void _showMessage(String message, Color color) {
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: color,
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 3),
-      ),
-    );
   }
 
   // --- GIAO DIỆN CHÍNH (SPLIT VIEW) ---
@@ -67,7 +51,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   Widget build(BuildContext context) {
     // 1. Kiểm tra kích thước màn hình
     final width = MediaQuery.of(context).size.width;
-    final isDesktop = width > 900; // Desktop nếu > 900px
+    final isDesktop = width > 900;
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -84,20 +68,20 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Container(
-                            padding: const EdgeInsets.all(25),
+                            padding: const EdgeInsets.all(20),
                             decoration: BoxDecoration(
                               color: Colors.white.withOpacity(0.1),
                               shape: BoxShape.circle,
                             ),
                             child: const Icon(
-                              Icons.lock_reset_rounded,
+                              Icons.waving_hand_rounded,
                               size: 80,
                               color: Colors.white,
                             ),
                           ),
                           const SizedBox(height: 30),
                           const Text(
-                            'Forgot Password?',
+                            'Welcome Back!',
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 32,
@@ -109,7 +93,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                           const Padding(
                             padding: EdgeInsets.symmetric(horizontal: 40),
                             child: Text(
-                              "Don't worry! It happens. Please enter the email address associated with your account.",
+                              'To keep connected with us please login with your personal info.',
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 color: Colors.white70,
@@ -128,7 +112,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                     child: Center(
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 500),
-                        child: _buildFormContent(),
+                        child: _buildLoginForm(),
                       ),
                     ),
                   ),
@@ -136,25 +120,25 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               )
             // --- GIAO DIỆN MOBILE (ĐÃ SỬA) ---
             : Align(
-                // SỬA: Thay Center bằng Align + topCenter
+                // SỬA Ở ĐÂY: Thay Center bằng Align + topCenter
                 alignment: Alignment.topCenter,
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 500),
-                  child: _buildFormContent(),
+                  child: _buildLoginForm(),
                 ),
               ),
       ),
     );
   }
 
-  // --- TÁCH RIÊNG NỘI DUNG FORM ---
-  Widget _buildFormContent() {
+  // --- TÁCH RIÊNG NỘI DUNG FORM LOGIN ---
+  Widget _buildLoginForm() {
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // --- HEADER (Stack: Back + Title) ---
+          // --- HEADER (Back + Hello) ---
           SizedBox(
             height: 50,
             child: Stack(
@@ -174,19 +158,19 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 Align(
                   alignment: Alignment.center,
                   child: AnimatedSlide(
-                    offset: _isTitleVisible
+                    offset: _isHeaderVisible
                         ? Offset.zero
                         : const Offset(0, -0.5),
                     duration: const Duration(milliseconds: 800),
                     curve: Curves.easeOut,
                     child: AnimatedOpacity(
-                      opacity: _isTitleVisible ? 1.0 : 0.0,
+                      opacity: _isHeaderVisible ? 1.0 : 0.0,
                       duration: const Duration(milliseconds: 800),
                       child: const Text(
-                        'Forgot Password',
+                        'Hello!',
                         style: TextStyle(
                           color: AppColors.primary,
-                          fontSize: 28,
+                          fontSize: 30,
                           fontFamily: 'Inter',
                           fontWeight: FontWeight.w700,
                         ),
@@ -198,37 +182,83 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             ),
           ),
 
+          // --- CHỮ "WELCOME" ---
           const SizedBox(height: 40),
-
-          // --- FORM NHẬP EMAIL ---
           AnimatedSlide(
-            offset: _isFormVisible ? Offset.zero : const Offset(0, 0.2),
+            offset: _isHeaderVisible ? Offset.zero : const Offset(0, -0.5),
             duration: const Duration(milliseconds: 800),
             curve: Curves.easeOut,
             child: AnimatedOpacity(
-              opacity: _isFormVisible ? 1.0 : 0.0,
+              opacity: _isHeaderVisible ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 800),
+              child: const Text(
+                'Welcome',
+                style: TextStyle(
+                  color: AppColors.primary,
+                  fontSize: 35,
+                  fontFamily: 'Inter',
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 40),
+
+          // --- FORM NHẬP LIỆU ---
+          AnimatedSlide(
+            offset: _isInputVisible ? Offset.zero : const Offset(0, 0.2),
+            duration: const Duration(milliseconds: 800),
+            curve: Curves.easeOut,
+            child: AnimatedOpacity(
+              opacity: _isInputVisible ? 1.0 : 0.0,
               duration: const Duration(milliseconds: 800),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildLabel('Email'),
+                  _buildLabel('Email or Mobile Number'),
                   CustomTextField(
                     controller: _emailController,
                     hintText: 'example@example.com',
-                    keyboardType: TextInputType.emailAddress,
                   ),
 
-                  const SizedBox(height: 20),
-                  Center(
-                    child: Text(
-                      'Please enter your correct email to recover your password.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.black.withOpacity(0.56),
-                        fontSize: 13,
-                        fontFamily: 'Inter',
-                        fontWeight: FontWeight.w400,
-                        height: 1.5,
+                  const SizedBox(height: 25),
+
+                  _buildLabel('Password'),
+                  CustomTextField(
+                    controller: _passwordController,
+                    hintText: '*************',
+                    isPassword: !_isPasswordVisible,
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _isPasswordVisible
+                            ? Icons.visibility
+                            : Icons.visibility_off,
+                        color: AppColors.primary,
+                      ),
+                      onPressed: () => setState(
+                        () => _isPasswordVisible = !_isPasswordVisible,
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  // Nút Quên mật khẩu
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: () {
+                        Navigator.pushNamed(context, '/forgot_password');
+                      },
+                      child: const Text(
+                        'Forgot Password',
+                        style: TextStyle(
+                          color: AppColors.primary,
+                          fontSize: 16,
+                          fontFamily: 'Inter',
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ),
                   ),
@@ -237,9 +267,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             ),
           ),
 
-          const SizedBox(height: 40),
+          const SizedBox(height: 30),
 
-          // --- NÚT SEND CODE ---
+          // --- NÚT LOG IN & FOOTER ---
           AnimatedSlide(
             offset: _isButtonVisible ? Offset.zero : const Offset(0, 1.0),
             duration: const Duration(milliseconds: 800),
@@ -247,28 +277,47 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             child: AnimatedOpacity(
               opacity: _isButtonVisible ? 1.0 : 0.0,
               duration: const Duration(milliseconds: 800),
-              child: CustomButton(
-                text: 'Send Code',
-                onPressed: () {
-                  String email = _emailController.text.trim();
+              child: Column(
+                children: [
+                  CustomButton(
+                    text: 'Log In',
+                    onPressed: () {
+                      // Logic Login
+                      print("Login: ${_emailController.text}");
+                      // Navigator.pushNamed(context, '/home');
+                    },
+                  ),
 
-                  if (email.isEmpty) {
-                    _showMessage("Please enter Email!", Colors.red);
-                    return;
-                  }
+                  const SizedBox(height: 25),
 
-                  if (!_isValidEmail(email)) {
-                    _showMessage(
-                      "Invalid email! (Example: abc@gmail.com)",
-                      Colors.red,
-                    );
-                    return;
-                  }
-
-                  FocusScope.of(context).unfocus();
-                  _showMessage("Verification code sent!", Colors.green);
-                  Navigator.pushNamed(context, '/otp_verification');
-                },
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text(
+                        "Don’t have an account? ",
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w300,
+                          fontFamily: 'Inter',
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () =>
+                            Navigator.pushReplacementNamed(context, '/signup'),
+                        child: const Text(
+                          'Create Company',
+                          style: TextStyle(
+                            color: AppColors.primary,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            fontFamily: 'Inter',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 30),
+                ],
               ),
             ),
           ),
@@ -277,7 +326,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     );
   }
 
-  // Widget hiển thị Label
+  // Widget Helper
   Widget _buildLabel(String text) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
@@ -287,7 +336,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           fontSize: 18,
           fontFamily: 'Inter',
           fontWeight: FontWeight.w500,
-          color: Colors.black,
         ),
       ),
     );

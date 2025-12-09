@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
-import '../../../../core/constants/app_colors.dart';
+import '../../../../core/config/app_colors.dart';
 import '../../../../core/widgets/custom_button.dart';
 
 class RegisterScreen extends StatefulWidget {

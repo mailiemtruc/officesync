@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 
 // 1. Import các màn hình
-import 'features/auth_service/presentation/screens/splash_screen.dart';
-import 'features/auth_service/presentation/screens/register_screen.dart';
-import 'features/auth_service/presentation/screens/login_screen.dart';
-import 'features/auth_service/presentation/screens/sign_up_screen.dart';
-import 'features/auth_service/presentation/screens/set_password_screen.dart';
-import 'features/auth_service/presentation/screens/forgot_password_screen.dart';
-import 'features/auth_service/presentation/screens/otp_verification_screen.dart';
+import 'features/auth_service/presentation/pages/splash_screen.dart';
+import 'features/auth_service/presentation/pages/register_screen.dart';
+import 'features/auth_service/presentation/pages/login_screen.dart';
+import 'features/auth_service/presentation/pages/sign_up_screen.dart';
+import 'features/auth_service/presentation/pages/set_password_screen.dart';
+import 'features/auth_service/presentation/pages/forgot_password_screen.dart';
+import 'features/auth_service/presentation/pages/otp_verification_screen.dart';
 
 void main() {
   runApp(const OfficeSyncApp());
