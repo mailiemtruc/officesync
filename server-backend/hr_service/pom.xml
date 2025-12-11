@@ -8,11 +8,11 @@
 		<version>4.0.0</version>
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
-	<groupId>edu.uth</groupId>
+	<groupId>com.officesync</groupId>
 	<artifactId>hr_service</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 	<name>hr_service</name>
-	<description>Demo project for Spring Boot</description>
+	<description>officesync</description>
 	<url/>
 	<licenses>
 		<license/>
