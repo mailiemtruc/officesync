@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
-
+import 'change_password_page.dart';
 // Import config
 import '../../../../core/config/app_colors.dart';
 import 'edit_profile_page.dart';
@@ -480,7 +480,14 @@ class _ActionSection extends StatelessWidget {
           Material(
             color: Colors.transparent,
             child: InkWell(
-              onTap: () {},
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const ChangePasswordPage(),
+                  ),
+                );
+              },
               borderRadius: const BorderRadius.vertical(
                 top: Radius.circular(32),
               ),
