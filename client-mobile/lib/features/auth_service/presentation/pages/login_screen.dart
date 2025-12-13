@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
-
+import 'dart:convert';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 // Import Core
 import '../../../../core/config/app_colors.dart';
 import '../../../../core/widgets/custom_button.dart';
 import '../../../../core/widgets/custom_text_field.dart';
+
+import '../../../../core/api/api_client.dart';
+import 'dashboard_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -18,6 +22,9 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isHeaderVisible = false;
   bool _isInputVisible = false;
   bool _isButtonVisible = false;
+
+  // 🔴 THÊM BIẾN NÀY: Để khóa nút khi đang gọi API
+  bool _isLoading = false;
 
   // --- 2. Controller ---
   final _emailController = TextEditingController();
@@ -46,10 +53,9 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  // --- GIAO DIỆN CHÍNH (SPLIT VIEW) ---
+  // --- GIAO DIỆN CHÍNH ---
   @override
   Widget build(BuildContext context) {
-    // 1. Kiểm tra kích thước màn hình
     final width = MediaQuery.of(context).size.width;
     final isDesktop = width > 900;
 
@@ -57,7 +63,6 @@ class _LoginScreenState extends State<LoginScreen> {
       backgroundColor: Colors.white,
       body: SafeArea(
         child: isDesktop
-            // --- GIAO DIỆN DESKTOP (Giữ nguyên Split View) ---
             ? Row(
                 children: [
                   Expanded(
@@ -118,9 +123,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ],
               )
-            // --- GIAO DIỆN MOBILE (ĐÃ SỬA) ---
             : Align(
-                // SỬA Ở ĐÂY: Thay Center bằng Align + topCenter
                 alignment: Alignment.topCenter,
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 500),
@@ -131,14 +134,14 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  // --- TÁCH RIÊNG NỘI DUNG FORM LOGIN ---
+  // --- FORM LOGIN ---
   Widget _buildLoginForm() {
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // --- HEADER (Back + Hello) ---
+          // HEADER
           SizedBox(
             height: 50,
             child: Stack(
@@ -182,7 +185,6 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ),
 
-          // --- CHỮ "WELCOME" ---
           const SizedBox(height: 40),
           AnimatedSlide(
             offset: _isHeaderVisible ? Offset.zero : const Offset(0, -0.5),
@@ -205,7 +207,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
           const SizedBox(height: 40),
 
-          // --- FORM NHẬP LIỆU ---
+          // INPUTS
           AnimatedSlide(
             offset: _isInputVisible ? Offset.zero : const Offset(0, 0.2),
             duration: const Duration(milliseconds: 800),
@@ -244,13 +246,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
                   const SizedBox(height: 10),
 
-                  // Nút Quên mật khẩu
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton(
-                      onPressed: () {
-                        Navigator.pushNamed(context, '/forgot_password');
-                      },
+                      onPressed: () =>
+                          Navigator.pushNamed(context, '/forgot_password'),
                       child: const Text(
                         'Forgot Password',
                         style: TextStyle(
@@ -269,7 +269,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
           const SizedBox(height: 30),
 
-          // --- NÚT LOG IN & FOOTER ---
+          // BUTTON
           AnimatedSlide(
             offset: _isButtonVisible ? Offset.zero : const Offset(0, 1.0),
             duration: const Duration(milliseconds: 800),
@@ -279,13 +279,46 @@ class _LoginScreenState extends State<LoginScreen> {
               duration: const Duration(milliseconds: 800),
               child: Column(
                 children: [
-                  CustomButton(
-                    text: 'Log In',
-                    onPressed: () {
-                      // Logic Login
-                      print("Login: ${_emailController.text}");
-                      // Navigator.pushNamed(context, '/home');
-                    },
+                  // 🔴 SỬA ĐỔI: Dùng SizedBox và ElevatedButton trực tiếp để custom Loading
+                  SizedBox(
+                    width: double.infinity,
+                    height: 55,
+                    child: ElevatedButton(
+                      // Nếu đang loading thì disable nút (onPressed = null)
+                      onPressed: _isLoading
+                          ? null
+                          : () async {
+                              _handleLogin();
+                            },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        disabledBackgroundColor: AppColors.primary.withOpacity(
+                          0.6,
+                        ), // Màu khi đang load
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30),
+                        ),
+                      ),
+                      // Nếu đang load thì hiện vòng quay, ngược lại hiện chữ Log In
+                      child: _isLoading
+                          ? const SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : const Text(
+                              'Log In',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontFamily: 'Inter',
+                                fontWeight: FontWeight.w500,
+                                color: Colors.white,
+                              ),
+                            ),
+                    ),
                   ),
 
                   const SizedBox(height: 25),
@@ -326,7 +359,76 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  // Widget Helper
+  // --- HÀM XỬ LÝ LOGIN ---
+  Future<void> _handleLogin() async {
+    // 1. Ẩn bàn phím
+    FocusScope.of(context).unfocus();
+
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+
+    // 2. Validate
+    if (email.isEmpty || password.isEmpty) {
+      _showSnack("Please enter your email and password!", Colors.orange);
+      return;
+    }
+
+    // 3. Bắt đầu Loading (Khóa nút bấm)
+    setState(() => _isLoading = true);
+
+    try {
+      final apiClient = ApiClient();
+      final response = await apiClient.post(
+        '/auth/login',
+        data: {"email": email, "password": password},
+      );
+
+      if (response.statusCode == 200) {
+        final data = response.data;
+        final String token = data['token'];
+        final Map<String, dynamic> user = data['user'];
+
+        // Lưu Token & User
+        final storage = const FlutterSecureStorage();
+        await storage.write(key: 'auth_token', value: token);
+        await storage.write(key: 'user_info', value: jsonEncode(user));
+
+        if (mounted) {
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(
+              builder: (context) => DashboardScreen(userInfo: user),
+            ),
+            (route) => false,
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        String errorMessage = e.toString();
+        if (errorMessage.startsWith("Exception: ")) {
+          errorMessage = errorMessage.substring("Exception: ".length);
+        }
+        _showSnack(errorMessage, Colors.red);
+      }
+    } finally {
+      // 4. Kết thúc Loading (Mở khóa nút)
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _showSnack(String msg, Color color) {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: color,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3), // Giảm xuống 3s cho nhanh
+      ),
+    );
+  }
+
   Widget _buildLabel(String text) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),

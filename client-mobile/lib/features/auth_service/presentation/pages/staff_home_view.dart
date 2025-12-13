@@ -1,0 +1,481 @@
+import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'dart:async';
+import '../../../../core/config/app_colors.dart';
+
+class StaffHomeView extends StatefulWidget {
+  const StaffHomeView({super.key});
+
+  @override
+  State<StaffHomeView> createState() => _StaffHomeViewState();
+}
+
+class _StaffHomeViewState extends State<StaffHomeView> {
+  bool _animate = false;
+
+  @override
+  void initState() {
+    super.initState();
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (mounted) setState(() => _animate = true);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    final isDesktop = width > 900;
+
+    return Container(
+      color: const Color(0xFFF3F5F9),
+      child: isDesktop ? _buildDesktopLayout() : _buildMobileLayout(),
+    );
+  }
+
+  Widget _buildMobileLayout() {
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildAnimatedItem(0, _buildHeader()),
+          const SizedBox(height: 30),
+          _buildAnimatedItem(1, _buildBlueCard()),
+          const SizedBox(height: 30),
+          _buildAnimatedItem(2, _buildQuickActions()),
+          const SizedBox(height: 35),
+          _buildAnimatedItem(3, _buildMyJobHeader()), // <--- Đã có nút View all
+          const SizedBox(height: 15),
+          _buildAnimatedItem(4, _buildTaskList()),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDesktopLayout() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(40.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            flex: 4,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildAnimatedItem(0, _buildHeader()),
+                const SizedBox(height: 40),
+                _buildAnimatedItem(1, _buildBlueCard()),
+                const SizedBox(height: 40),
+                _buildAnimatedItem(2, _buildQuickActions()),
+              ],
+            ),
+          ),
+          const SizedBox(width: 40),
+          Expanded(
+            flex: 6,
+            child: Container(
+              padding: const EdgeInsets.all(30),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(30),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.04),
+                    blurRadius: 20,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildAnimatedItem(
+                    3,
+                    _buildMyJobHeader(),
+                  ), // <--- Đã có nút View all
+                  const SizedBox(height: 20),
+                  _buildAnimatedItem(4, _buildTaskList()),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- CÁC WIDGET CON ---
+
+  Widget _buildHeader() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 55,
+              height: 55,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(18),
+                image: const DecorationImage(
+                  image: NetworkImage("https://i.pravatar.cc/150?img=11"),
+                  fit: BoxFit.cover,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.08),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 15),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                Text(
+                  'Hi, Nguyen Van A',
+                  style: TextStyle(
+                    color: AppColors.primary,
+                    fontSize: 18,
+                    fontFamily: 'Inter',
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  'ABC Tech Company',
+                  style: TextStyle(
+                    color: Color(0xFF64748B),
+                    fontSize: 14,
+                    fontFamily: 'Inter',
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        Row(
+          children: [
+            _buildCircleIcon(PhosphorIconsBold.bell, () {
+              print("Đã nhấn chuông thông báo");
+            }),
+            const SizedBox(width: 12),
+            _buildCircleIcon(PhosphorIconsBold.chatCircleDots, () {
+              print("Đã nhấn chat");
+            }),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBlueCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: const Color(0xFFCAD6FF),
+        borderRadius: BorderRadius.circular(30),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF2260FF).withOpacity(0.15),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: AppColors.primary,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: const Text(
+              'New Announcements',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Year-end party preparation & schedule',
+            style: TextStyle(
+              color: Color(0xFF1E293B),
+              fontSize: 20,
+              fontFamily: 'Inter',
+              fontWeight: FontWeight.w700,
+              height: 1.3,
+            ),
+          ),
+          const SizedBox(height: 12),
+          GestureDetector(
+            onTap: () {},
+            child: Row(
+              children: [
+                const Text(
+                  'Read more',
+                  style: TextStyle(
+                    color: Color(0xFF1E293B),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(
+                  PhosphorIconsBold.arrowRight,
+                  size: 16,
+                  color: const Color(0xFF1E293B),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickActions() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildActionItem("Request", PhosphorIconsBold.calendarBlank, () {}),
+        _buildActionItem("Note", PhosphorIconsBold.notePencil, () {}),
+        _buildActionItem("OT", PhosphorIconsBold.clock, () {}),
+        _buildActionItem("News", PhosphorIconsBold.newspaper, () {}),
+      ],
+    );
+  }
+
+  // --- MY JOB HEADER (ĐÃ SỬA: CÓ NÚT VIEW ALL) ---
+  Widget _buildMyJobHeader() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        const Text(
+          'My Job',
+          style: TextStyle(
+            color: Color(0xFF1E293B),
+            fontSize: 24,
+            fontFamily: 'Inter',
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        // --- Nút View all ---
+        TextButton(
+          onPressed: () {
+            print("Bấm View all");
+          },
+          child: const Text(
+            "View all",
+            style: TextStyle(
+              color: Color(0xFF2260FF), // Màu xanh chuẩn
+              fontSize: 13,
+              fontFamily: 'Inter',
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTaskList() {
+    return Column(
+      children: [
+        _buildTaskItem(
+          title: "UI/UX Design - Home",
+          status: "Todo",
+          statusColor: AppColors.primary,
+          assignedBy: "Nguyen Van B",
+          onTap: () {},
+        ),
+        const SizedBox(height: 16),
+        _buildTaskItem(
+          title: "Payment Integration",
+          status: "In Progress",
+          statusColor: const Color(0xFFF59E0B),
+          assignedBy: "Nguyen Van B",
+          onTap: () {},
+        ),
+        const SizedBox(height: 16),
+        _buildTaskItem(
+          title: "Code Review",
+          status: "Done",
+          statusColor: const Color(0xFF10B981),
+          assignedBy: "Nguyen Van B",
+          onTap: () {},
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionItem(String label, IconData icon, VoidCallback onTap) {
+    return Column(
+      children: [
+        Material(
+          color: const Color(0xFFE0E7FF),
+          borderRadius: BorderRadius.circular(24),
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(24),
+            child: Container(
+              width: 68,
+              height: 68,
+              alignment: Alignment.center,
+              child: Icon(icon, color: const Color(0xFF1E293B), size: 30),
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          label,
+          style: const TextStyle(
+            color: Color(0xFF64748B),
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTaskItem({
+    required String title,
+    required String status,
+    required Color statusColor,
+    required String assignedBy,
+    required VoidCallback onTap,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 15,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(24),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: const TextStyle(
+                          color: Color(0xFF1E293B),
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    Icon(PhosphorIconsBold.dotsThree, color: Colors.grey),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: statusColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        status,
+                        style: TextStyle(
+                          color: statusColor,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      'By $assignedBy',
+                      style: const TextStyle(
+                        color: Color(0xFF94A3B8),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCircleIcon(IconData icon, VoidCallback onTap) {
+    return Container(
+      width: 44,
+      height: 44,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          customBorder: const CircleBorder(),
+          child: Center(
+            child: Icon(icon, size: 24, color: const Color(0xFF1E293B)),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAnimatedItem(int index, Widget child) {
+    return AnimatedSlide(
+      offset: _animate ? Offset.zero : const Offset(0, 0.1),
+      duration: Duration(milliseconds: 500 + (index * 100)),
+      curve: Curves.easeOutQuad,
+      child: AnimatedOpacity(
+        opacity: _animate ? 1.0 : 0.0,
+        duration: Duration(milliseconds: 500 + (index * 100)),
+        child: child,
+      ),
+    );
+  }
+}

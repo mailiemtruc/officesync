@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // Để dùng FilteringTextInputFormatter
 import 'dart:async';
 
 // Import Core
 import '../../../../core/config/app_colors.dart';
 import '../../../../core/widgets/custom_button.dart';
 import '../../../../core/widgets/custom_text_field.dart';
+import '../../../../core/api/api_client.dart'; // 1. Import API Client
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -14,12 +16,13 @@ class SignUpScreen extends StatefulWidget {
 }
 
 class _SignUpScreenState extends State<SignUpScreen> {
-  // --- 1. Biến trạng thái hiệu ứng ---
   bool _isTitleVisible = false;
   bool _isFormVisible = false;
   bool _isButtonVisible = false;
 
-  // --- 2. Controller ---
+  // Biến loading để khóa nút khi đang gửi mã
+  bool _isLoading = false;
+
   final _companyController = TextEditingController();
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
@@ -29,7 +32,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
   @override
   void initState() {
     super.initState();
-    // Hiệu ứng xuất hiện
     Future.delayed(const Duration(milliseconds: 100), () {
       if (mounted) setState(() => _isTitleVisible = true);
     });
@@ -68,14 +70,144 @@ class _SignUpScreenState extends State<SignUpScreen> {
     );
     if (picked != null) {
       setState(() {
-        _dobController.text = "${picked.day}/${picked.month}/${picked.year}";
+        _dobController.text =
+            "${picked.day.toString().padLeft(2, '0')}/${picked.month.toString().padLeft(2, '0')}/${picked.year}";
       });
     }
   }
 
+  // --- 1. GỬI MÃ XÁC THỰC EMAIL ---
+  Future<void> _handleVerifyEmail() async {
+    // Validate form
+    if (_companyController.text.isEmpty ||
+        _nameController.text.isEmpty ||
+        _emailController.text.isEmpty ||
+        _phoneController.text.isEmpty ||
+        _dobController.text.isEmpty) {
+      _showMessage("Please fill all required fields", Colors.orange);
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      final apiClient = ApiClient();
+      final response = await apiClient.post(
+        '/auth/send-register-otp',
+        data: {
+          "email": _emailController.text.trim(),
+          "mobile": _phoneController.text.trim(),
+        },
+      );
+
+      if (response.statusCode == 200) {
+        // Gửi thành công -> Hiện Dialog nhập mã
+        if (mounted) _showOtpDialog();
+      }
+    } catch (e) {
+      String msg = e.toString().replaceAll("Exception:", "").trim();
+      _showMessage(msg, Colors.red);
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  // --- 2. DIALOG NHẬP OTP ---
+  void _showOtpDialog() {
+    final otpController = TextEditingController();
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          "Verify Email",
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              "We sent a code to ${_emailController.text}.\nEnter it below to verify ownership.",
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 14, color: Colors.grey),
+            ),
+            const SizedBox(height: 20),
+            TextField(
+              controller: otpController,
+              keyboardType: TextInputType.number,
+              textAlign: TextAlign.center,
+              maxLength: 4,
+              style: const TextStyle(
+                fontSize: 24,
+                letterSpacing: 5,
+                fontWeight: FontWeight.bold,
+              ),
+              decoration: InputDecoration(
+                hintText: "----",
+                counterText: "",
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                contentPadding: const EdgeInsets.symmetric(vertical: 10),
+              ),
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel", style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            onPressed: () {
+              String otp = otpController.text.trim();
+              if (otp.length == 4) {
+                Navigator.pop(context); // Đóng dialog
+                _navigateToSetPassword(otp); // Chuyển trang kèm OTP
+              }
+            },
+            child: const Text("Confirm", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- 3. CHUYỂN TRANG ---
+  void _navigateToSetPassword(String otp) {
+    final signUpData = {
+      "companyName": _companyController.text.trim(),
+      "fullName": _nameController.text.trim(),
+      "email": _emailController.text.trim(),
+      "mobile": _phoneController.text.trim(),
+      "dob": _dobController.text.trim(),
+      "otp": otp, // 🔴 Kèm mã OTP để Server verify lúc tạo user
+    };
+
+    Navigator.pushNamed(context, '/set_password', arguments: signUpData);
+  }
+
+  void _showMessage(String msg, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: color,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    // 1. Kiểm tra kích thước màn hình
     final width = MediaQuery.of(context).size.width;
     final isDesktop = width > 900;
 
@@ -83,7 +215,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
       backgroundColor: Colors.white,
       body: SafeArea(
         child: isDesktop
-            // --- GIAO DIỆN DESKTOP (Giữ nguyên Split View) ---
             ? Row(
                 children: [
                   Expanded(
@@ -144,9 +275,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   ),
                 ],
               )
-            // --- GIAO DIỆN MOBILE (ĐÃ SỬA) ---
             : Align(
-                // SỬA: Dùng Align + topCenter để form bắt đầu từ trên cùng
                 alignment: Alignment.topCenter,
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 500),
@@ -157,14 +286,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
     );
   }
 
-  // --- Tách phần nội dung Form ra để dùng chung cho cả Mobile và Desktop ---
   Widget _buildFormContent(BuildContext context) {
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // --- HEADER ---
+          // HEADER
           SizedBox(
             height: 50,
             child: Stack(
@@ -210,7 +338,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
           const SizedBox(height: 30),
 
-          // --- FORM FIELDS ---
+          // FORM FIELDS
           AnimatedSlide(
             offset: _isFormVisible ? Offset.zero : const Offset(0, 0.2),
             duration: const Duration(milliseconds: 800),
@@ -246,9 +374,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   _buildLabel("Date Of Birth"),
                   CustomTextField(
                     controller: _dobController,
-                    hintText: "DD / MM / YYYY",
+                    hintText: "DD/MM/YYYY",
                     readOnly: true,
                     onTap: _selectDate,
+                    suffixIcon: const Icon(Icons.calendar_today, size: 20),
                   ),
                 ],
               ),
@@ -257,7 +386,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
           const SizedBox(height: 40),
 
-          // --- BUTTON & FOOTER ---
+          // BUTTON & FOOTER
           AnimatedSlide(
             offset: _isButtonVisible ? Offset.zero : const Offset(0, 1.0),
             duration: const Duration(milliseconds: 800),
@@ -314,12 +443,45 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     ),
                   ),
                   const SizedBox(height: 25),
-                  CustomButton(
-                    text: 'Continue',
-                    onPressed: () {
-                      Navigator.pushNamed(context, '/set_password');
-                    },
+
+                  // NÚT CONTINUE (Đã sửa logic)
+                  SizedBox(
+                    width: double.infinity,
+                    height: 55,
+                    child: ElevatedButton(
+                      onPressed: _isLoading
+                          ? null
+                          : _handleVerifyEmail, // Gọi hàm gửi OTP
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        disabledBackgroundColor: AppColors.primary.withOpacity(
+                          0.6,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30),
+                        ),
+                      ),
+                      child: _isLoading
+                          ? const SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : const Text(
+                              'Continue',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                                fontFamily: 'Inter',
+                              ),
+                            ),
+                    ),
                   ),
+
                   const SizedBox(height: 20),
                   GestureDetector(
                     onTap: () {
@@ -368,7 +530,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
         text,
         style: const TextStyle(
           color: Colors.black,
-          fontSize: 20,
+          fontSize: 18, // Giảm font size một chút cho cân đối
           fontFamily: 'Inter',
           fontWeight: FontWeight.w500,
         ),

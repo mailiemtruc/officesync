@@ -5,6 +5,7 @@ import 'dart:async';
 import '../../../../core/config/app_colors.dart';
 import '../../../../core/widgets/custom_button.dart';
 import '../../../../core/widgets/custom_text_field.dart';
+import '../../../../core/api/api_client.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -18,6 +19,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   bool _isTitleVisible = false;
   bool _isFormVisible = false;
   bool _isButtonVisible = false;
+
+  // 🔴 THÊM BIẾN LOADING 🔴
+  bool _isLoading = false;
 
   // --- 2. Controller ---
   final _emailController = TextEditingController();
@@ -43,15 +47,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     super.dispose();
   }
 
-  // --- 3. HÀM LOGIC (Giữ nguyên) ---
-  bool _isValidEmail(String email) {
-    return RegExp(
-      r"^[a-zA-Z0-9.a-zA-Z0-9.!#$%&'*+-/=?^_`{|}~]+@[a-zA-Z0-9]+\.[a-zA-Z]+",
-    ).hasMatch(email);
-  }
-
+  // --- 3. HÀM LOGIC ---
   void _showMessage(String message, Color color) {
-    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).hideCurrentSnackBar(); // Ẩn thông báo cũ
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
@@ -65,15 +63,13 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   // --- GIAO DIỆN CHÍNH (SPLIT VIEW) ---
   @override
   Widget build(BuildContext context) {
-    // 1. Kiểm tra kích thước màn hình
     final width = MediaQuery.of(context).size.width;
-    final isDesktop = width > 900; // Desktop nếu > 900px
+    final isDesktop = width > 900;
 
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
         child: isDesktop
-            // --- GIAO DIỆN DESKTOP (Giữ nguyên Split View) ---
             ? Row(
                 children: [
                   Expanded(
@@ -134,9 +130,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   ),
                 ],
               )
-            // --- GIAO DIỆN MOBILE (ĐÃ SỬA) ---
             : Align(
-                // SỬA: Thay Center bằng Align + topCenter
                 alignment: Alignment.topCenter,
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 500),
@@ -154,7 +148,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // --- HEADER (Stack: Back + Title) ---
+          // HEADER
           SizedBox(
             height: 50,
             child: Stack(
@@ -200,7 +194,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
           const SizedBox(height: 40),
 
-          // --- FORM NHẬP EMAIL ---
+          // FORM
           AnimatedSlide(
             offset: _isFormVisible ? Offset.zero : const Offset(0, 0.2),
             duration: const Duration(milliseconds: 800),
@@ -239,7 +233,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
           const SizedBox(height: 40),
 
-          // --- NÚT SEND CODE ---
+          // BUTTON (ĐÃ NÂNG CẤP LOADING)
           AnimatedSlide(
             offset: _isButtonVisible ? Offset.zero : const Offset(0, 1.0),
             duration: const Duration(milliseconds: 800),
@@ -247,28 +241,89 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             child: AnimatedOpacity(
               opacity: _isButtonVisible ? 1.0 : 0.0,
               duration: const Duration(milliseconds: 800),
-              child: CustomButton(
-                text: 'Send Code',
-                onPressed: () {
-                  String email = _emailController.text.trim();
+              child: SizedBox(
+                width: double.infinity,
+                height: 55,
+                child: ElevatedButton(
+                  // Khóa nút nếu đang loading
+                  onPressed: _isLoading
+                      ? null
+                      : () async {
+                          // 1. Ẩn bàn phím
+                          FocusScope.of(context).unfocus();
 
-                  if (email.isEmpty) {
-                    _showMessage("Please enter Email!", Colors.red);
-                    return;
-                  }
+                          String email = _emailController.text.trim();
+                          if (email.isEmpty) {
+                            _showMessage(
+                              "Please enter your email!",
+                              Colors.orange,
+                            );
+                            return;
+                          }
 
-                  if (!_isValidEmail(email)) {
-                    _showMessage(
-                      "Invalid email! (Example: abc@gmail.com)",
-                      Colors.red,
-                    );
-                    return;
-                  }
+                          // 2. Bắt đầu Loading
+                          setState(() => _isLoading = true);
 
-                  FocusScope.of(context).unfocus();
-                  _showMessage("Verification code sent!", Colors.green);
-                  Navigator.pushNamed(context, '/otp_verification');
-                },
+                          try {
+                            final apiClient = ApiClient();
+                            final response = await apiClient.post(
+                              '/auth/forgot-password',
+                              data: {"email": email},
+                            );
+
+                            if (response.statusCode == 200) {
+                              _showMessage(
+                                "OTP sent successfully!",
+                                Colors.green,
+                              );
+
+                              // Chuyển trang
+                              if (mounted) {
+                                Navigator.pushNamed(
+                                  context,
+                                  '/otp_verification',
+                                  arguments: email,
+                                );
+                              }
+                            }
+                          } catch (e) {
+                            // Xử lý thông báo lỗi gọn gàng
+                            String msg = e.toString();
+                            if (msg.contains("Exception:")) {
+                              msg = msg.replaceAll("Exception:", "").trim();
+                            }
+                            _showMessage(msg, Colors.red);
+                          } finally {
+                            // 3. Kết thúc Loading (Dù thành công hay thất bại)
+                            if (mounted) setState(() => _isLoading = false);
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    disabledBackgroundColor: AppColors.primary.withOpacity(0.6),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                  ),
+                  child: _isLoading
+                      ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : const Text(
+                          'Send Code',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                            fontFamily: 'Inter',
+                          ),
+                        ),
+                ),
               ),
             ),
           ),
@@ -277,7 +332,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     );
   }
 
-  // Widget hiển thị Label
   Widget _buildLabel(String text) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),

@@ -5,6 +5,7 @@ import 'dart:async';
 import '../../../../core/config/app_colors.dart';
 import '../../../../core/widgets/custom_button.dart';
 import '../../../../core/widgets/custom_text_field.dart';
+import '../../../../core/api/api_client.dart';
 
 class SetPasswordScreen extends StatefulWidget {
   const SetPasswordScreen({super.key});
@@ -14,12 +15,10 @@ class SetPasswordScreen extends StatefulWidget {
 }
 
 class _SetPasswordScreenState extends State<SetPasswordScreen> {
-  // --- 1. Biến trạng thái hiệu ứng ---
   bool _isTitleVisible = false;
   bool _isFormVisible = false;
   bool _isButtonVisible = false;
 
-  // --- 2. Controller ---
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
@@ -29,7 +28,6 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
   @override
   void initState() {
     super.initState();
-    // Hiệu ứng xuất hiện
     Future.delayed(const Duration(milliseconds: 100), () {
       if (mounted) setState(() => _isTitleVisible = true);
     });
@@ -48,7 +46,65 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
     super.dispose();
   }
 
-  // --- 3. LOGIC KIỂM TRA MẬT KHẨU (Giữ nguyên) ---
+  // --- 1. XỬ LÝ ĐĂNG KÝ (CREATE COMPANY) ---
+  Future<void> _handleRegister(Map<String, dynamic> prevData) async {
+    final String password = _passwordController.text;
+
+    final requestBody = {
+      "companyName": prevData['companyName'],
+      "fullName": prevData['fullName'],
+      "email": prevData['email'],
+      "mobileNumber": prevData['mobile'],
+      "dateOfBirth": prevData['dob'],
+      "password": password,
+      "otp": prevData['otp'],
+    };
+    try {
+      final apiClient = ApiClient();
+      final response = await apiClient.post(
+        '/auth/register',
+        data: requestBody,
+      );
+
+      if (response.statusCode == 200) {
+        if (mounted) _showSuccessDialog();
+      }
+    } catch (e) {
+      if (mounted) _showError("Registration failed: ${e.toString()}");
+    }
+  }
+
+  // --- 2. XỬ LÝ ĐẶT LẠI MẬT KHẨU (FORGOT PASSWORD) ---
+  Future<void> _handleResetPassword(String email, String newPassword) async {
+    try {
+      final apiClient = ApiClient();
+      final response = await apiClient.post(
+        '/auth/reset-password',
+        data: {"email": email, "password": newPassword},
+      );
+
+      if (response.statusCode == 200) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Password reset successfully! Login now."),
+              backgroundColor: Colors.green,
+            ),
+          );
+          // Về trang Login và xóa lịch sử
+          Navigator.pushNamedAndRemoveUntil(
+            context,
+            '/login',
+            (route) => false,
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) _showError("Reset failed: ${e.toString()}");
+    }
+  }
+
+  // --- VALIDATION ---
   List<String> _validatePasswordErrors(String password) {
     List<String> errors = [];
     if (password.length < 8) errors.add("Minimum 8 characters");
@@ -75,10 +131,8 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
     );
   }
 
-  // --- 4. GIAO DIỆN CHÍNH (Đã nâng cấp Split View) ---
   @override
   Widget build(BuildContext context) {
-    // 1. Kiểm tra kích thước màn hình
     final width = MediaQuery.of(context).size.width;
     final isDesktop = width > 900;
 
@@ -86,7 +140,6 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
       backgroundColor: Colors.white,
       body: SafeArea(
         child: isDesktop
-            // --- GIAO DIỆN DESKTOP (Giữ nguyên Split View) ---
             ? Row(
                 children: [
                   Expanded(
@@ -147,9 +200,7 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
                   ),
                 ],
               )
-            // --- GIAO DIỆN MOBILE (ĐÃ SỬA) ---
             : Align(
-                // SỬA: Dùng Align + topCenter để nội dung bắt đầu từ trên cùng
                 alignment: Alignment.topCenter,
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 500),
@@ -160,15 +211,13 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
     );
   }
 
-  // --- 5. TÁCH RIÊNG NỘI DUNG FORM ---
-  // Để dùng chung cho cả Mobile và Desktop
   Widget _buildFormContent() {
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // --- HEADER (Stack: Back + Title) ---
+          // HEADER
           SizedBox(
             height: 50,
             child: Stack(
@@ -214,7 +263,7 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
 
           const SizedBox(height: 30),
 
-          // --- FORM ---
+          // FORM
           AnimatedSlide(
             offset: _isFormVisible ? Offset.zero : const Offset(0, 0.2),
             duration: const Duration(milliseconds: 800),
@@ -225,7 +274,6 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // 1. Password
                   _buildLabel("Password"),
                   CustomTextField(
                     controller: _passwordController,
@@ -243,8 +291,6 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
                       ),
                     ),
                   ),
-
-                  // 2. Rules Box
                   const SizedBox(height: 15),
                   Container(
                     width: double.infinity,
@@ -268,8 +314,6 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
-
-                  // 3. Confirm Password
                   _buildLabel("Confirm Password"),
                   CustomTextField(
                     controller: _confirmPasswordController,
@@ -295,7 +339,7 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
 
           const SizedBox(height: 40),
 
-          // --- BUTTON ---
+          // BUTTON
           AnimatedSlide(
             offset: _isButtonVisible ? Offset.zero : const Offset(0, 1.0),
             duration: const Duration(milliseconds: 800),
@@ -304,7 +348,7 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
               opacity: _isButtonVisible ? 1.0 : 0.0,
               duration: const Duration(milliseconds: 800),
               child: CustomButton(
-                text: 'Create new password',
+                text: 'Confirm', // Đổi tên nút thành Confirm cho chung
                 onPressed: () {
                   String pass = _passwordController.text;
                   String confirm = _confirmPasswordController.text;
@@ -313,12 +357,10 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
                     _showError("Please enter complete information!");
                     return;
                   }
-
                   if (pass != confirm) {
                     _showError("Confirmation password does not match!");
                     return;
                   }
-
                   List<String> errors = _validatePasswordErrors(pass);
                   if (errors.isNotEmpty) {
                     String errorMsg =
@@ -327,7 +369,24 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
                     return;
                   }
 
-                  _showSuccessDialog();
+                  // 🔴 LOGIC ĐIỀU HƯỚNG QUAN TRỌNG 🔴
+                  final args =
+                      ModalRoute.of(context)!.settings.arguments
+                          as Map<String, dynamic>?;
+
+                  if (args != null) {
+                    // TRƯỜNG HỢP 1: QUÊN MẬT KHẨU (Có cờ isReset)
+                    if (args.containsKey('isReset') &&
+                        args['isReset'] == true) {
+                      _handleResetPassword(args['email'], pass);
+                    }
+                    // TRƯỜNG HỢP 2: ĐĂNG KÝ MỚI (Mặc định)
+                    else {
+                      _handleRegister(args);
+                    }
+                  } else {
+                    _showError("Error: Missing data! Please go back.");
+                  }
                 },
               ),
             ),
@@ -336,8 +395,6 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
       ),
     );
   }
-
-  // --- Helper Widgets ---
 
   Widget _buildLabel(String text) {
     return Padding(

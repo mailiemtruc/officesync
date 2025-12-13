@@ -5,6 +5,7 @@ import 'dart:async';
 // Import Core
 import '../../../../core/config/app_colors.dart';
 import '../../../../core/widgets/custom_button.dart';
+import '../../../../core/api/api_client.dart';
 
 class OtpVerificationScreen extends StatefulWidget {
   const OtpVerificationScreen({super.key});
@@ -28,7 +29,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
   // --- 3. Quản lý đồng hồ đếm ngược ---
   Timer? _timer;
-  int _start = 30;
+  int _start = 60;
   bool _canResend = false;
 
   @override
@@ -60,7 +61,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     super.dispose();
   }
 
-  // --- HÀM LOGIC (Giữ nguyên) ---
+  // --- HÀM LOGIC ---
   void _showMessage(String message, Color color) {
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
@@ -77,41 +78,67 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     const oneSec = Duration(seconds: 1);
     _timer = Timer.periodic(oneSec, (Timer timer) {
       if (_start == 0) {
-        setState(() {
-          timer.cancel();
-          _canResend = true;
-        });
+        if (mounted) {
+          setState(() {
+            timer.cancel();
+            _canResend = true;
+          });
+        }
       } else {
-        setState(() {
-          _start--;
-        });
+        if (mounted) {
+          setState(() {
+            _start--;
+          });
+        }
       }
     });
   }
 
-  void _resendCode() {
+  // 🔴 SỬA HÀM RESEND CODE (ĐÃ NÂNG CẤP GIAO DIỆN) 🔴
+  Future<void> _resendCode() async {
     if (_canResend) {
-      setState(() {
-        _start = 30;
-        _canResend = false;
-      });
-      _startTimer();
-      _showMessage("Code resent successfully!", Colors.green);
+      final emailArg = ModalRoute.of(context)?.settings.arguments;
+      if (emailArg == null) {
+        _showMessage("Error: Email not found!", Colors.red);
+        return;
+      }
+      final String email = emailArg as String;
+
+      try {
+        _showMessage("Resending code...", AppColors.primary);
+
+        final apiClient = ApiClient();
+        final response = await apiClient.post(
+          '/auth/forgot-password',
+          data: {"email": email},
+        );
+
+        if (response.statusCode == 200) {
+          setState(() {
+            // 🔴 SỬA VỊ TRÍ 2: Đổi 30 thành 60
+            _start = 60;
+
+            _canResend = false;
+          });
+          _startTimer();
+          _showMessage("Code resent successfully! Check Email.", Colors.green);
+        }
+      } catch (e) {
+        _showMessage("Failed to resend: ${e.toString()}", Colors.red);
+      }
     }
   }
 
   // --- GIAO DIỆN CHÍNH (SPLIT VIEW) ---
   @override
   Widget build(BuildContext context) {
-    // 1. Kiểm tra kích thước màn hình
     final width = MediaQuery.of(context).size.width;
-    final isDesktop = width > 900; // Desktop nếu > 900px
+    final isDesktop = width > 900;
 
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
         child: isDesktop
-            // --- GIAO DIỆN DESKTOP (Giữ nguyên Split View) ---
             ? Row(
                 children: [
                   Expanded(
@@ -172,10 +199,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                   ),
                 ],
               )
-            // --- GIAO DIỆN MOBILE (ĐÃ SỬA) ---
             : Align(
-                // SỬA: Dùng Align + topCenter thay vì Center
-                // Giúp form nằm gọn ở trên cùng, tiện cho việc nhập số
                 alignment: Alignment.topCenter,
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 500),
@@ -195,7 +219,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // --- HEADER (Stack: Back + Title) ---
+          // HEADER
           SizedBox(
             height: 50,
             child: Stack(
@@ -241,7 +265,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
           const SizedBox(height: 50),
 
-          // --- CONTENT (OTP Box + Timer + Text) ---
+          // CONTENT
           AnimatedSlide(
             offset: _isContentVisible ? Offset.zero : const Offset(0, 0.2),
             duration: const Duration(milliseconds: 800),
@@ -251,7 +275,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
               duration: const Duration(milliseconds: 800),
               child: Column(
                 children: [
-                  // 4 Ô OTP
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: List.generate(4, (index) {
@@ -266,7 +289,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
                   const SizedBox(height: 30),
 
-                  // TIMER & RESEND TEXT
                   if (!_canResend)
                     Text(
                       'Resend code in $timerText',
@@ -280,6 +302,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                     ),
 
                   TextButton(
+                    // Gọi hàm _resendCode mới
                     onPressed: _canResend ? _resendCode : null,
                     child: Text(
                       'Resend Code',
@@ -294,7 +317,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
                   const SizedBox(height: 20),
 
-                  // DESCRIPTION
                   Text(
                     'Please enter the correct code we sent you to complete the verification.',
                     textAlign: TextAlign.center,
@@ -313,7 +335,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
           const SizedBox(height: 40),
 
-          // --- BUTTON ---
+          // BUTTON
           AnimatedSlide(
             offset: _isButtonVisible ? Offset.zero : const Offset(0, 1.0),
             duration: const Duration(milliseconds: 800),
@@ -323,13 +345,44 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
               duration: const Duration(milliseconds: 800),
               child: CustomButton(
                 text: 'Continue',
-                onPressed: () {
-                  FocusScope.of(context).unfocus(); // Ẩn bàn phím
+                onPressed: () async {
+                  FocusScope.of(context).unfocus();
                   String otp = _controllers.map((c) => c.text).join();
                   if (otp.length < 4) {
-                    _showMessage("Please enter 4 digits!", Colors.red);
-                  } else {
-                    Navigator.pushNamed(context, '/set_password');
+                    _showMessage(
+                      "Please enter complete OTP code!",
+                      Colors.orange,
+                    );
+                    return;
+                  }
+
+                  final email =
+                      ModalRoute.of(context)!.settings.arguments as String;
+
+                  try {
+                    // Gọi API Verify
+                    final apiClient = ApiClient();
+                    final response = await apiClient.post(
+                      '/auth/verify-otp',
+                      data: {"email": email, "otp": otp},
+                    );
+
+                    if (response.statusCode == 200) {
+                      _showMessage("Verified!", Colors.green);
+
+                      Navigator.pushNamed(
+                        context,
+                        '/set_password',
+                        arguments: {'email': email, 'isReset': true},
+                      );
+                    }
+                  } catch (e) {
+                    // Xử lý thông báo lỗi đẹp hơn
+                    String msg = e.toString();
+                    if (msg.contains("Exception:")) {
+                      msg = msg.replaceAll("Exception:", "").trim();
+                    }
+                    _showMessage(msg, Colors.red);
                   }
                 },
               ),
@@ -340,7 +393,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     );
   }
 
-  // --- HELPER: Ô NHẬP OTP ---
   Widget _buildOtpBox(int index) {
     return Container(
       decoration: ShapeDecoration(
