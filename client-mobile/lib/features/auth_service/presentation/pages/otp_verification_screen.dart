@@ -346,8 +346,12 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
               child: CustomButton(
                 text: 'Continue',
                 onPressed: () async {
-                  FocusScope.of(context).unfocus();
-                  String otp = _controllers.map((c) => c.text).join();
+                  FocusScope.of(context).unfocus(); // Ẩn bàn phím
+                  String otp = _controllers
+                      .map((c) => c.text)
+                      .join(); // Lấy chuỗi OTP
+
+                  // 1. Validate độ dài
                   if (otp.length < 4) {
                     _showMessage(
                       "Please enter complete OTP code!",
@@ -360,7 +364,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                       ModalRoute.of(context)!.settings.arguments as String;
 
                   try {
-                    // Gọi API Verify
+                    // 2. Gọi API Verify (Chỉ để check xem đúng không trước khi cho qua)
                     final apiClient = ApiClient();
                     final response = await apiClient.post(
                       '/auth/verify-otp',
@@ -370,18 +374,28 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                     if (response.statusCode == 200) {
                       _showMessage("Verified!", Colors.green);
 
+                      // 3. 🔴 QUAN TRỌNG: Phải truyền OTP sang màn hình tiếp theo
                       Navigator.pushNamed(
                         context,
                         '/set_password',
-                        arguments: {'email': email, 'isReset': true},
+                        arguments: {
+                          'email': email,
+                          'otp': otp, // <--- THÊM DÒNG NÀY
+                          'isReset':
+                              true, // Cờ đánh dấu đây là luồng quên mật khẩu
+                        },
                       );
                     }
                   } catch (e) {
-                    // Xử lý thông báo lỗi đẹp hơn
+                    // Xử lý lỗi từ Backend (Ví dụ: Mã sai, hết hạn)
                     String msg = e.toString();
+                    // Lọc bớt chữ "Exception:" nếu có để thông báo đẹp hơn
                     if (msg.contains("Exception:")) {
                       msg = msg.replaceAll("Exception:", "").trim();
                     }
+                    // Nếu là lỗi Dio (API) thì parse message từ response
+                    // (Tùy vào cách bạn viết class ApiClient, nhưng logic cơ bản là vậy)
+
                     _showMessage(msg, Colors.red);
                   }
                 },

@@ -161,6 +161,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
             onPressed: () => Navigator.pop(context),
             child: const Text("Cancel", style: TextStyle(color: Colors.grey)),
           ),
+
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
@@ -168,11 +169,47 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 borderRadius: BorderRadius.circular(10),
               ),
             ),
-            onPressed: () {
+            onPressed: () async {
               String otp = otpController.text.trim();
-              if (otp.length == 4) {
-                Navigator.pop(context); // Đóng dialog
-                _navigateToSetPassword(otp); // Chuyển trang kèm OTP
+
+              // 1. Validate độ dài
+              if (otp.length != 4) {
+                _showMessage("Please enter full 4-digit code", Colors.orange);
+                return;
+              }
+
+              // 2. Gọi API để kiểm tra tính đúng sai với Server
+              try {
+                final apiClient = ApiClient();
+                final response = await apiClient.post(
+                  '/auth/verify-register-otp', // Gọi API kiểm tra
+                  data: {"email": _emailController.text.trim(), "otp": otp},
+                );
+
+                // 3. Nếu Server xác nhận đúng (Status 200)
+                if (response.statusCode == 200) {
+                  if (context.mounted) {
+                    Navigator.pop(context); // Đóng Dialog
+                    _navigateToSetPassword(otp); // Chuyển trang
+                  }
+                }
+              } catch (e) {
+                // 4. Nếu sai (Server trả lỗi 400) -> Hiện thông báo lỗi
+                String msg = e.toString();
+                if (msg.contains("Exception:")) {
+                  msg = msg.replaceAll("Exception:", "").trim();
+                }
+
+                // Hiển thị lỗi ngay lập tức
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(msg), // Ví dụ: "Invalid verification code!"
+                      backgroundColor: Colors.red,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
               }
             },
             child: const Text("Confirm", style: TextStyle(color: Colors.white)),

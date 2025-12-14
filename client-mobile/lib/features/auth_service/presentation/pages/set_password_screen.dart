@@ -75,12 +75,20 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
   }
 
   // --- 2. XỬ LÝ ĐẶT LẠI MẬT KHẨU (FORGOT PASSWORD) ---
-  Future<void> _handleResetPassword(String email, String newPassword) async {
+  Future<void> _handleResetPassword(
+    String email,
+    String otp,
+    String newPassword,
+  ) async {
     try {
       final apiClient = ApiClient();
       final response = await apiClient.post(
         '/auth/reset-password',
-        data: {"email": email, "password": newPassword},
+        data: {
+          "email": email,
+          "password": newPassword,
+          "otp": otp, // 🔴 QUAN TRỌNG: Bắt buộc phải gửi OTP lên
+        },
       );
 
       if (response.statusCode == 200) {
@@ -91,7 +99,7 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
               backgroundColor: Colors.green,
             ),
           );
-          // Về trang Login và xóa lịch sử
+          // Về trang Login và xóa sạch lịch sử cũ
           Navigator.pushNamedAndRemoveUntil(
             context,
             '/login',
@@ -100,7 +108,11 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
         }
       }
     } catch (e) {
-      if (mounted) _showError("Reset failed: ${e.toString()}");
+      // Xử lý thông báo lỗi gọn gàng hơn
+      String msg = e.toString();
+      if (msg.contains("Exception:"))
+        msg = msg.replaceAll("Exception:", "").trim();
+      if (mounted) _showError(msg);
     }
   }
 
@@ -378,7 +390,16 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
                     // TRƯỜNG HỢP 1: QUÊN MẬT KHẨU (Có cờ isReset)
                     if (args.containsKey('isReset') &&
                         args['isReset'] == true) {
-                      _handleResetPassword(args['email'], pass);
+                      // 🔴 SỬA: Lấy OTP và truyền vào hàm
+                      final email = args['email'];
+                      final otp = args['otp']; // Lấy OTP từ màn hình trước
+
+                      if (otp == null) {
+                        _showError("Security Error: OTP is missing!");
+                        return;
+                      }
+
+                      _handleResetPassword(email, otp, pass);
                     }
                     // TRƯỜNG HỢP 2: ĐĂNG KÝ MỚI (Mặc định)
                     else {
@@ -452,13 +473,13 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
                   style: TextStyle(color: Colors.white),
                 ),
                 onPressed: () {
-                  Navigator.pop(context);
+                  Navigator.pop(context); // Đóng Dialog
+                  // Chuyển thẳng về trang Login, xóa hết lịch sử cũ
                   Navigator.pushNamedAndRemoveUntil(
                     context,
-                    '/register',
+                    '/login',
                     (route) => false,
                   );
-                  Navigator.pushNamed(context, '/login');
                 },
               ),
             ),
