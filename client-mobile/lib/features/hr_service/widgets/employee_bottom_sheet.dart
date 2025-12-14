@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../data/models/employee_model.dart';
+import '../presentation/pages/edit_profile_emloyee_page.dart';
+import 'confirm_bottom_sheet.dart';
 
 class EmployeeBottomSheet extends StatelessWidget {
   final Employee employee;
@@ -113,33 +115,80 @@ class EmployeeBottomSheet extends StatelessWidget {
               icon: PhosphorIcons.pencilSimple(),
               text: 'Edit Information',
               color: const Color(0xFF374151),
-              onTap: () {},
-            ),
+              onTap: () {
+                Navigator.pop(context); // 1. Đóng BottomSheet trước
 
+                // 2. Chuyển sang trang Edit
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const EditProfileEmployeePage(),
+                  ),
+                );
+              },
+            ),
             const Divider(height: 1, color: Color(0xFFE5E7EB)),
 
-            // Nút Khóa / Mở khóa (Logic đổi text và icon)
+            // --- NÚT LOCK / UNLOCK ---
             _buildActionItem(
               icon: employee.isLocked
                   ? PhosphorIcons.lockOpen()
                   : PhosphorIcons.lock(),
               text: employee.isLocked ? 'Unlock Account' : 'Lock Account',
-              color: employee.isLocked
-                  ? Colors.green
-                  : const Color(0xFFDC2626), // Đỏ nếu khóa, Xanh nếu mở
+              color: employee.isLocked ? Colors.green : const Color(0xFFDC2626),
               onTap: () {
-                Navigator.pop(context); // Đóng sheet trước
-                onToggleLock(); // Gọi hàm xử lý logic
+                Navigator.pop(context); // Đóng menu chính trước
+
+                if (employee.isLocked) {
+                  // Mở khóa ngay lập tức (không cần hỏi)
+                  onToggleLock();
+                } else {
+                  // Nếu Khóa -> Gọi trực tiếp showModalBottomSheet ở đây
+                  showModalBottomSheet(
+                    context: context,
+                    backgroundColor: Colors.transparent,
+                    isScrollControlled: true,
+                    builder: (context) => ConfirmBottomSheet(
+                      title: 'Suspend Access?',
+                      message:
+                          'Employee ${employee.name} will not be able to log in to the system.',
+                      confirmText: 'Suspend',
+                      confirmColor: const Color(0xFFF97316), // Màu cam
+                      onConfirm: () {
+                        Navigator.pop(context); // Đóng confirm sheet
+                        onToggleLock(); // Thực hiện khóa
+                      },
+                    ),
+                  );
+                }
               },
             ),
 
+            // --- NÚT DELETE ---
             _buildActionItem(
               icon: PhosphorIcons.trash(),
               text: 'Delete Employee',
               color: const Color(0xFFDC2626),
               onTap: () {
-                Navigator.pop(context);
-                onDelete();
+                Navigator.pop(context); // Đóng menu chính trước
+
+                // Gọi trực tiếp showModalBottomSheet ở đây
+                showModalBottomSheet(
+                  context: context,
+                  backgroundColor: Colors.transparent,
+                  isScrollControlled: true,
+                  builder: (context) => ConfirmBottomSheet(
+                    title: 'Delete Employee?',
+                    message:
+                        'This action cannot be undone. All data associated with ${employee.name} will be permanently deleted.',
+                    confirmText: 'Delete',
+                    confirmColor: const Color(0xFFDC2626), // Màu đỏ
+                    onConfirm: () {
+                      Navigator.pop(context); // Đóng confirm sheet
+                      onDelete(); // Thực hiện xóa
+                    },
+                  ),
+                );
               },
             ),
 
