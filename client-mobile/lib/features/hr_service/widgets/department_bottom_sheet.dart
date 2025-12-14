@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../data/models/department_model.dart';
+import 'confirm_bottom_sheet.dart'; // Import Widget xác nhận
+import '../presentation/pages/edit_department_page.dart'; // Import trang Edit
 
 class DepartmentBottomSheet extends StatelessWidget {
   final Department department;
@@ -11,6 +13,26 @@ class DepartmentBottomSheet extends StatelessWidget {
     required this.department,
     required this.onDelete,
   });
+
+  // Hàm hiển thị bảng xác nhận xóa (dùng lại ConfirmBottomSheet)
+  void _showDeleteDialog(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => ConfirmBottomSheet(
+        title: 'Delete Department?',
+        message:
+            'This action cannot be undone. Employees in this department will be moved to "Unassigned".',
+        confirmText: 'Delete',
+        confirmColor: const Color(0xFFDC2626), // Màu đỏ
+        onConfirm: () {
+          Navigator.pop(context); // Đóng bảng xác nhận
+          onDelete(); // Gọi hàm xóa từ trang cha truyền vào
+        },
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -102,11 +124,20 @@ class DepartmentBottomSheet extends StatelessWidget {
               onTap: () {},
             ),
 
+            // NÚT EDIT: Chuyển sang trang EditDepartmentPage
             _buildActionItem(
               icon: PhosphorIcons.pencilSimple(),
               text: 'Edit Department Info',
               color: const Color(0xFF374151),
-              onTap: () {},
+              onTap: () {
+                Navigator.pop(context); // Đóng menu trước
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const EditDepartmentPage(),
+                  ),
+                );
+              },
             ),
 
             _buildActionItem(
@@ -121,10 +152,10 @@ class DepartmentBottomSheet extends StatelessWidget {
             _buildActionItem(
               icon: PhosphorIcons.trash(),
               text: 'Delete Department',
-              color: const Color(0xFFDC2626), // Màu đỏ
+              color: const Color(0xFFDC2626),
               onTap: () {
-                Navigator.pop(context);
-                onDelete();
+                Navigator.pop(context); // Đóng menu trước
+                _showDeleteDialog(context); // Hiện bảng xác nhận xóa
               },
             ),
 
