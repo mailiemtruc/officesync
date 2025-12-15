@@ -9,9 +9,9 @@
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
     <groupId>com.officesync</groupId>
-    <artifactId>core-service</artifactId>
+    <artifactId>core_service</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>core-service</name>
+    <name>core_service</name>
     <description>officesync</description>
     <url/>
     <licenses>

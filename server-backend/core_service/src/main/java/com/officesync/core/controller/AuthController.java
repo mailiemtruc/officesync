@@ -52,10 +52,32 @@ public class AuthController {
     // --- API LOGIN ---
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginRequest req) {
+        // 1. Tìm User
         User user = userRepository.findByEmail(req.getEmail()).orElse(null);
+        
+        // 2. Check Password
         if (user == null || !passwordEncoder.matches(req.getPassword(), user.getPassword())) {
             return ResponseEntity.badRequest().body("Incorrect email or password!");
         }
+
+        // Logic: Nếu user thuộc công ty (có companyId) VÀ công ty đó đang bị LOCKED -> Chặn luôn
+        if (user.getCompanyId() != null) {
+            Company company = companyRepository.findById(user.getCompanyId()).orElse(null);
+            
+            if (company != null && "LOCKED".equals(company.getStatus())) {
+                // Trả về lỗi 403 Forbidden
+                return ResponseEntity.status(403) 
+                    .body("Your company account has been locked. Please contact support.");
+            }
+        }
+
+        // Nếu chính tài khoản này bị khóa
+        if ("LOCKED".equals(user.getStatus())) {
+            return ResponseEntity.status(403)
+                .body("Your account has been locked by Administrator.");
+        }
+
+        // 4. Nếu mọi thứ OK -> Tạo Token
         String token = tokenProvider.generateToken(user);
         return ResponseEntity.ok(new AuthResponse(token, user));
     }

@@ -6,6 +6,7 @@ import '../../../../core/config/app_colors.dart';
 import '../../../../core/widgets/custom_button.dart';
 import '../../../../core/widgets/custom_text_field.dart';
 import '../../../../core/api/api_client.dart';
+import '../../../../core/utils/custom_snackbar.dart';
 
 class SetPasswordScreen extends StatefulWidget {
   const SetPasswordScreen({super.key});
@@ -130,14 +131,11 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 3),
-      ),
+    CustomSnackBar.show(
+      context,
+      title: "Error",
+      message: message,
+      isError: true,
     );
   }
 

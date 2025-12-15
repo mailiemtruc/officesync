@@ -6,6 +6,7 @@ import 'dart:async';
 import '../../../../core/config/app_colors.dart';
 import '../../../../core/widgets/custom_button.dart';
 import '../../../../core/api/api_client.dart';
+import '../../../../core/utils/custom_snackbar.dart';
 
 class OtpVerificationScreen extends StatefulWidget {
   const OtpVerificationScreen({super.key});
@@ -63,14 +64,13 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
   // --- HÀM LOGIC ---
   void _showMessage(String message, Color color) {
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: color,
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 3),
-      ),
+    bool isError = color == Colors.red || color == Colors.orange;
+
+    CustomSnackBar.show(
+      context,
+      title: isError ? "Notification" : "Success", // Hoặc tùy chỉnh title
+      message: message,
+      isError: isError,
     );
   }
 

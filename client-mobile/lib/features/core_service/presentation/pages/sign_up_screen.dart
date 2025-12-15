@@ -7,6 +7,7 @@ import '../../../../core/config/app_colors.dart';
 import '../../../../core/widgets/custom_button.dart';
 import '../../../../core/widgets/custom_text_field.dart';
 import '../../../../core/api/api_client.dart'; // 1. Import API Client
+import '../../../../core/utils/custom_snackbar.dart';
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -234,12 +235,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   void _showMessage(String msg, Color color) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor: color,
-        behavior: SnackBarBehavior.floating,
-      ),
+    bool isError = color == Colors.red || color == Colors.orange;
+
+    CustomSnackBar.show(
+      context,
+      title: isError ? "Action Failed" : "Success",
+      message: msg,
+      isError: isError,
     );
   }
 

@@ -9,6 +9,7 @@ import '../../../../core/widgets/custom_text_field.dart';
 
 import '../../../../core/api/api_client.dart';
 import 'dashboard_screen.dart';
+import '../../../../core/utils/custom_snackbar.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -369,7 +370,12 @@ class _LoginScreenState extends State<LoginScreen> {
 
     // 2. Validate
     if (email.isEmpty || password.isEmpty) {
-      _showSnack("Please enter your email and password!", Colors.orange);
+      CustomSnackBar.show(
+        context,
+        title: "Validation Error",
+        message: "Please enter your email and password!",
+        isError: true,
+      );
       return;
     }
 
@@ -409,7 +415,12 @@ class _LoginScreenState extends State<LoginScreen> {
         if (errorMessage.startsWith("Exception: ")) {
           errorMessage = errorMessage.substring("Exception: ".length);
         }
-        _showSnack(errorMessage, Colors.red);
+        CustomSnackBar.show(
+          context,
+          title: "Login Failed",
+          message: errorMessage,
+          isError: true,
+        );
       }
     } finally {
       // 4. Kết thúc Loading (Mở khóa nút)

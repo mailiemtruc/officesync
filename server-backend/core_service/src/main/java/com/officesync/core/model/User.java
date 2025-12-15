@@ -48,4 +48,7 @@ public class User {
     
     @Column(name = "otp_expiry")
     private LocalDateTime otpExpiry;
+
+    @Column(columnDefinition = "ENUM('ACTIVE', 'LOCKED') DEFAULT 'ACTIVE'")
+    private String status = "ACTIVE";
 }

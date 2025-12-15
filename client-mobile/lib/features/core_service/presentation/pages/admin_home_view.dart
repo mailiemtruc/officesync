@@ -1,7 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart'; // Đảm bảo đã cài gói này
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'dart:async';
 import '../../../../core/config/app_colors.dart';
+
+// 1. Import API và Model
+import '../../../../core/api/api_client.dart';
+import '../../data/models/company_model.dart';
+import '../../../../core/utils/custom_snackbar.dart';
+import 'company_detail_screen.dart';
+import 'all_companies_screen.dart';
 
 class AdminHomeView extends StatefulWidget {
   const AdminHomeView({super.key});
@@ -13,12 +20,86 @@ class AdminHomeView extends StatefulWidget {
 class _AdminHomeViewState extends State<AdminHomeView> {
   bool _animate = false;
 
+  // 2. Thêm biến trạng thái dữ liệu
+  bool _isLoading = true;
+  Map<String, dynamic>? _stats; // Chứa {companies: 10, users: 50}
+  List<CompanyModel> _companies = [];
+
   @override
   void initState() {
     super.initState();
+    // Animation
     Future.delayed(const Duration(milliseconds: 100), () {
       if (mounted) setState(() => _animate = true);
     });
+
+    // 3. Gọi API lấy dữ liệu khi màn hình mở
+    _fetchData();
+  }
+
+  // --- HÀM GỌI API ---
+  Future<void> _fetchData() async {
+    try {
+      final client = ApiClient();
+
+      // Gọi song song cả 2 API cho nhanh
+      final results = await Future.wait([
+        client.get('/admin/stats'), // API 1: Thống kê
+        client.get('/admin/companies/top'), // API: Chỉ lấy Top 3 công ty
+      ]);
+
+      if (mounted) {
+        setState(() {
+          _stats = results[0].data;
+          // Parse JSON list thành List<CompanyModel>
+          _companies = (results[1].data as List)
+              .map((e) => CompanyModel.fromJson(e))
+              .toList();
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      print("Error fetching admin data: $e");
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  // --- HÀM KHÓA/MỞ KHÓA CÔNG TY ---
+  Future<void> _toggleCompanyStatus(int id, String currentStatus) async {
+    try {
+      final newStatus = currentStatus == 'ACTIVE' ? 'LOCKED' : 'ACTIVE';
+      final client = ApiClient();
+
+      await client.put(
+        '/admin/companies/$id/status',
+        data: {"status": newStatus},
+      );
+
+      // Reload lại dữ liệu sau khi update
+      _fetchData();
+
+      if (mounted) {
+        Navigator.pop(context); // Đóng BottomSheet
+
+        // 🔴 THÊM THÔNG BÁO THÀNH CÔNG
+        CustomSnackBar.show(
+          context,
+          title: "Success",
+          message: "Company status updated successfully!",
+          isError: false,
+        );
+      }
+    } catch (e) {
+      print("Error update status: $e");
+
+      // 🔴 SỬA THÔNG BÁO LỖI
+      CustomSnackBar.show(
+        context,
+        title: "Action Failed",
+        message: e.toString(),
+        isError: true,
+      );
+    }
   }
 
   @override
@@ -27,13 +108,16 @@ class _AdminHomeViewState extends State<AdminHomeView> {
     final isDesktop = width > 900;
 
     return Container(
-      color: const Color(0xFFF3F5F9), // Màu nền chuẩn
+      color: const Color(0xFFF3F5F9),
       child: isDesktop ? _buildDesktopLayout() : _buildMobileLayout(),
     );
   }
 
   // --- LAYOUT MOBILE ---
   Widget _buildMobileLayout() {
+    // Nếu đang load thì hiện vòng xoay
+    if (_isLoading) return const Center(child: CircularProgressIndicator());
+
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
@@ -56,6 +140,8 @@ class _AdminHomeViewState extends State<AdminHomeView> {
 
   // --- LAYOUT DESKTOP ---
   Widget _buildDesktopLayout() {
+    if (_isLoading) return const Center(child: CircularProgressIndicator());
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(40.0),
       child: Row(
@@ -105,9 +191,7 @@ class _AdminHomeViewState extends State<AdminHomeView> {
     );
   }
 
-  // ================= CÁC WIDGET CON (STYLE CHUẨN ĐỒNG BỘ) =================
-
-  // 1. Header: Avatar Admin
+  // ... (Header giữ nguyên) ...
   Widget _buildHeader() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -118,7 +202,7 @@ class _AdminHomeViewState extends State<AdminHomeView> {
               width: 55,
               height: 55,
               decoration: BoxDecoration(
-                color: const Color(0xFF1E293B), // Màu tối quyền lực cho Admin
+                color: const Color(0xFF1E293B),
                 borderRadius: BorderRadius.circular(18),
                 boxShadow: [
                   BoxShadow(
@@ -139,7 +223,7 @@ class _AdminHomeViewState extends State<AdminHomeView> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: const [
                 Text(
-                  'Hi, Nguyen Van D',
+                  'Hi, Nguyen Van D', // Tên này có thể lấy từ UserInfo nếu muốn
                   style: TextStyle(
                     color: AppColors.primary,
                     fontSize: 18,
@@ -165,23 +249,24 @@ class _AdminHomeViewState extends State<AdminHomeView> {
           children: [
             _buildCircleIcon(PhosphorIconsBold.bell, () {}),
             const SizedBox(width: 12),
-            _buildCircleIcon(
-              PhosphorIconsBold.gear,
-              () {},
-            ), // Admin dùng Gear (Cài đặt)
+            _buildCircleIcon(PhosphorIconsBold.gear, () {}),
           ],
         ),
       ],
     );
   }
 
-  // 2. Blue Card: System Health (Thay cho Bảng tin)
+  // 4. Blue Card: HIỂN THỊ DỮ LIỆU THẬT TỪ _stats
   Widget _buildBlueCard() {
+    // Lấy số liệu, mặc định là 0 nếu chưa có
+    final countComp = _stats?['companies'] ?? 0;
+    final countUser = _stats?['users'] ?? 0;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: const Color(0xFFCAD6FF), // Màu nền chuẩn
+        color: const Color(0xFFCAD6FF),
         borderRadius: BorderRadius.circular(30),
         boxShadow: [
           BoxShadow(
@@ -210,9 +295,10 @@ class _AdminHomeViewState extends State<AdminHomeView> {
             ),
           ),
           const SizedBox(height: 16),
-          const Text(
-            'All systems operational. 12 Companies Active.',
-            style: TextStyle(
+          // Hiển thị số liệu thật
+          Text(
+            'All systems operational.\n$countComp Companies, $countUser Users.',
+            style: const TextStyle(
               color: Color(0xFF1E293B),
               fontSize: 20,
               fontFamily: 'Inter',
@@ -248,34 +334,27 @@ class _AdminHomeViewState extends State<AdminHomeView> {
     );
   }
 
-  // 3. Quick Actions: Chức năng Admin (Add Company, Users...)
+  // ... (Quick Actions giữ nguyên) ...
   Widget _buildQuickActions() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Add Company (Tòa nhà)
         _buildActionItem("Add Company", PhosphorIconsBold.buildings, () {}),
-
-        // Users (Người dùng)
         _buildActionItem("Admins", PhosphorIconsBold.users, () {}),
-
-        // Reports (Biểu đồ)
         _buildActionItem("Reports", PhosphorIconsBold.chartBar, () {}),
-
-        // Logs (Khiên bảo mật)
         _buildActionItem("Audit Logs", PhosphorIconsBold.shieldCheck, () {}),
       ],
     );
   }
 
-  // 4. Header Danh sách công ty
+  // ... (List Header giữ nguyên) ...
   Widget _buildListHeader() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         const Text(
-          'Registered Companies',
+          'Top Companies', // Đổi tiêu đề cho hợp lý
           style: TextStyle(
             color: Color(0xFF1E293B),
             fontSize: 24,
@@ -284,9 +363,17 @@ class _AdminHomeViewState extends State<AdminHomeView> {
           ),
         ),
         TextButton(
-          onPressed: () {},
+          onPressed: () {
+            // 🔴 ĐIỀU HƯỚNG SANG TRANG "ALL COMPANIES"
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const AllCompaniesScreen(),
+              ),
+            ).then((_) => _fetchData()); // Reload top 3 khi quay lại
+          },
           child: const Text(
-            "View all",
+            "View all", // Đổi chữ Refresh thành View all
             style: TextStyle(
               color: Color(0xFF2260FF),
               fontSize: 13,
@@ -299,44 +386,114 @@ class _AdminHomeViewState extends State<AdminHomeView> {
     );
   }
 
-  // 5. Danh sách công ty
+  // 5. Danh sách công ty: HIỂN THỊ LIST _companies THẬT
   Widget _buildCompanyList() {
+    if (_companies.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(20),
+        child: Center(child: Text("No companies found.")),
+      );
+    }
+
     return Column(
-      children: [
-        _buildCompanyItem(
-          name: "FPT Software",
-          status: "Active",
-          statusColor: const Color(0xFF4DE275), // Xanh lá
-          domain: "fpt.officesync.com",
-          onTap: () {},
-        ),
-        const SizedBox(height: 16),
-        _buildCompanyItem(
-          name: "Viettel Solutions",
-          status: "Active",
-          statusColor: const Color(0xFF4DE275),
-          domain: "viettel.officesync.com",
-          onTap: () {},
-        ),
-        const SizedBox(height: 16),
-        _buildCompanyItem(
-          name: "Startup XYZ",
-          status: "Locked",
-          statusColor: const Color(0xFFDC2626), // Đỏ
-          domain: "xyz.officesync.com",
-          onTap: () {},
-        ),
-      ],
+      children: _companies.map((company) {
+        // Logic màu sắc trạng thái
+        final isLocked = company.status == 'LOCKED';
+        final statusColor = isLocked
+            ? const Color(0xFFDC2626)
+            : const Color(0xFF4DE275);
+        final displayDomain = "${company.domain}.officesync.com";
+
+        return Column(
+          children: [
+            _buildCompanyItem(
+              name: company.name,
+              status: company.status,
+              statusColor: statusColor,
+              domain: displayDomain,
+
+              // 🔴 SỬA ĐỔI QUAN TRỌNG TẠI ĐÂY 🔴
+              onTap: () {
+                // Thay vì hiện BottomSheet ở đây, ta chuyển sang màn hình chi tiết
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => CompanyDetailScreen(
+                      companyId: company.id,
+                      companyName: company.name,
+                    ),
+                  ),
+                ).then((_) {
+                  // Khi quay lại từ màn hình chi tiết -> Refresh lại dữ liệu
+                  // Để cập nhật trạng thái nếu Admin đã khóa công ty trong kia
+                  _fetchData();
+                });
+              },
+            ),
+            const SizedBox(height: 16),
+          ],
+        );
+      }).toList(),
     );
   }
 
-  // ================= HELPER WIDGETS =================
+  // Helper hiển thị BottomSheet để Lock/Unlock
+  void _showActionSheet(CompanyModel company) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        final isLocked = company.status == 'LOCKED';
+        return Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                "Action for ${company.name}",
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton.icon(
+                  onPressed: () =>
+                      _toggleCompanyStatus(company.id, company.status),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: isLocked ? Colors.green : Colors.red,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  icon: Icon(isLocked ? Icons.lock_open : Icons.lock_outline),
+                  label: Text(isLocked ? "Unlock Company" : "Lock Company"),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text("Cancel"),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
 
+  // ... (Các helper widgets cũ giữ nguyên) ...
   Widget _buildActionItem(String label, IconData icon, VoidCallback onTap) {
     return Column(
       children: [
         Material(
-          color: const Color(0xFFE0E7FF), // Màu nền chuẩn Staff
+          color: const Color(0xFFE0E7FF),
           borderRadius: BorderRadius.circular(24),
           child: InkWell(
             onTap: onTap,

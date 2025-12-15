@@ -6,6 +6,7 @@ import '../../../../core/config/app_colors.dart';
 import '../../../../core/widgets/custom_button.dart';
 import '../../../../core/widgets/custom_text_field.dart';
 import '../../../../core/api/api_client.dart';
+import '../../../../core/utils/custom_snackbar.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -49,14 +50,14 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   // --- 3. HÀM LOGIC ---
   void _showMessage(String message, Color color) {
-    ScaffoldMessenger.of(context).hideCurrentSnackBar(); // Ẩn thông báo cũ
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: color,
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 3),
-      ),
+    // Xác định xem có phải lỗi không dựa vào màu sắc (Logic tạm thời)
+    bool isError = color == Colors.red || color == Colors.orange;
+
+    CustomSnackBar.show(
+      context,
+      title: isError ? "Error" : "Success",
+      message: message,
+      isError: isError,
     );
   }
 
