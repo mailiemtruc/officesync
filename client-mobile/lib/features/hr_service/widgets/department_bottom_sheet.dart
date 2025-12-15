@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../data/models/department_model.dart';
-import 'confirm_bottom_sheet.dart'; // Import Widget xác nhận
-import '../presentation/pages/edit_department_page.dart'; // Import trang Edit
+import 'confirm_bottom_sheet.dart';
+import '../presentation/pages/edit_department_page.dart';
+import '../presentation/pages/department_details_page.dart'; // Trang vừa tạo
+import '../presentation/pages/add_members_page.dart'; // Trang thêm thành viên
 
 class DepartmentBottomSheet extends StatelessWidget {
   final Department department;
@@ -14,7 +16,6 @@ class DepartmentBottomSheet extends StatelessWidget {
     required this.onDelete,
   });
 
-  // Hàm hiển thị bảng xác nhận xóa (dùng lại ConfirmBottomSheet)
   void _showDeleteDialog(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -25,10 +26,10 @@ class DepartmentBottomSheet extends StatelessWidget {
         message:
             'This action cannot be undone. Employees in this department will be moved to "Unassigned".',
         confirmText: 'Delete',
-        confirmColor: const Color(0xFFDC2626), // Màu đỏ
+        confirmColor: const Color(0xFFDC2626),
         onConfirm: () {
-          Navigator.pop(context); // Đóng bảng xác nhận
-          onDelete(); // Gọi hàm xóa từ trang cha truyền vào
+          Navigator.pop(context);
+          onDelete();
         },
       ),
     );
@@ -48,7 +49,6 @@ class DepartmentBottomSheet extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             const SizedBox(height: 12),
-            // Handle bar
             Container(
               width: 35,
               height: 4,
@@ -59,12 +59,11 @@ class DepartmentBottomSheet extends StatelessWidget {
             ),
             const SizedBox(height: 24),
 
-            // Header Bottom Sheet
+            // Header
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Row(
                 children: [
-                  // Icon hộp màu cam nhạt như trong thiết kế Stack của bạn
                   Container(
                     width: 46,
                     height: 46,
@@ -116,21 +115,31 @@ class DepartmentBottomSheet extends StatelessWidget {
             const SizedBox(height: 24),
             const Divider(height: 1, color: Color(0xFFE5E7EB)),
 
-            // --- MENU ACTIONS ---
+            // --- MENU ACTIONS (ĐÃ CẬP NHẬT) ---
+
+            // 1. View Details -> Chuyển sang trang DepartmentDetailsPage
             _buildActionItem(
               icon: PhosphorIcons.listMagnifyingGlass(),
               text: 'View Details & Members',
               color: const Color(0xFF374151),
-              onTap: () {},
+              onTap: () {
+                Navigator.pop(context); // Đóng sheet
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        DepartmentDetailsPage(department: department),
+                  ),
+                );
+              },
             ),
 
-            // NÚT EDIT: Chuyển sang trang EditDepartmentPage
             _buildActionItem(
               icon: PhosphorIcons.pencilSimple(),
               text: 'Edit Department Info',
               color: const Color(0xFF374151),
               onTap: () {
-                Navigator.pop(context); // Đóng menu trước
+                Navigator.pop(context);
                 Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -140,11 +149,22 @@ class DepartmentBottomSheet extends StatelessWidget {
               },
             ),
 
+            // 2. Add Member -> Chuyển sang trang AddMembersPage
             _buildActionItem(
               icon: PhosphorIcons.userPlus(),
               text: 'Add Member to Dept',
               color: const Color(0xFF374151),
-              onTap: () {},
+              onTap: () {
+                Navigator.pop(context); // Đóng sheet
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const AddMembersPage(
+                      alreadySelectedMembers: [],
+                    ), // Truyền list rỗng nếu thêm mới
+                  ),
+                );
+              },
             ),
 
             const Divider(height: 1, color: Color(0xFFE5E7EB)),
@@ -154,8 +174,8 @@ class DepartmentBottomSheet extends StatelessWidget {
               text: 'Delete Department',
               color: const Color(0xFFDC2626),
               onTap: () {
-                Navigator.pop(context); // Đóng menu trước
-                _showDeleteDialog(context); // Hiện bảng xác nhận xóa
+                Navigator.pop(context);
+                _showDeleteDialog(context);
               },
             ),
 

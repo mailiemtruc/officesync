@@ -156,10 +156,10 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
                   Row(
                     children: [
                       IconButton(
-                        icon: const Icon(
-                          Icons.arrow_back_ios,
-                          size: 20,
-                          color: Colors.blue,
+                        icon: Icon(
+                          PhosphorIcons.caretLeft(PhosphorIconsStyle.bold),
+                          color: AppColors.primary,
+                          size: 24,
                         ),
                         onPressed: () => Navigator.pop(context),
                       ),
@@ -169,7 +169,7 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
                             'ADD EMPLOYEE',
                             style: TextStyle(
                               color: AppColors.primary,
-                              fontSize: 20,
+                              fontSize: 24,
                               fontFamily: 'Inter',
                               fontWeight: FontWeight.w700,
                             ),
