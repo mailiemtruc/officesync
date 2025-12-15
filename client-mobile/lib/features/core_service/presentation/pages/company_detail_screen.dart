@@ -59,7 +59,6 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
   }
 
   // 🔴 1. HÀM GỌI API KHÓA/MỞ KHÓA USER
-  // Tìm hàm này và sửa nội dung bên trong
   Future<void> _toggleUserStatus(int userId, String currentStatus) async {
     try {
       final newStatus = currentStatus == 'ACTIVE' ? 'LOCKED' : 'ACTIVE';
@@ -74,7 +73,6 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
         Navigator.pop(context); // Đóng BottomSheet
         _fetchDetail(); // Reload lại danh sách
 
-        // ✅ SỬA: Gọi CustomSnackBar dùng chung
         CustomSnackBar.show(
           context,
           title: "Success",
@@ -87,8 +85,6 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
       print("Error: $e");
       if (mounted) {
         Navigator.pop(context);
-
-        // ✅ SỬA: Gọi CustomSnackBar dùng chung
         CustomSnackBar.show(
           context,
           title: "Action Failed",
@@ -122,8 +118,6 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
                 ),
               ),
               const SizedBox(height: 20),
-
-              // Nút Lock/Unlock
               SizedBox(
                 width: double.infinity,
                 height: 50,
@@ -144,10 +138,7 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
                   label: Text(isLocked ? "Unlock Account" : "Lock Account"),
                 ),
               ),
-
               const SizedBox(height: 12),
-
-              // Nút Hủy
               TextButton(
                 onPressed: () => Navigator.pop(context),
                 child: const Text(
@@ -200,7 +191,7 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
     );
   }
 
-  // --- TAB 1: Giữ nguyên ---
+  // --- TAB 1: OVERVIEW (ĐÃ CẬP NHẬT) ---
   Widget _buildOverviewTab() {
     if (_company == null) return const Center(child: Text("No info"));
     return SingleChildScrollView(
@@ -208,32 +199,76 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
       child: Column(
         children: [
           Container(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(20),
             ),
             child: Column(
               children: [
-                CircleAvatar(
-                  radius: 40,
-                  backgroundColor: AppColors.primary.withOpacity(0.1),
-                  child: Text(
-                    _company!.name.isNotEmpty ? _company!.name[0] : "C",
-                    style: const TextStyle(
-                      fontSize: 40,
-                      color: AppColors.primary,
-                      fontWeight: FontWeight.bold,
-                    ),
+                // 1. LOGO CÔNG TY (CẬP NHẬT)
+                Container(
+                  width: 100,
+                  height: 100,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                    // Nếu có URL ảnh -> Hiển thị ảnh
+                    image:
+                        (_company!.logoUrl != null &&
+                            _company!.logoUrl!.isNotEmpty)
+                        ? DecorationImage(
+                            image: NetworkImage(_company!.logoUrl!),
+                            fit: BoxFit.cover,
+                          )
+                        : null,
+                  ),
+                  // Nếu không có ảnh -> Hiển thị chữ cái đầu
+                  child:
+                      (_company!.logoUrl == null || _company!.logoUrl!.isEmpty)
+                      ? Center(
+                          child: Text(
+                            _company!.name.isNotEmpty ? _company!.name[0] : "C",
+                            style: const TextStyle(
+                              fontSize: 40,
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        )
+                      : null,
+                ),
+
+                const SizedBox(height: 20),
+
+                // Tên công ty
+                Text(
+                  _company!.name,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 30),
+
+                // 2. DANH SÁCH THÔNG TIN
                 _buildInfoRow(
                   PhosphorIconsBold.globe,
                   "Domain",
                   "${_company!.domain}.officesync.com",
                 ),
                 const Divider(),
+
+                // 🔴 Hiển thị Lĩnh vực (Industry)
+                _buildInfoRow(
+                  PhosphorIconsBold.buildings,
+                  "Industry",
+                  _company!.industry ?? "Not specified",
+                ),
+                const Divider(),
+
                 _buildInfoRow(
                   PhosphorIconsBold.checkCircle,
                   "Status",
@@ -244,15 +279,50 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
                       : Colors.red,
                 ),
                 const Divider(),
+
                 _buildInfoRow(
                   PhosphorIconsBold.users,
                   "Total Employees",
                   "${_users.length}",
                 ),
+
+                // 🔴 Hiển thị Mô tả (Description) - Chỉ hiện nếu có dữ liệu
+                if (_company!.description != null &&
+                    _company!.description!.isNotEmpty) ...[
+                  const SizedBox(height: 20),
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      "About Company",
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      _company!.description!,
+                      style: const TextStyle(
+                        color: Color(0xFF64748B),
+                        height: 1.5,
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
           const SizedBox(height: 20),
+
           // Nút Khóa Công ty
           SizedBox(
             width: double.infinity,
@@ -272,7 +342,6 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
 
                   _fetchDetail(); // Reload UI
 
-                  // ✅ SỬA: Gọi CustomSnackBar dùng chung
                   CustomSnackBar.show(
                     context,
                     title: "Success",
@@ -282,8 +351,6 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
                   );
                 } catch (e) {
                   print("Error: $e");
-
-                  // ✅ SỬA: Gọi CustomSnackBar dùng chung
                   CustomSnackBar.show(
                     context,
                     title: "Action Failed",
@@ -328,9 +395,12 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 12),
       child: Row(
+        crossAxisAlignment:
+            CrossAxisAlignment.start, // Căn lề trên để nếu xuống dòng vẫn đẹp
         children: [
           Icon(icon, size: 20, color: Colors.grey),
           const SizedBox(width: 15),
+          // Label giữ nguyên kích thước
           Text(
             label,
             style: const TextStyle(
@@ -339,33 +409,44 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
               fontWeight: FontWeight.w500,
             ),
           ),
-          const Spacer(),
-          isStatus
-              ? Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: color!.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    value,
-                    style: TextStyle(
-                      color: color,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
+
+          const SizedBox(width: 10), // Khoảng cách nhỏ giữa label và value
+          // 🔴 SỬA: Bỏ Spacer(), dùng Expanded để Value chiếm toàn bộ không gian còn lại
+          Expanded(
+            child: isStatus
+                ? Align(
+                    alignment: Alignment.centerRight,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: color!.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        value,
+                        style: TextStyle(
+                          color: color,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
                     ),
+                  )
+                : Text(
+                    value,
+                    textAlign: TextAlign.end, // Canh phải
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black87, // Màu chữ đậm hơn chút cho dễ đọc
+                    ),
+                    // 🔴 QUAN TRỌNG: Bỏ overflow: ellipsis để không bị cắt chữ
+                    // Cho phép xuống dòng thoải mái
                   ),
-                )
-              : Text(
-                  value,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+          ),
         ],
       ),
     );
@@ -416,17 +497,13 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
             ],
           ),
         ),
-        ...users
-            .map((user) => _buildUserItem(user))
-            .toList(), // Cập nhật cách gọi map
+        ...users.map((user) => _buildUserItem(user)).toList(),
         const SizedBox(height: 10),
       ],
     );
   }
 
-  // 🔴 3. SỬA GIAO DIỆN ITEM USER
   Widget _buildUserItem(UserModel user) {
-    // 1. Kiểm tra logic trạng thái
     final isLocked = user.status == 'LOCKED';
 
     return Container(
@@ -441,7 +518,6 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
             offset: const Offset(0, 2),
           ),
         ],
-        // Nếu bị khóa thì viền đỏ nhẹ để gây chú ý
         border: isLocked
             ? Border.all(color: Colors.red.withOpacity(0.3))
             : null,
@@ -451,11 +527,7 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
         leading: CircleAvatar(
           backgroundColor: isLocked ? Colors.grey[200] : AppColors.inputFill,
           child: isLocked
-              ? const Icon(
-                  Icons.lock,
-                  size: 20,
-                  color: Colors.grey,
-                ) // Hiện icon khóa nếu bị lock
+              ? const Icon(Icons.lock, size: 20, color: Colors.grey)
               : Text(
                   user.fullName.isNotEmpty
                       ? user.fullName[0].toUpperCase()
@@ -468,11 +540,10 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
         ),
         title: Row(
           children: [
-            // Tên người dùng
             Flexible(
               child: Text(
                 user.fullName,
-                overflow: TextOverflow.ellipsis, // Cắt bớt nếu tên quá dài
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   color: isLocked ? Colors.grey : Colors.black,
@@ -480,24 +551,22 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
               ),
             ),
             const SizedBox(width: 8),
-
-            // 🔴 PHẦN MỚI: Badge hiển thị trạng thái (ACTIVE/LOCKED)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
                 color: isLocked
-                    ? const Color(0xFFFEE2E2) // Đỏ nhạt
-                    : const Color(0xFFDCFCE7), // Xanh nhạt
+                    ? const Color(0xFFFEE2E2)
+                    : const Color(0xFFDCFCE7),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
-                user.status, // Hiển thị text từ API
+                user.status,
                 style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.bold,
                   color: isLocked
-                      ? const Color(0xFFDC2626) // Chữ đỏ
-                      : const Color(0xFF16A34A), // Chữ xanh
+                      ? const Color(0xFFDC2626)
+                      : const Color(0xFF16A34A),
                 ),
               ),
             ),
@@ -509,7 +578,7 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
         ),
         trailing: IconButton(
           icon: Icon(PhosphorIconsBold.dotsThree, color: Colors.grey),
-          onPressed: () => _showUserAction(user), // Gọi menu khóa/mở khóa
+          onPressed: () => _showUserAction(user),
         ),
       ),
     );

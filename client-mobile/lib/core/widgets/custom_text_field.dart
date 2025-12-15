@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // 🔴 1. Import bắt buộc để dùng TextInputFormatter
 import '../config/app_colors.dart';
 
 class CustomTextField extends StatelessWidget {
@@ -7,10 +8,15 @@ class CustomTextField extends StatelessWidget {
   final bool isPassword;
   final TextInputType keyboardType;
   final Widget? suffixIcon;
+  final Widget? prefixIcon;
   final bool readOnly;
+  final int maxLines;
   final VoidCallback? onTap;
-
   final Color? fillColor;
+
+  // 🔴 2. KHAI BÁO THÊM 2 THAM SỐ MỚI (Để sửa lỗi)
+  final FocusNode? focusNode;
+  final List<TextInputFormatter>? inputFormatters;
 
   const CustomTextField({
     super.key,
@@ -19,10 +25,14 @@ class CustomTextField extends StatelessWidget {
     this.isPassword = false,
     this.keyboardType = TextInputType.text,
     this.suffixIcon,
+    this.prefixIcon,
     this.readOnly = false,
+    this.maxLines = 1,
     this.onTap,
-
     this.fillColor,
+    // 🔴 3. THÊM VÀO CONSTRUCTOR
+    this.focusNode,
+    this.inputFormatters,
   });
 
   @override
@@ -32,7 +42,13 @@ class CustomTextField extends StatelessWidget {
       obscureText: isPassword,
       keyboardType: keyboardType,
       readOnly: readOnly,
+      maxLines: maxLines,
       onTap: onTap,
+
+      // 🔴 4. TRUYỀN THAM SỐ VÀO TEXTFIELD GỐC
+      focusNode: focusNode,
+      inputFormatters: inputFormatters,
+
       style: const TextStyle(fontSize: 16, fontFamily: 'Inter'),
       decoration: InputDecoration(
         hintText: hintText,
@@ -48,6 +64,7 @@ class CustomTextField extends StatelessWidget {
           vertical: 16,
         ),
         suffixIcon: suffixIcon,
+        prefixIcon: prefixIcon,
       ),
     );
   }

@@ -3,10 +3,10 @@ import 'dart:async';
 
 // Import Core
 import '../../../../core/config/app_colors.dart';
-import '../../../../core/widgets/custom_button.dart';
 import '../../../../core/widgets/custom_text_field.dart';
 import '../../../../core/api/api_client.dart';
 import '../../../../core/utils/custom_snackbar.dart';
+// Lưu ý: Nếu CustomButton của bạn chưa hỗ trợ loading, ta dùng ElevatedButton trực tiếp như bên dưới
 
 class SetPasswordScreen extends StatefulWidget {
   const SetPasswordScreen({super.key});
@@ -19,6 +19,9 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
   bool _isTitleVisible = false;
   bool _isFormVisible = false;
   bool _isButtonVisible = false;
+
+  // 🔴 1. THÊM BIẾN LOADING
+  bool _isLoading = false;
 
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
@@ -49,6 +52,9 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
 
   // --- 1. XỬ LÝ ĐĂNG KÝ (CREATE COMPANY) ---
   Future<void> _handleRegister(Map<String, dynamic> prevData) async {
+    // 🔴 Bật loading
+    setState(() => _isLoading = true);
+
     final String password = _passwordController.text;
 
     final requestBody = {
@@ -69,7 +75,6 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
 
       if (response.statusCode == 200) {
         if (mounted) {
-          // ✅ Truyền thông báo cụ thể cho trường hợp Đăng ký thành công
           _showSuccessDialog(
             "Your account has been created.\nPlease log in to continue.",
           );
@@ -77,11 +82,13 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
       }
     } catch (e) {
       String msg = e.toString();
-      // Loại bỏ chữ Exception: nếu có để thông báo thân thiện hơn
       if (msg.contains("Exception:")) {
         msg = msg.replaceAll("Exception:", "").trim();
       }
       if (mounted) _showError(msg);
+    } finally {
+      // 🔴 Tắt loading dù thành công hay thất bại
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -91,6 +98,9 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
     String otp,
     String newPassword,
   ) async {
+    // 🔴 Bật loading
+    setState(() => _isLoading = true);
+
     try {
       final apiClient = ApiClient();
       final response = await apiClient.post(
@@ -100,8 +110,6 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
 
       if (response.statusCode == 200) {
         if (mounted) {
-          // --- ĐOẠN ĐÃ SỬA ---
-          // Gọi Dialog đẹp thay vì SnackBar
           _showSuccessDialog(
             "Password reset successfully!\nPlease log in with your new password.",
           );
@@ -111,7 +119,13 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
       String msg = e.toString();
       if (msg.contains("Exception:"))
         msg = msg.replaceAll("Exception:", "").trim();
+
+      // Nếu Backend trả về lỗi "Password has been used recently..."
+      // thì msg sẽ hiển thị đúng dòng đó nhờ logic này.
       if (mounted) _showError(msg);
+    } finally {
+      // 🔴 Tắt loading
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -154,46 +168,12 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
                     flex: 4,
                     child: Container(
                       color: AppColors.primary,
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(25),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.1),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.lock_outline_rounded,
-                              size: 80,
-                              color: Colors.white,
-                            ),
-                          ),
-                          const SizedBox(height: 30),
-                          const Text(
-                            'Secure Account',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 32,
-                              fontFamily: 'Inter',
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 15),
-                          const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 40),
-                            child: Text(
-                              'Create a strong password to protect your business data and privacy.',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: Colors.white70,
-                                fontSize: 16,
-                                fontFamily: 'Inter',
-                                height: 1.5,
-                              ),
-                            ),
-                          ),
-                        ],
+                      child: const Center(
+                        child: Icon(
+                          Icons.lock_outline_rounded,
+                          size: 80,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
                   ),
@@ -244,23 +224,15 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
                 ),
                 Align(
                   alignment: Alignment.center,
-                  child: AnimatedSlide(
-                    offset: _isTitleVisible
-                        ? Offset.zero
-                        : const Offset(0, -0.5),
+                  child: AnimatedOpacity(
+                    opacity: _isTitleVisible ? 1.0 : 0.0,
                     duration: const Duration(milliseconds: 800),
-                    curve: Curves.easeOut,
-                    child: AnimatedOpacity(
-                      opacity: _isTitleVisible ? 1.0 : 0.0,
-                      duration: const Duration(milliseconds: 800),
-                      child: const Text(
-                        'Set Password',
-                        style: TextStyle(
-                          color: AppColors.primary,
-                          fontSize: 26,
-                          fontFamily: 'Inter',
-                          fontWeight: FontWeight.w700,
-                        ),
+                    child: const Text(
+                      'Set Password',
+                      style: TextStyle(
+                        color: AppColors.primary,
+                        fontSize: 26,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
@@ -272,139 +244,154 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
           const SizedBox(height: 30),
 
           // FORM
-          AnimatedSlide(
-            offset: _isFormVisible ? Offset.zero : const Offset(0, 0.2),
+          AnimatedOpacity(
+            opacity: _isFormVisible ? 1.0 : 0.0,
             duration: const Duration(milliseconds: 800),
-            curve: Curves.easeOut,
-            child: AnimatedOpacity(
-              opacity: _isFormVisible ? 1.0 : 0.0,
-              duration: const Duration(milliseconds: 800),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildLabel("Password"),
-                  CustomTextField(
-                    controller: _passwordController,
-                    hintText: "*************",
-                    isPassword: !_isPasswordVisible,
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _isPasswordVisible
-                            ? Icons.visibility
-                            : Icons.visibility_off,
-                        color: AppColors.primary,
-                      ),
-                      onPressed: () => setState(
-                        () => _isPasswordVisible = !_isPasswordVisible,
-                      ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildLabel("Password"),
+                CustomTextField(
+                  controller: _passwordController,
+                  hintText: "*************",
+                  isPassword: !_isPasswordVisible,
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _isPasswordVisible
+                          ? Icons.visibility
+                          : Icons.visibility_off,
+                      color: AppColors.primary,
+                    ),
+                    onPressed: () => setState(
+                      () => _isPasswordVisible = !_isPasswordVisible,
                     ),
                   ),
-                  const SizedBox(height: 15),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF5F7FF),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      '• Minimum 8 characters\n'
-                      '• At least 1 uppercase letter (A-Z)\n'
-                      '• At least 1 lowercase letter (a-z)\n'
-                      '• At least 1 number (0-9)\n'
-                      '• At least 1 special character (@, #, _, - ...)',
-                      style: TextStyle(
-                        color: Colors.black.withOpacity(0.6),
-                        fontSize: 12,
-                        fontFamily: 'Inter',
-                        height: 1.6,
-                      ),
+                ),
+                const SizedBox(height: 15),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF5F7FF),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    '• Minimum 8 characters\n'
+                    '• At least 1 uppercase letter (A-Z)\n'
+                    '• At least 1 lowercase letter (a-z)\n'
+                    '• At least 1 number (0-9)\n'
+                    '• At least 1 special character (@, #, _, - ...)',
+                    style: TextStyle(
+                      color: Colors.black.withOpacity(0.6),
+                      fontSize: 12,
+                      fontFamily: 'Inter',
+                      height: 1.6,
                     ),
                   ),
-                  const SizedBox(height: 20),
-                  _buildLabel("Confirm Password"),
-                  CustomTextField(
-                    controller: _confirmPasswordController,
-                    hintText: "*************",
-                    isPassword: !_isConfirmPasswordVisible,
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _isConfirmPasswordVisible
-                            ? Icons.visibility
-                            : Icons.visibility_off,
-                        color: AppColors.primary,
-                      ),
-                      onPressed: () => setState(
-                        () => _isConfirmPasswordVisible =
-                            !_isConfirmPasswordVisible,
-                      ),
+                ),
+                const SizedBox(height: 20),
+                _buildLabel("Confirm Password"),
+                CustomTextField(
+                  controller: _confirmPasswordController,
+                  hintText: "*************",
+                  isPassword: !_isConfirmPasswordVisible,
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _isConfirmPasswordVisible
+                          ? Icons.visibility
+                          : Icons.visibility_off,
+                      color: AppColors.primary,
+                    ),
+                    onPressed: () => setState(
+                      () => _isConfirmPasswordVisible =
+                          !_isConfirmPasswordVisible,
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
 
           const SizedBox(height: 40),
 
-          // BUTTON
-          AnimatedSlide(
-            offset: _isButtonVisible ? Offset.zero : const Offset(0, 1.0),
+          // 🔴 BUTTON (SỬA ĐỂ HIỂN THỊ LOADING)
+          AnimatedOpacity(
+            opacity: _isButtonVisible ? 1.0 : 0.0,
             duration: const Duration(milliseconds: 800),
-            curve: Curves.easeOutBack,
-            child: AnimatedOpacity(
-              opacity: _isButtonVisible ? 1.0 : 0.0,
-              duration: const Duration(milliseconds: 800),
-              child: CustomButton(
-                text: 'Confirm', // Đổi tên nút thành Confirm cho chung
-                onPressed: () {
-                  String pass = _passwordController.text;
-                  String confirm = _confirmPasswordController.text;
+            child: SizedBox(
+              width: double.infinity,
+              height: 55,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  disabledBackgroundColor: AppColors.primary.withOpacity(0.6),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(30),
+                  ),
+                ),
+                // Nếu đang loading thì disable nút
+                onPressed: _isLoading
+                    ? null
+                    : () {
+                        String pass = _passwordController.text;
+                        String confirm = _confirmPasswordController.text;
 
-                  if (pass.isEmpty || confirm.isEmpty) {
-                    _showError("Please enter complete information!");
-                    return;
-                  }
-                  if (pass != confirm) {
-                    _showError("Confirmation password does not match!");
-                    return;
-                  }
-                  List<String> errors = _validatePasswordErrors(pass);
-                  if (errors.isNotEmpty) {
-                    String errorMsg =
-                        "Invalid password:\n- ${errors.join("\n- ")}";
-                    _showError(errorMsg);
-                    return;
-                  }
+                        if (pass.isEmpty || confirm.isEmpty) {
+                          _showError("Please enter complete information!");
+                          return;
+                        }
+                        if (pass != confirm) {
+                          _showError("Confirmation password does not match!");
+                          return;
+                        }
+                        List<String> errors = _validatePasswordErrors(pass);
+                        if (errors.isNotEmpty) {
+                          _showError(
+                            "Invalid password:\n- ${errors.join("\n- ")}",
+                          );
+                          return;
+                        }
 
-                  // 🔴 LOGIC ĐIỀU HƯỚNG QUAN TRỌNG 🔴
-                  final args =
-                      ModalRoute.of(context)!.settings.arguments
-                          as Map<String, dynamic>?;
+                        final args =
+                            ModalRoute.of(context)!.settings.arguments
+                                as Map<String, dynamic>?;
 
-                  if (args != null) {
-                    // TRƯỜNG HỢP 1: QUÊN MẬT KHẨU (Có cờ isReset)
-                    if (args.containsKey('isReset') &&
-                        args['isReset'] == true) {
-                      // 🔴 SỬA: Lấy OTP và truyền vào hàm
-                      final email = args['email'];
-                      final otp = args['otp']; // Lấy OTP từ màn hình trước
-
-                      if (otp == null) {
-                        _showError("Security Error: OTP is missing!");
-                        return;
-                      }
-
-                      _handleResetPassword(email, otp, pass);
-                    }
-                    // TRƯỜNG HỢP 2: ĐĂNG KÝ MỚI (Mặc định)
-                    else {
-                      _handleRegister(args);
-                    }
-                  } else {
-                    _showError("Error: Missing data! Please go back.");
-                  }
-                },
+                        if (args != null) {
+                          if (args.containsKey('isReset') &&
+                              args['isReset'] == true) {
+                            final email = args['email'];
+                            final otp = args['otp'];
+                            if (otp == null) {
+                              _showError("Security Error: OTP is missing!");
+                              return;
+                            }
+                            _handleResetPassword(email, otp, pass);
+                          } else {
+                            _handleRegister(args);
+                          }
+                        } else {
+                          _showError("Error: Missing data! Please go back.");
+                        }
+                      },
+                // 🔴 Hiển thị Spinner nếu đang loading
+                child: _isLoading
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : const Text(
+                        'Confirm',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                          fontFamily: 'Inter',
+                        ),
+                      ),
               ),
             ),
           ),
@@ -428,9 +415,7 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
     );
   }
 
-  // Thay thế hàm _showSuccessDialog cũ bằng hàm này
   void _showSuccessDialog(String message) {
-    // Thêm tham số message
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -452,7 +437,6 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
               ),
             ],
           ),
-          // Sử dụng message được truyền vào
           content: Text(
             message,
             textAlign: TextAlign.center,
@@ -474,8 +458,7 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
                   style: TextStyle(color: Colors.white, fontSize: 16),
                 ),
                 onPressed: () {
-                  Navigator.pop(context); // Đóng Dialog
-                  // Chuyển thẳng về trang Login, xóa hết lịch sử cũ
+                  Navigator.pop(context);
                   Navigator.pushNamedAndRemoveUntil(
                     context,
                     '/login',

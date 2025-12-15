@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart'; // Đảm bảo đã cài gói này
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'dart:async';
 import '../../../../core/config/app_colors.dart';
+
+// 🔴 1. IMPORT MÀN HÌNH PROFILE & SNACKBAR
+import 'director_company_profile_screen.dart';
+import '../../../../core/utils/custom_snackbar.dart';
 
 class DirectorHomeView extends StatefulWidget {
   const DirectorHomeView({super.key});
@@ -27,7 +31,7 @@ class _DirectorHomeViewState extends State<DirectorHomeView> {
     final isDesktop = width > 900;
 
     return Container(
-      color: const Color(0xFFF3F5F9), // Màu nền chuẩn Staff
+      color: const Color(0xFFF3F5F9),
       child: isDesktop ? _buildDesktopLayout() : _buildMobileLayout(),
     );
   }
@@ -42,17 +46,11 @@ class _DirectorHomeViewState extends State<DirectorHomeView> {
         children: [
           _buildAnimatedItem(0, _buildHeader()),
           const SizedBox(height: 30),
-          _buildAnimatedItem(
-            1,
-            _buildBlueCard(),
-          ), // <--- Đã quay về Bảng tin chuẩn
+          _buildAnimatedItem(1, _buildBlueCard()),
           const SizedBox(height: 30),
           _buildAnimatedItem(2, _buildQuickActions()),
           const SizedBox(height: 35),
-          _buildAnimatedItem(
-            3,
-            _buildProgressHeader(),
-          ), // Danh sách việc đã giao
+          _buildAnimatedItem(3, _buildProgressHeader()),
           const SizedBox(height: 15),
           _buildAnimatedItem(4, _buildAssignedTaskList()),
         ],
@@ -168,22 +166,34 @@ class _DirectorHomeViewState extends State<DirectorHomeView> {
         ),
         Row(
           children: [
-            _buildCircleIcon(PhosphorIconsBold.bell, () {}),
+            _buildCircleIcon(PhosphorIconsBold.bell, () {
+              CustomSnackBar.show(
+                context,
+                title: "Notifications",
+                message: "No new alerts.",
+              );
+            }),
             const SizedBox(width: 12),
-            _buildCircleIcon(PhosphorIconsBold.chatCircleDots, () {}),
+            _buildCircleIcon(PhosphorIconsBold.chatCircleDots, () {
+              CustomSnackBar.show(
+                context,
+                title: "Messages",
+                message: "Opening chat...",
+              );
+            }),
           ],
         ),
       ],
     );
   }
 
-  // 2. Blue Card: QUAY VỀ "NEW ANNOUNCEMENTS" (BẢNG TIN)
+  // 2. Blue Card
   Widget _buildBlueCard() {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: const Color(0xFFCAD6FF), // Màu xanh chuẩn Staff
+        color: const Color(0xFFCAD6FF),
         borderRadius: BorderRadius.circular(30),
         boxShadow: [
           BoxShadow(
@@ -203,7 +213,7 @@ class _DirectorHomeViewState extends State<DirectorHomeView> {
               borderRadius: BorderRadius.circular(20),
             ),
             child: const Text(
-              'New Announcements', // Tiêu đề chuẩn Bảng tin
+              'New Announcements',
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 12,
@@ -213,7 +223,7 @@ class _DirectorHomeViewState extends State<DirectorHomeView> {
           ),
           const SizedBox(height: 16),
           const Text(
-            'Year-end party preparation & schedule', // Nội dung tin tức
+            'Year-end party preparation & schedule',
             style: TextStyle(
               color: Color(0xFF1E293B),
               fontSize: 20,
@@ -224,7 +234,13 @@ class _DirectorHomeViewState extends State<DirectorHomeView> {
           ),
           const SizedBox(height: 12),
           GestureDetector(
-            onTap: () {},
+            onTap: () {
+              CustomSnackBar.show(
+                context,
+                title: "News",
+                message: "Showing details...",
+              );
+            },
             child: Row(
               children: [
                 const Text(
@@ -250,34 +266,59 @@ class _DirectorHomeViewState extends State<DirectorHomeView> {
     );
   }
 
-  // 3. Quick Actions: Config + Note + Assign Task + News
+  // 🔴 3. SỬA QUICK ACTIONS (Gắn điều hướng)
   Widget _buildQuickActions() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Nút Config (Bánh răng) - Thay cho Request
+        // --- NÚT CONFIG: CHUYỂN SANG MÀN HÌNH EDIT PROFILE ---
         _buildActionItem("Config", PhosphorIconsBold.gear, () {
-          print("Mở cấu hình");
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const DirectorCompanyProfileScreen(),
+            ),
+          ).then((_) {
+            // Khi quay lại có thể setState để reload nếu cần
+            setState(() {});
+          });
         }),
 
-        _buildActionItem("Note", PhosphorIconsBold.notePencil, () {}),
+        _buildActionItem("Note", PhosphorIconsBold.notePencil, () {
+          CustomSnackBar.show(
+            context,
+            title: "Note",
+            message: "Director notes feature.",
+          );
+        }),
 
-        // Nút Assign Task
-        _buildActionItem("Assign Task", PhosphorIconsBold.clipboardText, () {}),
+        _buildActionItem("Assign Task", PhosphorIconsBold.clipboardText, () {
+          CustomSnackBar.show(
+            context,
+            title: "Assign",
+            message: "Assign task module.",
+          );
+        }),
 
-        _buildActionItem("News", PhosphorIconsBold.newspaper, () {}),
+        _buildActionItem("News", PhosphorIconsBold.newspaper, () {
+          CustomSnackBar.show(
+            context,
+            title: "News",
+            message: "Internal news feed.",
+          );
+        }),
       ],
     );
   }
 
-  // 4. Header: Assigned Tasks (Việc đã giao)
+  // 4. Header: Assigned Tasks
   Widget _buildProgressHeader() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         const Text(
-          'Assigned Tasks', // Thay thế "My Job"
+          'Assigned Tasks',
           style: TextStyle(
             color: Color(0xFF1E293B),
             fontSize: 24,
@@ -285,7 +326,6 @@ class _DirectorHomeViewState extends State<DirectorHomeView> {
             fontWeight: FontWeight.w700,
           ),
         ),
-        // Nút View all
         TextButton(
           onPressed: () {},
           child: const Text(
@@ -302,7 +342,7 @@ class _DirectorHomeViewState extends State<DirectorHomeView> {
     );
   }
 
-  // 5. Danh sách việc đã giao
+  // 5. Danh sách việc
   Widget _buildAssignedTaskList() {
     return Column(
       children: [

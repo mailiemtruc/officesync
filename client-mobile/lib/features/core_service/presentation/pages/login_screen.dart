@@ -4,9 +4,7 @@ import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 // Import Core
 import '../../../../core/config/app_colors.dart';
-import '../../../../core/widgets/custom_button.dart';
 import '../../../../core/widgets/custom_text_field.dart';
-
 import '../../../../core/api/api_client.dart';
 import 'dashboard_screen.dart';
 import '../../../../core/utils/custom_snackbar.dart';
@@ -24,13 +22,22 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isInputVisible = false;
   bool _isButtonVisible = false;
 
-  // 🔴 THÊM BIẾN NÀY: Để khóa nút khi đang gọi API
+  // Biến loading
   bool _isLoading = false;
 
   // --- 2. Controller ---
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isPasswordVisible = false;
+
+  // 🔴 DANH SÁCH CÁC ĐUÔI EMAIL GỢI Ý
+  static const List<String> _emailDomains = [
+    '@gmail.com',
+    '@outlook.com',
+    '@yahoo.com',
+    '@icloud.com',
+    '@hotmail.com',
+  ];
 
   @override
   void initState() {
@@ -52,6 +59,80 @@ class _LoginScreenState extends State<LoginScreen> {
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  // 🔴 3. WIDGET AUTOCOMPLETE CHO EMAIL (MỚI THÊM)
+  Widget _buildEmailField() {
+    return RawAutocomplete<String>(
+      textEditingController: _emailController,
+      focusNode: FocusNode(),
+      optionsBuilder: (TextEditingValue textEditingValue) {
+        if (textEditingValue.text.isEmpty) {
+          return const Iterable<String>.empty();
+        }
+        // Logic lọc domain:
+        // Nếu đã có @ -> Lọc theo phần sau @
+        if (textEditingValue.text.contains('@')) {
+          final split = textEditingValue.text.split('@');
+          final prefix = split[0];
+          final domainPart = split.length > 1 ? split[1] : '';
+
+          return _emailDomains
+              .where(
+                (option) =>
+                    option.contains('@$domainPart') && option != '@$domainPart',
+              )
+              .map((option) => '$prefix$option');
+        }
+
+        // Nếu chưa có @ -> Gợi ý tất cả đuôi nối vào
+        return _emailDomains.map((option) => '${textEditingValue.text}$option');
+      },
+      // Giao diện ô nhập liệu (Dùng lại CustomTextField)
+      fieldViewBuilder:
+          (context, textEditingController, focusNode, onFieldSubmitted) {
+            return CustomTextField(
+              controller: textEditingController,
+              focusNode:
+                  focusNode, // Yêu cầu CustomTextField đã hỗ trợ focusNode
+              hintText: 'example@example.com',
+              // Không set keyboardType email ở đây để tránh conflict với autocomplete trên một số máy
+            );
+          },
+      // Giao diện danh sách gợi ý (Popup)
+      optionsViewBuilder: (context, onSelected, options) {
+        return Align(
+          alignment: Alignment.topLeft,
+          child: Material(
+            elevation: 4.0,
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              width: 300, // Độ rộng popup gợi ý
+              constraints: const BoxConstraints(maxHeight: 200),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: ListView.builder(
+                padding: EdgeInsets.zero,
+                shrinkWrap: true,
+                itemCount: options.length,
+                itemBuilder: (BuildContext context, int index) {
+                  final String option = options.elementAt(index);
+                  return InkWell(
+                    onTap: () => onSelected(option),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Text(option),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   // --- GIAO DIỆN CHÍNH ---
@@ -220,10 +301,9 @@ class _LoginScreenState extends State<LoginScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _buildLabel('Email or Mobile Number'),
-                  CustomTextField(
-                    controller: _emailController,
-                    hintText: 'example@example.com',
-                  ),
+
+                  // 🔴 THAY THẾ CUSTOM TEXT FIELD CŨ BẰNG WIDGET MỚI
+                  _buildEmailField(),
 
                   const SizedBox(height: 25),
 
@@ -280,12 +360,10 @@ class _LoginScreenState extends State<LoginScreen> {
               duration: const Duration(milliseconds: 800),
               child: Column(
                 children: [
-                  // 🔴 SỬA ĐỔI: Dùng SizedBox và ElevatedButton trực tiếp để custom Loading
                   SizedBox(
                     width: double.infinity,
                     height: 55,
                     child: ElevatedButton(
-                      // Nếu đang loading thì disable nút (onPressed = null)
                       onPressed: _isLoading
                           ? null
                           : () async {
@@ -295,12 +373,11 @@ class _LoginScreenState extends State<LoginScreen> {
                         backgroundColor: AppColors.primary,
                         disabledBackgroundColor: AppColors.primary.withOpacity(
                           0.6,
-                        ), // Màu khi đang load
+                        ),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(30),
                         ),
                       ),
-                      // Nếu đang load thì hiện vòng quay, ngược lại hiện chữ Log In
                       child: _isLoading
                           ? const SizedBox(
                               width: 24,
@@ -362,13 +439,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
   // --- HÀM XỬ LÝ LOGIN ---
   Future<void> _handleLogin() async {
-    // 1. Ẩn bàn phím
     FocusScope.of(context).unfocus();
 
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
-    // 2. Validate
     if (email.isEmpty || password.isEmpty) {
       CustomSnackBar.show(
         context,
@@ -379,7 +454,6 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
-    // 3. Bắt đầu Loading (Khóa nút bấm)
     setState(() => _isLoading = true);
 
     try {
@@ -394,7 +468,6 @@ class _LoginScreenState extends State<LoginScreen> {
         final String token = data['token'];
         final Map<String, dynamic> user = data['user'];
 
-        // Lưu Token & User
         final storage = const FlutterSecureStorage();
         await storage.write(key: 'auth_token', value: token);
         await storage.write(key: 'user_info', value: jsonEncode(user));
@@ -423,21 +496,8 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       }
     } finally {
-      // 4. Kết thúc Loading (Mở khóa nút)
       if (mounted) setState(() => _isLoading = false);
     }
-  }
-
-  void _showSnack(String msg, Color color) {
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor: color,
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 3), // Giảm xuống 3s cho nhanh
-      ),
-    );
   }
 
   Widget _buildLabel(String text) {

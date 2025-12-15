@@ -29,4 +29,13 @@ public class Company {
 
     @Column(name = "created_at")
     private LocalDateTime createdAt = LocalDateTime.now();
+
+    @Column(name = "logo_url")
+    private String logoUrl;
+
+    @Column(name = "industry")
+    private String industry;
+
+    @Column(name = "description", length = 1000)
+    private String description;
 }

@@ -3,7 +3,6 @@ import 'dart:async';
 
 // Import Core
 import '../../../../core/config/app_colors.dart';
-import '../../../../core/widgets/custom_button.dart';
 import '../../../../core/widgets/custom_text_field.dart';
 import '../../../../core/api/api_client.dart';
 import '../../../../core/utils/custom_snackbar.dart';
@@ -21,11 +20,20 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   bool _isFormVisible = false;
   bool _isButtonVisible = false;
 
-  // 🔴 THÊM BIẾN LOADING 🔴
+  // Biến loading
   bool _isLoading = false;
 
   // --- 2. Controller ---
   final _emailController = TextEditingController();
+
+  // 🔴 DANH SÁCH CÁC ĐUÔI EMAIL GỢI Ý
+  static const List<String> _emailDomains = [
+    '@gmail.com',
+    '@outlook.com',
+    '@yahoo.com',
+    '@icloud.com',
+    '@hotmail.com',
+  ];
 
   @override
   void initState() {
@@ -50,7 +58,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   // --- 3. HÀM LOGIC ---
   void _showMessage(String message, Color color) {
-    // Xác định xem có phải lỗi không dựa vào màu sắc (Logic tạm thời)
     bool isError = color == Colors.red || color == Colors.orange;
 
     CustomSnackBar.show(
@@ -58,6 +65,81 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       title: isError ? "Error" : "Success",
       message: message,
       isError: isError,
+    );
+  }
+
+  // 🔴 4. WIDGET AUTOCOMPLETE CHO EMAIL (MỚI THÊM)
+  Widget _buildEmailField() {
+    return RawAutocomplete<String>(
+      textEditingController: _emailController,
+      focusNode: FocusNode(),
+      optionsBuilder: (TextEditingValue textEditingValue) {
+        if (textEditingValue.text.isEmpty) {
+          return const Iterable<String>.empty();
+        }
+        // Logic lọc domain:
+        // Nếu người dùng gõ "abc@" -> Gợi ý "abc@gmail.com", ...
+        // Nếu người dùng gõ "abc@g" -> Gợi ý "abc@gmail.com"
+        if (textEditingValue.text.contains('@')) {
+          final split = textEditingValue.text.split('@');
+          final prefix = split[0];
+          final domainPart = split.length > 1 ? split[1] : '';
+
+          return _emailDomains
+              .where(
+                (option) =>
+                    option.contains('@$domainPart') && option != '@$domainPart',
+              )
+              .map((option) => '$prefix$option');
+        }
+
+        // Nếu chưa gõ @ -> Gợi ý tất cả đuôi
+        return _emailDomains.map((option) => '${textEditingValue.text}$option');
+      },
+      // Giao diện ô nhập liệu (Dùng lại CustomTextField)
+      fieldViewBuilder:
+          (context, textEditingController, focusNode, onFieldSubmitted) {
+            return CustomTextField(
+              controller: textEditingController,
+              focusNode:
+                  focusNode, // CustomTextField của bạn phải hỗ trợ tham số này (đã cập nhật trước đó)
+              hintText: 'example@example.com',
+              keyboardType: TextInputType.emailAddress,
+            );
+          },
+      // Giao diện danh sách gợi ý (Popup)
+      optionsViewBuilder: (context, onSelected, options) {
+        return Align(
+          alignment: Alignment.topLeft,
+          child: Material(
+            elevation: 4.0,
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              width: 300, // Độ rộng popup gợi ý
+              constraints: const BoxConstraints(maxHeight: 200),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: ListView.builder(
+                padding: EdgeInsets.zero,
+                shrinkWrap: true,
+                itemCount: options.length,
+                itemBuilder: (BuildContext context, int index) {
+                  final String option = options.elementAt(index);
+                  return InkWell(
+                    onTap: () => onSelected(option),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Text(option),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -207,11 +289,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _buildLabel('Email'),
-                  CustomTextField(
-                    controller: _emailController,
-                    hintText: 'example@example.com',
-                    keyboardType: TextInputType.emailAddress,
-                  ),
+
+                  // 🔴 SỬ DỤNG WIDGET MỚI TẠI ĐÂY
+                  _buildEmailField(),
 
                   const SizedBox(height: 20),
                   Center(
@@ -234,7 +314,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
           const SizedBox(height: 40),
 
-          // BUTTON (ĐÃ NÂNG CẤP LOADING)
+          // BUTTON
           AnimatedSlide(
             offset: _isButtonVisible ? Offset.zero : const Offset(0, 1.0),
             duration: const Duration(milliseconds: 800),
@@ -288,14 +368,13 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                               }
                             }
                           } catch (e) {
-                            // Xử lý thông báo lỗi gọn gàng
                             String msg = e.toString();
                             if (msg.contains("Exception:")) {
                               msg = msg.replaceAll("Exception:", "").trim();
                             }
                             _showMessage(msg, Colors.red);
                           } finally {
-                            // 3. Kết thúc Loading (Dù thành công hay thất bại)
+                            // 3. Kết thúc Loading
                             if (mounted) setState(() => _isLoading = false);
                           }
                         },

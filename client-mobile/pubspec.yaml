@@ -38,6 +38,7 @@ dependencies:
 
   dio: ^5.9.0
   phosphor_flutter: ^2.1.0
+  image_picker: ^1.2.1
 
 dev_dependencies:
   flutter_test:
