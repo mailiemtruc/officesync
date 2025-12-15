@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
-
+import 'create_department_page.dart'; // <--- Thêm dòng này
 // Import Config & Widgets
 import '../../../../core/config/app_colors.dart';
 import '../../widgets/employee_card.widget.dart';
 import '../../data/models/employee_model.dart';
 import '../../widgets/employee_bottom_sheet.dart';
-
+// Import trang AddEmployeePage (sửa đường dẫn nếu cần)
+import 'add_employee_page.dart';
 // Import mới cho Departments
 import '../../data/models/department_model.dart';
 import '../../widgets/department_card.widget.dart';
@@ -146,7 +147,21 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
       backgroundColor: const Color(0xFFF9F9F9),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
-          // Xử lý thêm mới tùy theo Tab
+          if (_isEmployeesTab) {
+            // Tab Nhân viên -> Mở trang Thêm Nhân viên
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const AddEmployeePage()),
+            );
+          } else {
+            // Tab Phòng ban -> Mở trang Tạo Phòng ban (Mới cập nhật)
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const CreateDepartmentPage(),
+              ),
+            );
+          }
         },
         backgroundColor: AppColors.primary,
         shape: const CircleBorder(),
