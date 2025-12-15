@@ -67,10 +67,20 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
       );
 
       if (response.statusCode == 200) {
-        if (mounted) _showSuccessDialog();
+        if (mounted) {
+          // ✅ Truyền thông báo cụ thể cho trường hợp Đăng ký thành công
+          _showSuccessDialog(
+            "Your account has been created.\nPlease log in to continue.",
+          );
+        }
       }
     } catch (e) {
-      if (mounted) _showError("Registration failed: ${e.toString()}");
+      String msg = e.toString();
+      // Loại bỏ chữ Exception: nếu có để thông báo thân thiện hơn
+      if (msg.contains("Exception:")) {
+        msg = msg.replaceAll("Exception:", "").trim();
+      }
+      if (mounted) _showError(msg);
     }
   }
 
@@ -84,31 +94,19 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
       final apiClient = ApiClient();
       final response = await apiClient.post(
         '/auth/reset-password',
-        data: {
-          "email": email,
-          "password": newPassword,
-          "otp": otp, // 🔴 QUAN TRỌNG: Bắt buộc phải gửi OTP lên
-        },
+        data: {"email": email, "password": newPassword, "otp": otp},
       );
 
       if (response.statusCode == 200) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("Password reset successfully! Login now."),
-              backgroundColor: Colors.green,
-            ),
-          );
-          // Về trang Login và xóa sạch lịch sử cũ
-          Navigator.pushNamedAndRemoveUntil(
-            context,
-            '/login',
-            (route) => false,
+          // --- ĐOẠN ĐÃ SỬA ---
+          // Gọi Dialog đẹp thay vì SnackBar
+          _showSuccessDialog(
+            "Password reset successfully!\nPlease log in with your new password.",
           );
         }
       }
     } catch (e) {
-      // Xử lý thông báo lỗi gọn gàng hơn
       String msg = e.toString();
       if (msg.contains("Exception:"))
         msg = msg.replaceAll("Exception:", "").trim();
@@ -432,7 +430,9 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
     );
   }
 
-  void _showSuccessDialog() {
+  // Thay thế hàm _showSuccessDialog cũ bằng hàm này
+  void _showSuccessDialog(String message) {
+    // Thêm tham số message
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -454,9 +454,11 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
               ),
             ],
           ),
-          content: const Text(
-            "Your account has been created.\nPlease log in to continue.",
+          // Sử dụng message được truyền vào
+          content: Text(
+            message,
             textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 16),
           ),
           actions: [
             SizedBox(
@@ -467,10 +469,11 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(30),
                   ),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
                 ),
                 child: const Text(
                   "Log in",
-                  style: TextStyle(color: Colors.white),
+                  style: TextStyle(color: Colors.white, fontSize: 16),
                 ),
                 onPressed: () {
                   Navigator.pop(context); // Đóng Dialog
