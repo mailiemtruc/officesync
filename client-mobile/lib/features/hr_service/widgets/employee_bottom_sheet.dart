@@ -4,6 +4,7 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../data/models/employee_model.dart';
 import '../presentation/pages/edit_profile_emloyee_page.dart';
 import 'confirm_bottom_sheet.dart';
+import '../presentation/pages/employee_profile_page.dart';
 
 class EmployeeBottomSheet extends StatelessWidget {
   final Employee employee;
@@ -108,7 +109,17 @@ class EmployeeBottomSheet extends StatelessWidget {
               icon: PhosphorIcons.userList(),
               text: 'View Employee Profile',
               color: const Color(0xFF374151),
-              onTap: () {},
+              onTap: () {
+                Navigator.pop(context); // Đóng Sheet
+                // Chuyển sang trang xem chi tiết
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        EmployeeProfilePage(employee: employee),
+                  ),
+                );
+              },
             ),
 
             _buildActionItem(
