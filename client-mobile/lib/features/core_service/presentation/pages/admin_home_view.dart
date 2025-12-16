@@ -3,7 +3,6 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'dart:async';
 import '../../../../core/config/app_colors.dart';
 
-// 1. Import API và Model
 import '../../../../core/api/api_client.dart';
 import '../../data/models/company_model.dart';
 import '../../../../core/utils/custom_snackbar.dart';
@@ -20,38 +19,34 @@ class AdminHomeView extends StatefulWidget {
 class _AdminHomeViewState extends State<AdminHomeView> {
   bool _animate = false;
 
-  // 2. Thêm biến trạng thái dữ liệu
   bool _isLoading = true;
-  Map<String, dynamic>? _stats; // Chứa {companies: 10, users: 50}
+  Map<String, dynamic>? _stats;
   List<CompanyModel> _companies = [];
 
   @override
   void initState() {
     super.initState();
-    // Animation
+
     Future.delayed(const Duration(milliseconds: 100), () {
       if (mounted) setState(() => _animate = true);
     });
 
-    // 3. Gọi API lấy dữ liệu khi màn hình mở
     _fetchData();
   }
 
-  // --- HÀM GỌI API ---
   Future<void> _fetchData() async {
     try {
       final client = ApiClient();
 
-      // Gọi song song cả 2 API cho nhanh
       final results = await Future.wait([
-        client.get('/admin/stats'), // API 1: Thống kê
-        client.get('/admin/companies/top'), // API: Chỉ lấy Top 3 công ty
+        client.get('/admin/stats'),
+        client.get('/admin/companies/top'),
       ]);
 
       if (mounted) {
         setState(() {
           _stats = results[0].data;
-          // Parse JSON list thành List<CompanyModel>
+
           _companies = (results[1].data as List)
               .map((e) => CompanyModel.fromJson(e))
               .toList();
@@ -64,7 +59,6 @@ class _AdminHomeViewState extends State<AdminHomeView> {
     }
   }
 
-  // --- HÀM KHÓA/MỞ KHÓA CÔNG TY ---
   Future<void> _toggleCompanyStatus(int id, String currentStatus) async {
     try {
       final newStatus = currentStatus == 'ACTIVE' ? 'LOCKED' : 'ACTIVE';
@@ -75,13 +69,11 @@ class _AdminHomeViewState extends State<AdminHomeView> {
         data: {"status": newStatus},
       );
 
-      // Reload lại dữ liệu sau khi update
       _fetchData();
 
       if (mounted) {
-        Navigator.pop(context); // Đóng BottomSheet
+        Navigator.pop(context);
 
-        // 🔴 THÊM THÔNG BÁO THÀNH CÔNG
         CustomSnackBar.show(
           context,
           title: "Success",
@@ -92,7 +84,6 @@ class _AdminHomeViewState extends State<AdminHomeView> {
     } catch (e) {
       print("Error update status: $e");
 
-      // 🔴 SỬA THÔNG BÁO LỖI
       CustomSnackBar.show(
         context,
         title: "Action Failed",
@@ -113,9 +104,7 @@ class _AdminHomeViewState extends State<AdminHomeView> {
     );
   }
 
-  // --- LAYOUT MOBILE ---
   Widget _buildMobileLayout() {
-    // Nếu đang load thì hiện vòng xoay
     if (_isLoading) return const Center(child: CircularProgressIndicator());
 
     return SingleChildScrollView(
@@ -138,7 +127,6 @@ class _AdminHomeViewState extends State<AdminHomeView> {
     );
   }
 
-  // --- LAYOUT DESKTOP ---
   Widget _buildDesktopLayout() {
     if (_isLoading) return const Center(child: CircularProgressIndicator());
 
@@ -191,7 +179,6 @@ class _AdminHomeViewState extends State<AdminHomeView> {
     );
   }
 
-  // ... (Header giữ nguyên) ...
   Widget _buildHeader() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -223,7 +210,7 @@ class _AdminHomeViewState extends State<AdminHomeView> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: const [
                 Text(
-                  'Hi, Nguyen Van D', // Tên này có thể lấy từ UserInfo nếu muốn
+                  'Hi, Nguyen Van D',
                   style: TextStyle(
                     color: AppColors.primary,
                     fontSize: 18,
@@ -256,9 +243,7 @@ class _AdminHomeViewState extends State<AdminHomeView> {
     );
   }
 
-  // 4. Blue Card: HIỂN THỊ DỮ LIỆU THẬT TỪ _stats
   Widget _buildBlueCard() {
-    // Lấy số liệu, mặc định là 0 nếu chưa có
     final countComp = _stats?['companies'] ?? 0;
     final countUser = _stats?['users'] ?? 0;
 
@@ -295,7 +280,7 @@ class _AdminHomeViewState extends State<AdminHomeView> {
             ),
           ),
           const SizedBox(height: 16),
-          // Hiển thị số liệu thật
+
           Text(
             'All systems operational.\n$countComp Companies, $countUser Users.',
             style: const TextStyle(
@@ -334,7 +319,6 @@ class _AdminHomeViewState extends State<AdminHomeView> {
     );
   }
 
-  // ... (Quick Actions giữ nguyên) ...
   Widget _buildQuickActions() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -348,13 +332,12 @@ class _AdminHomeViewState extends State<AdminHomeView> {
     );
   }
 
-  // ... (List Header giữ nguyên) ...
   Widget _buildListHeader() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         const Text(
-          'Top Companies', // Đổi tiêu đề cho hợp lý
+          'Top Companies',
           style: TextStyle(
             color: Color(0xFF1E293B),
             fontSize: 24,
@@ -364,16 +347,15 @@ class _AdminHomeViewState extends State<AdminHomeView> {
         ),
         TextButton(
           onPressed: () {
-            // 🔴 ĐIỀU HƯỚNG SANG TRANG "ALL COMPANIES"
             Navigator.push(
               context,
               MaterialPageRoute(
                 builder: (context) => const AllCompaniesScreen(),
               ),
-            ).then((_) => _fetchData()); // Reload top 3 khi quay lại
+            ).then((_) => _fetchData());
           },
           child: const Text(
-            "View all", // Đổi chữ Refresh thành View all
+            "View all",
             style: TextStyle(
               color: Color(0xFF2260FF),
               fontSize: 13,
@@ -386,7 +368,6 @@ class _AdminHomeViewState extends State<AdminHomeView> {
     );
   }
 
-  // 5. Danh sách công ty: HIỂN THỊ LIST _companies THẬT
   Widget _buildCompanyList() {
     if (_companies.isEmpty) {
       return const Padding(
@@ -397,7 +378,6 @@ class _AdminHomeViewState extends State<AdminHomeView> {
 
     return Column(
       children: _companies.map((company) {
-        // Logic màu sắc trạng thái
         final isLocked = company.status == 'LOCKED';
         final statusColor = isLocked
             ? const Color(0xFFDC2626)
@@ -412,9 +392,7 @@ class _AdminHomeViewState extends State<AdminHomeView> {
               statusColor: statusColor,
               domain: displayDomain,
 
-              // 🔴 SỬA ĐỔI QUAN TRỌNG TẠI ĐÂY 🔴
               onTap: () {
-                // Thay vì hiện BottomSheet ở đây, ta chuyển sang màn hình chi tiết
                 Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -424,8 +402,6 @@ class _AdminHomeViewState extends State<AdminHomeView> {
                     ),
                   ),
                 ).then((_) {
-                  // Khi quay lại từ màn hình chi tiết -> Refresh lại dữ liệu
-                  // Để cập nhật trạng thái nếu Admin đã khóa công ty trong kia
                   _fetchData();
                 });
               },
@@ -437,7 +413,6 @@ class _AdminHomeViewState extends State<AdminHomeView> {
     );
   }
 
-  // Helper hiển thị BottomSheet để Lock/Unlock
   void _showActionSheet(CompanyModel company) {
     showModalBottomSheet(
       context: context,
@@ -488,7 +463,6 @@ class _AdminHomeViewState extends State<AdminHomeView> {
     );
   }
 
-  // ... (Các helper widgets cũ giữ nguyên) ...
   Widget _buildActionItem(String label, IconData icon, VoidCallback onTap) {
     return Column(
       children: [

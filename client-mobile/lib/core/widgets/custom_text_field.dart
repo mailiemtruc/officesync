@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // 🔴 1. Import bắt buộc để dùng TextInputFormatter
+import 'package:flutter/services.dart';
 import '../config/app_colors.dart';
 
 class CustomTextField extends StatelessWidget {
@@ -14,7 +14,6 @@ class CustomTextField extends StatelessWidget {
   final VoidCallback? onTap;
   final Color? fillColor;
 
-  // 🔴 2. KHAI BÁO THÊM 2 THAM SỐ MỚI (Để sửa lỗi)
   final FocusNode? focusNode;
   final List<TextInputFormatter>? inputFormatters;
 
@@ -30,7 +29,7 @@ class CustomTextField extends StatelessWidget {
     this.maxLines = 1,
     this.onTap,
     this.fillColor,
-    // 🔴 3. THÊM VÀO CONSTRUCTOR
+
     this.focusNode,
     this.inputFormatters,
   });
@@ -45,7 +44,6 @@ class CustomTextField extends StatelessWidget {
       maxLines: maxLines,
       onTap: onTap,
 
-      // 🔴 4. TRUYỀN THAM SỐ VÀO TEXTFIELD GỐC
       focusNode: focusNode,
       inputFormatters: inputFormatters,
 

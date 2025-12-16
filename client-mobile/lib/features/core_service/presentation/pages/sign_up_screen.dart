@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
 
-// Import Core
 import '../../../../core/config/app_colors.dart';
 import '../../../../core/widgets/custom_text_field.dart';
 import '../../../../core/api/api_client.dart';
@@ -27,14 +26,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _phoneController = TextEditingController();
   final _dobController = TextEditingController();
 
-  // 🔴 LIST CÁC ĐUÔI EMAIL GỢI Ý
   static const List<String> _emailDomains = [
     '@gmail.com',
     '@outlook.com',
     '@yahoo.com',
     '@icloud.com',
     '@hotmail.com',
-    '@fpt.com.vn', // Ví dụ thêm domain công ty
+    '@fpt.com.vn',
   ];
 
   @override
@@ -61,9 +59,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     super.dispose();
   }
 
-  // 🔴 1. HÀM KIỂM TRA SỐ ĐIỆN THOẠI VIỆT NAM
   bool _isValidPhone(String phone) {
-    // Regex: Bắt đầu bằng 0, theo sau là 3,5,7,8,9 và 8 số nữa (Tổng 10 số)
     final RegExp phoneRegex = RegExp(r'(0[3|5|7|8|9])+([0-9]{8})\b');
     return phoneRegex.hasMatch(phone);
   }
@@ -71,7 +67,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   Future<void> _selectDate() async {
     DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: DateTime(2000), // Mặc định năm 2000 cho tiện
+      initialDate: DateTime(2000),
       firstDate: DateTime(1900),
       lastDate: DateTime.now(),
       builder: (context, child) {
@@ -92,7 +88,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   Future<void> _handleVerifyEmail() async {
-    // Validate rỗng
     if (_companyController.text.isEmpty ||
         _nameController.text.isEmpty ||
         _emailController.text.isEmpty ||
@@ -102,7 +97,20 @@ class _SignUpScreenState extends State<SignUpScreen> {
       return;
     }
 
-    // 🔴 2. VALIDATE SỐ ĐIỆN THOẠI
+    String email = _emailController.text.trim();
+
+    final emailRegex = RegExp(
+      r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$",
+    );
+
+    if (!emailRegex.hasMatch(email)) {
+      _showMessage(
+        "Invalid email format! Please remove special characters like #, \$, %",
+        Colors.orange,
+      );
+      return;
+    }
+
     if (!_isValidPhone(_phoneController.text.trim())) {
       _showMessage("Invalid phone number format (VN)", Colors.orange);
       return;
@@ -114,10 +122,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
       final apiClient = ApiClient();
       final response = await apiClient.post(
         '/auth/send-register-otp',
-        data: {
-          "email": _emailController.text.trim(),
-          "mobile": _phoneController.text.trim(),
-        },
+        data: {"email": email, "mobile": _phoneController.text.trim()},
       );
 
       if (response.statusCode == 200) {
@@ -189,7 +194,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
             onPressed: () async {
               String otp = otpController.text.trim();
               if (otp.length != 4) {
-                // Sửa lỗi hiển thị dialog cũ -> dùng CustomSnackBar
                 if (context.mounted) {
                   CustomSnackBar.show(
                     context,
@@ -216,7 +220,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 }
               } catch (e) {
                 String msg = e.toString().replaceAll("Exception:", "").trim();
-                // Sửa lỗi hiển thị dialog cũ -> dùng CustomSnackBar
+
                 if (context.mounted) {
                   CustomSnackBar.show(
                     context,
@@ -256,24 +260,20 @@ class _SignUpScreenState extends State<SignUpScreen> {
     );
   }
 
-  // 🔴 3. WIDGET AUTOCOMPLETE CHO EMAIL
-  // Thay thế CustomTextField thường bằng cái này
   Widget _buildEmailField() {
     return RawAutocomplete<String>(
-      textEditingController: _emailController, // Gắn controller chính vào đây
+      textEditingController: _emailController,
       focusNode: FocusNode(),
       optionsBuilder: (TextEditingValue textEditingValue) {
         if (textEditingValue.text.isEmpty) {
           return const Iterable<String>.empty();
         }
-        // Logic lọc domain
-        // Nếu người dùng đã gõ @ -> Lọc theo những gì sau @
+
         if (textEditingValue.text.contains('@')) {
           final split = textEditingValue.text.split('@');
           final prefix = split[0];
           final domainPart = split.length > 1 ? split[1] : '';
 
-          // Chỉ hiện những domain khớp với phần đã gõ
           return _emailDomains
               .where(
                 (option) =>
@@ -282,10 +282,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
               .map((option) => '$prefix$option');
         }
 
-        // Nếu chưa gõ @ -> Hiển thị tất cả gợi ý ghép vào
         return _emailDomains.map((option) => '${textEditingValue.text}$option');
       },
-      // Giao diện ô nhập liệu (Dùng lại CustomTextField của bạn)
+
       fieldViewBuilder:
           (context, textEditingController, focusNode, onFieldSubmitted) {
             return CustomTextField(
@@ -293,10 +292,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
               focusNode: focusNode,
               hintText: "example@gmail.com",
               keyboardType: TextInputType.emailAddress,
-              // Quan trọng: khi chọn gợi ý, controller này sẽ tự update
             );
           },
-      // Giao diện danh sách gợi ý (Popup)
+
       optionsViewBuilder: (context, onSelected, options) {
         return Align(
           alignment: Alignment.topLeft,
@@ -304,7 +302,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
             elevation: 4.0,
             borderRadius: BorderRadius.circular(12),
             child: Container(
-              width: 300, // Độ rộng popup
+              width: 300,
               constraints: const BoxConstraints(maxHeight: 200),
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -384,7 +382,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // HEADER
           SizedBox(
             height: 50,
             child: Stack(
@@ -419,7 +416,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
           ),
           const SizedBox(height: 30),
 
-          // FORM FIELDS
           AnimatedOpacity(
             opacity: _isFormVisible ? 1.0 : 0.0,
             duration: const Duration(milliseconds: 800),
@@ -438,17 +434,16 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 ),
                 _buildLabel("Email"),
 
-                // 🔴 4. SỬ DỤNG WIDGET AUTOCOMPLETE Ở ĐÂY
                 _buildEmailField(),
 
                 _buildLabel("Mobile Number"),
                 CustomTextField(
                   controller: _phoneController,
-                  hintText: "09xxxxxxxxx", // Gợi ý format VN
+                  hintText: "09xxxxxxxxx",
                   keyboardType: TextInputType.phone,
                   inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly, // Chỉ cho nhập số
-                    LengthLimitingTextInputFormatter(10), // Tối đa 10 số
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(10),
                   ],
                 ),
                 _buildLabel("Date Of Birth"),
@@ -465,7 +460,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
           const SizedBox(height: 40),
 
-          // BUTTON
           AnimatedOpacity(
             opacity: _isButtonVisible ? 1.0 : 0.0,
             duration: const Duration(milliseconds: 800),

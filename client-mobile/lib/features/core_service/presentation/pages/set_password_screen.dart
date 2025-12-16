@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 
-// Import Core
 import '../../../../core/config/app_colors.dart';
 import '../../../../core/widgets/custom_text_field.dart';
 import '../../../../core/api/api_client.dart';
 import '../../../../core/utils/custom_snackbar.dart';
-// Lưu ý: Nếu CustomButton của bạn chưa hỗ trợ loading, ta dùng ElevatedButton trực tiếp như bên dưới
 
 class SetPasswordScreen extends StatefulWidget {
   const SetPasswordScreen({super.key});
@@ -20,7 +18,6 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
   bool _isFormVisible = false;
   bool _isButtonVisible = false;
 
-  // 🔴 1. THÊM BIẾN LOADING
   bool _isLoading = false;
 
   final _passwordController = TextEditingController();
@@ -50,9 +47,7 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
     super.dispose();
   }
 
-  // --- 1. XỬ LÝ ĐĂNG KÝ (CREATE COMPANY) ---
   Future<void> _handleRegister(Map<String, dynamic> prevData) async {
-    // 🔴 Bật loading
     setState(() => _isLoading = true);
 
     final String password = _passwordController.text;
@@ -87,18 +82,15 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
       }
       if (mounted) _showError(msg);
     } finally {
-      // 🔴 Tắt loading dù thành công hay thất bại
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  // --- 2. XỬ LÝ ĐẶT LẠI MẬT KHẨU (FORGOT PASSWORD) ---
   Future<void> _handleResetPassword(
     String email,
     String otp,
     String newPassword,
   ) async {
-    // 🔴 Bật loading
     setState(() => _isLoading = true);
 
     try {
@@ -120,16 +112,12 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
       if (msg.contains("Exception:"))
         msg = msg.replaceAll("Exception:", "").trim();
 
-      // Nếu Backend trả về lỗi "Password has been used recently..."
-      // thì msg sẽ hiển thị đúng dòng đó nhờ logic này.
       if (mounted) _showError(msg);
     } finally {
-      // 🔴 Tắt loading
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  // --- VALIDATION ---
   List<String> _validatePasswordErrors(String password) {
     List<String> errors = [];
     if (password.length < 8) errors.add("Minimum 8 characters");
@@ -205,7 +193,6 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // HEADER
           SizedBox(
             height: 50,
             child: Stack(
@@ -243,7 +230,6 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
 
           const SizedBox(height: 30),
 
-          // FORM
           AnimatedOpacity(
             opacity: _isFormVisible ? 1.0 : 0.0,
             duration: const Duration(milliseconds: 800),
@@ -314,7 +300,6 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
 
           const SizedBox(height: 40),
 
-          // 🔴 BUTTON (SỬA ĐỂ HIỂN THỊ LOADING)
           AnimatedOpacity(
             opacity: _isButtonVisible ? 1.0 : 0.0,
             duration: const Duration(milliseconds: 800),
@@ -329,7 +314,7 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
                     borderRadius: BorderRadius.circular(30),
                   ),
                 ),
-                // Nếu đang loading thì disable nút
+
                 onPressed: _isLoading
                     ? null
                     : () {
@@ -373,7 +358,7 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
                           _showError("Error: Missing data! Please go back.");
                         }
                       },
-                // 🔴 Hiển thị Spinner nếu đang loading
+
                 child: _isLoading
                     ? const SizedBox(
                         width: 24,

@@ -33,7 +33,7 @@ class CustomButton extends StatelessWidget {
         child: Text(
           text,
           style: const TextStyle(
-            fontSize: 20, // Hoặc 24 tùy thiết kế
+            fontSize: 20,
             fontFamily: 'Inter',
             fontWeight: FontWeight.w500,
           ),

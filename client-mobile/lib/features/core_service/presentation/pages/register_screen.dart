@@ -11,7 +11,6 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
-  // (Giữ nguyên phần khai báo biến và initState của bạn)
   bool _isLogoVisible = false;
   bool _isTextVisible = false;
   bool _isButtonVisible = false;
@@ -39,7 +38,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
       backgroundColor: Colors.white,
       body: SafeArea(
         child: isDesktop
-            // --- DESKTOP: Split View ---
             ? Row(
                 children: [
                   Expanded(
@@ -49,7 +47,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          // Truyền isDesktop = true để logo to ra
                           _buildLogo(isDesktop: true),
                           const SizedBox(height: 20),
                           _buildText(isDesktop: true),
@@ -68,14 +65,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                 ],
               )
-            // --- MOBILE: Giữ nguyên Spacer để bố cục thoáng ---
             : SizedBox(
                 width: double.infinity,
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     const Spacer(flex: 2),
-                    // Truyền isDesktop = false để giữ kích thước chuẩn mobile
+
                     _buildLogo(isDesktop: false),
                     const SizedBox(height: 20),
                     _buildText(isDesktop: false),
@@ -92,9 +88,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
-  // --- SỬA: Thêm tham số isDesktop để chỉnh kích thước ---
   Widget _buildLogo({required bool isDesktop}) {
-    // Nếu Desktop: 400px (cho khớp Splash). Nếu Mobile: 279px.
     final double size = isDesktop ? 400 : 279;
 
     return AnimatedScale(
@@ -106,7 +100,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         duration: const Duration(milliseconds: 800),
         child: SizedBox(
           width: size,
-          height: size, // Giữ tỷ lệ vuông hoặc chỉnh theo ảnh gốc
+          height: size,
           child: Image.asset('assets/images/logo2.png', fit: BoxFit.contain),
         ),
       ),
@@ -114,7 +108,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   Widget _buildText({required bool isDesktop}) {
-    // Nếu Desktop: Font to hơn để lấp đầy khoảng trống
     final double titleSize = isDesktop ? 90 : 55;
     final double sloganSize = isDesktop ? 30 : 18;
 
@@ -132,7 +125,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: AppColors.primary,
-                fontSize: titleSize, // Responsive Font
+                fontSize: titleSize,
                 fontStyle: FontStyle.italic,
                 fontFamily: 'Inter',
                 fontWeight: FontWeight.w800,
@@ -145,7 +138,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: AppColors.primary,
-                fontSize: sloganSize, // Responsive Font
+                fontSize: sloganSize,
                 fontFamily: 'Inter',
                 fontWeight: FontWeight.w700,
                 letterSpacing: 0.5,
@@ -166,7 +159,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         opacity: _isButtonVisible ? 1.0 : 0.0,
         duration: const Duration(milliseconds: 800),
         child: Column(
-          mainAxisSize: MainAxisSize.min, // Quan trọng để căn giữa bên Desktop
+          mainAxisSize: MainAxisSize.min,
           children: [
             CustomButton(
               text: 'Log In',

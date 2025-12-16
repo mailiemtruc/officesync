@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
 
-// Import Core
 import '../../../../core/config/app_colors.dart';
 import '../../../../core/widgets/custom_button.dart';
 import '../../../../core/api/api_client.dart';
@@ -16,19 +15,16 @@ class OtpVerificationScreen extends StatefulWidget {
 }
 
 class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
-  // --- 1. Biến trạng thái hiệu ứng ---
   bool _isTitleVisible = false;
   bool _isContentVisible = false;
   bool _isButtonVisible = false;
 
-  // --- 2. Quản lý 4 ô nhập OTP ---
   final List<TextEditingController> _controllers = List.generate(
     4,
     (_) => TextEditingController(),
   );
   final List<FocusNode> _focusNodes = List.generate(4, (_) => FocusNode());
 
-  // --- 3. Quản lý đồng hồ đếm ngược ---
   Timer? _timer;
   int _start = 60;
   bool _canResend = false;
@@ -38,7 +34,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     super.initState();
     _startTimer();
 
-    // Kịch bản hiệu ứng
     Future.delayed(const Duration(milliseconds: 100), () {
       if (mounted) setState(() => _isTitleVisible = true);
     });
@@ -62,7 +57,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     super.dispose();
   }
 
-  // --- HÀM LOGIC ---
   void _showMessage(String message, Color color) {
     bool isError = color == Colors.red || color == Colors.orange;
 
@@ -94,7 +88,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     });
   }
 
-  // 🔴 SỬA HÀM RESEND CODE (ĐÃ NÂNG CẤP GIAO DIỆN) 🔴
   Future<void> _resendCode() async {
     if (_canResend) {
       final emailArg = ModalRoute.of(context)?.settings.arguments;
@@ -115,7 +108,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
         if (response.statusCode == 200) {
           setState(() {
-            // 🔴 SỬA VỊ TRÍ 2: Đổi 30 thành 60
             _start = 60;
 
             _canResend = false;
@@ -129,7 +121,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     }
   }
 
-  // --- GIAO DIỆN CHÍNH (SPLIT VIEW) ---
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.of(context).size.width;
@@ -210,7 +201,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     );
   }
 
-  // --- TÁCH RIÊNG NỘI DUNG FORM OTP ---
   Widget _buildFormContent() {
     String timerText = "00:${_start.toString().padLeft(2, '0')}";
 
@@ -219,7 +209,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // HEADER
           SizedBox(
             height: 50,
             child: Stack(
@@ -265,7 +254,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
           const SizedBox(height: 50),
 
-          // CONTENT
           AnimatedSlide(
             offset: _isContentVisible ? Offset.zero : const Offset(0, 0.2),
             duration: const Duration(milliseconds: 800),
@@ -302,7 +290,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                     ),
 
                   TextButton(
-                    // Gọi hàm _resendCode mới
                     onPressed: _canResend ? _resendCode : null,
                     child: Text(
                       'Resend Code',
@@ -335,7 +322,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
           const SizedBox(height: 40),
 
-          // BUTTON
           AnimatedSlide(
             offset: _isButtonVisible ? Offset.zero : const Offset(0, 1.0),
             duration: const Duration(milliseconds: 800),
@@ -346,12 +332,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
               child: CustomButton(
                 text: 'Continue',
                 onPressed: () async {
-                  FocusScope.of(context).unfocus(); // Ẩn bàn phím
-                  String otp = _controllers
-                      .map((c) => c.text)
-                      .join(); // Lấy chuỗi OTP
+                  FocusScope.of(context).unfocus();
+                  String otp = _controllers.map((c) => c.text).join();
 
-                  // 1. Validate độ dài
                   if (otp.length < 4) {
                     _showMessage(
                       "Please enter complete OTP code!",
@@ -364,7 +347,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                       ModalRoute.of(context)!.settings.arguments as String;
 
                   try {
-                    // 2. Gọi API Verify (Chỉ để check xem đúng không trước khi cho qua)
                     final apiClient = ApiClient();
                     final response = await apiClient.post(
                       '/auth/verify-otp',
@@ -374,27 +356,22 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                     if (response.statusCode == 200) {
                       _showMessage("Verified!", Colors.green);
 
-                      // 3. 🔴 QUAN TRỌNG: Phải truyền OTP sang màn hình tiếp theo
                       Navigator.pushNamed(
                         context,
                         '/set_password',
                         arguments: {
                           'email': email,
-                          'otp': otp, // <--- THÊM DÒNG NÀY
-                          'isReset':
-                              true, // Cờ đánh dấu đây là luồng quên mật khẩu
+                          'otp': otp,
+                          'isReset': true,
                         },
                       );
                     }
                   } catch (e) {
-                    // Xử lý lỗi từ Backend (Ví dụ: Mã sai, hết hạn)
                     String msg = e.toString();
-                    // Lọc bớt chữ "Exception:" nếu có để thông báo đẹp hơn
+
                     if (msg.contains("Exception:")) {
                       msg = msg.replaceAll("Exception:", "").trim();
                     }
-                    // Nếu là lỗi Dio (API) thì parse message từ response
-                    // (Tùy vào cách bạn viết class ApiClient, nhưng logic cơ bản là vậy)
 
                     _showMessage(msg, Colors.red);
                   }

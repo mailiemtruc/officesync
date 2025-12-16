@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 
-// Import Core
 import '../../../../core/config/app_colors.dart';
 import '../../../../core/widgets/custom_text_field.dart';
 import '../../../../core/api/api_client.dart';
@@ -15,18 +14,14 @@ class ForgotPasswordScreen extends StatefulWidget {
 }
 
 class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
-  // --- 1. Biến trạng thái hiệu ứng ---
   bool _isTitleVisible = false;
   bool _isFormVisible = false;
   bool _isButtonVisible = false;
 
-  // Biến loading
   bool _isLoading = false;
 
-  // --- 2. Controller ---
   final _emailController = TextEditingController();
 
-  // 🔴 DANH SÁCH CÁC ĐUÔI EMAIL GỢI Ý
   static const List<String> _emailDomains = [
     '@gmail.com',
     '@outlook.com',
@@ -38,7 +33,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   @override
   void initState() {
     super.initState();
-    // KỊCH BẢN HIỆU ỨNG
+
     Future.delayed(const Duration(milliseconds: 100), () {
       if (mounted) setState(() => _isTitleVisible = true);
     });
@@ -56,7 +51,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     super.dispose();
   }
 
-  // --- 3. HÀM LOGIC ---
   void _showMessage(String message, Color color) {
     bool isError = color == Colors.red || color == Colors.orange;
 
@@ -68,7 +62,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     );
   }
 
-  // 🔴 4. WIDGET AUTOCOMPLETE CHO EMAIL (MỚI THÊM)
   Widget _buildEmailField() {
     return RawAutocomplete<String>(
       textEditingController: _emailController,
@@ -77,9 +70,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         if (textEditingValue.text.isEmpty) {
           return const Iterable<String>.empty();
         }
-        // Logic lọc domain:
-        // Nếu người dùng gõ "abc@" -> Gợi ý "abc@gmail.com", ...
-        // Nếu người dùng gõ "abc@g" -> Gợi ý "abc@gmail.com"
+
         if (textEditingValue.text.contains('@')) {
           final split = textEditingValue.text.split('@');
           final prefix = split[0];
@@ -93,21 +84,19 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               .map((option) => '$prefix$option');
         }
 
-        // Nếu chưa gõ @ -> Gợi ý tất cả đuôi
         return _emailDomains.map((option) => '${textEditingValue.text}$option');
       },
-      // Giao diện ô nhập liệu (Dùng lại CustomTextField)
+
       fieldViewBuilder:
           (context, textEditingController, focusNode, onFieldSubmitted) {
             return CustomTextField(
               controller: textEditingController,
-              focusNode:
-                  focusNode, // CustomTextField của bạn phải hỗ trợ tham số này (đã cập nhật trước đó)
+              focusNode: focusNode,
               hintText: 'example@example.com',
               keyboardType: TextInputType.emailAddress,
             );
           },
-      // Giao diện danh sách gợi ý (Popup)
+
       optionsViewBuilder: (context, onSelected, options) {
         return Align(
           alignment: Alignment.topLeft,
@@ -115,7 +104,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             elevation: 4.0,
             borderRadius: BorderRadius.circular(12),
             child: Container(
-              width: 300, // Độ rộng popup gợi ý
+              width: 300,
               constraints: const BoxConstraints(maxHeight: 200),
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -143,7 +132,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     );
   }
 
-  // --- GIAO DIỆN CHÍNH (SPLIT VIEW) ---
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.of(context).size.width;
@@ -224,7 +212,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     );
   }
 
-  // --- TÁCH RIÊNG NỘI DUNG FORM ---
   Widget _buildFormContent() {
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 10),
@@ -277,7 +264,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
           const SizedBox(height: 40),
 
-          // FORM
           AnimatedSlide(
             offset: _isFormVisible ? Offset.zero : const Offset(0, 0.2),
             duration: const Duration(milliseconds: 800),
@@ -290,7 +276,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 children: [
                   _buildLabel('Email'),
 
-                  // 🔴 SỬ DỤNG WIDGET MỚI TẠI ĐÂY
                   _buildEmailField(),
 
                   const SizedBox(height: 20),
@@ -314,7 +299,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
           const SizedBox(height: 40),
 
-          // BUTTON
           AnimatedSlide(
             offset: _isButtonVisible ? Offset.zero : const Offset(0, 1.0),
             duration: const Duration(milliseconds: 800),
@@ -326,14 +310,13 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 width: double.infinity,
                 height: 55,
                 child: ElevatedButton(
-                  // Khóa nút nếu đang loading
                   onPressed: _isLoading
                       ? null
                       : () async {
-                          // 1. Ẩn bàn phím
                           FocusScope.of(context).unfocus();
 
                           String email = _emailController.text.trim();
+
                           if (email.isEmpty) {
                             _showMessage(
                               "Please enter your email!",
@@ -342,7 +325,18 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                             return;
                           }
 
-                          // 2. Bắt đầu Loading
+                          final emailRegex = RegExp(
+                            r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$",
+                          );
+
+                          if (!emailRegex.hasMatch(email)) {
+                            _showMessage(
+                              "Invalid email format! Please remove special characters like #, \$, %",
+                              Colors.red,
+                            );
+                            return;
+                          }
+
                           setState(() => _isLoading = true);
 
                           try {
@@ -358,7 +352,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                                 Colors.green,
                               );
 
-                              // Chuyển trang
                               if (mounted) {
                                 Navigator.pushNamed(
                                   context,
@@ -374,7 +367,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                             }
                             _showMessage(msg, Colors.red);
                           } finally {
-                            // 3. Kết thúc Loading
                             if (mounted) setState(() => _isLoading = false);
                           }
                         },

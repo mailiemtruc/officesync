@@ -45,7 +45,7 @@ class _StaffHomeViewState extends State<StaffHomeView> {
           const SizedBox(height: 30),
           _buildAnimatedItem(2, _buildQuickActions()),
           const SizedBox(height: 35),
-          _buildAnimatedItem(3, _buildMyJobHeader()), // <--- Đã có nút View all
+          _buildAnimatedItem(3, _buildMyJobHeader()),
           const SizedBox(height: 15),
           _buildAnimatedItem(4, _buildTaskList()),
         ],
@@ -91,10 +91,7 @@ class _StaffHomeViewState extends State<StaffHomeView> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildAnimatedItem(
-                    3,
-                    _buildMyJobHeader(),
-                  ), // <--- Đã có nút View all
+                  _buildAnimatedItem(3, _buildMyJobHeader()),
                   const SizedBox(height: 20),
                   _buildAnimatedItem(4, _buildTaskList()),
                 ],
@@ -105,8 +102,6 @@ class _StaffHomeViewState extends State<StaffHomeView> {
       ),
     );
   }
-
-  // --- CÁC WIDGET CON ---
 
   Widget _buildHeader() {
     return Row(
@@ -260,7 +255,6 @@ class _StaffHomeViewState extends State<StaffHomeView> {
     );
   }
 
-  // --- MY JOB HEADER (ĐÃ SỬA: CÓ NÚT VIEW ALL) ---
   Widget _buildMyJobHeader() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -274,7 +268,7 @@ class _StaffHomeViewState extends State<StaffHomeView> {
             fontWeight: FontWeight.w700,
           ),
         ),
-        // --- Nút View all ---
+
         TextButton(
           onPressed: () {
             print("Bấm View all");
@@ -282,7 +276,7 @@ class _StaffHomeViewState extends State<StaffHomeView> {
           child: const Text(
             "View all",
             style: TextStyle(
-              color: Color(0xFF2260FF), // Màu xanh chuẩn
+              color: Color(0xFF2260FF),
               fontSize: 13,
               fontFamily: 'Inter',
               fontWeight: FontWeight.w600,

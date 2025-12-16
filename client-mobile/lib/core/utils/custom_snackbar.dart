@@ -8,21 +8,23 @@ class CustomSnackBar {
     required String message,
     bool isError = false,
   }) {
-    // 1. Xóa thông báo cũ nếu đang hiện
     ScaffoldMessenger.of(context).clearSnackBars();
 
-    // 2. Hiện thông báo mới
+    int autoDuration = 3000 + (message.length * 50);
+    if (autoDuration > 6000) autoDuration = 6000;
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        backgroundColor: Colors.transparent, // Nền trong suốt
+        backgroundColor: Colors.transparent,
         elevation: 0,
         behavior: SnackBarBehavior.floating,
         margin: const EdgeInsets.all(20),
-        duration: const Duration(seconds: 3),
+
+        duration: Duration(milliseconds: autoDuration),
+
         content: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            // Màu xanh lá (Success) hoặc Đỏ (Error)
             color: isError ? const Color(0xFFEF4444) : const Color(0xFF10B981),
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
@@ -34,8 +36,8 @@ class CustomSnackBar {
             ],
           ),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // Icon minh họa
               Icon(
                 isError
                     ? PhosphorIconsBold.warningCircle
@@ -44,7 +46,7 @@ class CustomSnackBar {
                 size: 32,
               ),
               const SizedBox(width: 12),
-              // Nội dung chữ
+
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -66,9 +68,8 @@ class CustomSnackBar {
                         fontSize: 13,
                         color: Colors.white.withOpacity(0.9),
                         fontFamily: 'Inter',
+                        height: 1.4,
                       ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),

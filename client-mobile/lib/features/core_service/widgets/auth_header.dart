@@ -28,7 +28,7 @@ class AuthHeader extends StatelessWidget {
               title,
               style: const TextStyle(
                 color: AppColors.primary,
-                fontSize: 28, // Điều chỉnh size cho phù hợp
+                fontSize: 28,
                 fontFamily: 'Inter',
                 fontWeight: FontWeight.w700,
               ),

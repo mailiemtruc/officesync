@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart'; // Đảm bảo đã cài: flutter pub add phosphor_flutter
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'dart:async';
 import '../../../../core/config/app_colors.dart';
 
@@ -27,7 +27,7 @@ class _ManagerHomeViewState extends State<ManagerHomeView> {
     final isDesktop = width > 900;
 
     return Container(
-      color: const Color(0xFFF3F5F9), // Màu nền chuẩn
+      color: const Color(0xFFF3F5F9),
       child: isDesktop ? _buildDesktopLayout() : _buildMobileLayout(),
     );
   }
@@ -45,7 +45,7 @@ class _ManagerHomeViewState extends State<ManagerHomeView> {
           const SizedBox(height: 30),
           _buildAnimatedItem(2, _buildQuickActions()),
           const SizedBox(height: 35),
-          _buildAnimatedItem(3, _buildMyJobHeader()), // <--- Đã có nút View all
+          _buildAnimatedItem(3, _buildMyJobHeader()),
           const SizedBox(height: 15),
           _buildAnimatedItem(4, _buildTaskList()),
         ],
@@ -91,10 +91,7 @@ class _ManagerHomeViewState extends State<ManagerHomeView> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildAnimatedItem(
-                    3,
-                    _buildMyJobHeader(),
-                  ), // <--- Đã có nút View all
+                  _buildAnimatedItem(3, _buildMyJobHeader()),
                   const SizedBox(height: 20),
                   _buildAnimatedItem(4, _buildTaskList()),
                 ],
@@ -106,9 +103,6 @@ class _ManagerHomeViewState extends State<ManagerHomeView> {
     );
   }
 
-  // ================= CÁC WIDGET CON =================
-
-  // 1. Header
   Widget _buildHeader() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -172,7 +166,6 @@ class _ManagerHomeViewState extends State<ManagerHomeView> {
     );
   }
 
-  // 2. Blue Card
   Widget _buildBlueCard() {
     return Container(
       width: double.infinity,
@@ -245,7 +238,6 @@ class _ManagerHomeViewState extends State<ManagerHomeView> {
     );
   }
 
-  // 3. Quick Actions
   Widget _buildQuickActions() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -261,7 +253,6 @@ class _ManagerHomeViewState extends State<ManagerHomeView> {
     );
   }
 
-  // 4. Header My Job (ĐÃ THÊM NÚT VIEW ALL)
   Widget _buildMyJobHeader() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -275,7 +266,7 @@ class _ManagerHomeViewState extends State<ManagerHomeView> {
             fontWeight: FontWeight.w700,
           ),
         ),
-        // --- Nút View all nằm bên phải ---
+
         TextButton(
           onPressed: () {
             print("Bấm View all");
@@ -283,7 +274,7 @@ class _ManagerHomeViewState extends State<ManagerHomeView> {
           child: const Text(
             "View all",
             style: TextStyle(
-              color: Color(0xFF2260FF), // Màu xanh
+              color: Color(0xFF2260FF),
               fontSize: 13,
               fontFamily: 'Inter',
               fontWeight: FontWeight.w600,
@@ -294,7 +285,6 @@ class _ManagerHomeViewState extends State<ManagerHomeView> {
     );
   }
 
-  // 5. Task List
   Widget _buildTaskList() {
     return Column(
       children: [
@@ -324,8 +314,6 @@ class _ManagerHomeViewState extends State<ManagerHomeView> {
       ],
     );
   }
-
-  // ================= HELPER WIDGETS =================
 
   Widget _buildActionItem(String label, IconData icon, VoidCallback onTap) {
     return Column(

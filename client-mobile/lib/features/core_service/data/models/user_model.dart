@@ -3,14 +3,14 @@ class UserModel {
   final String fullName;
   final String email;
   final String role;
-  final String status; // 🔴 Thêm dòng này
+  final String status;
 
   UserModel({
     required this.id,
     required this.fullName,
     required this.email,
     required this.role,
-    required this.status, // 🔴 Thêm dòng này
+    required this.status,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -19,7 +19,7 @@ class UserModel {
       fullName: json['fullName'] ?? 'Unknown',
       email: json['email'] ?? '',
       role: json['role'] ?? 'STAFF',
-      status: json['status'] ?? 'ACTIVE', // 🔴 Map dữ liệu
+      status: json['status'] ?? 'ACTIVE',
     );
   }
 }

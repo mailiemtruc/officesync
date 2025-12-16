@@ -3,7 +3,6 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'dart:async';
 import '../../../../core/config/app_colors.dart';
 
-// 🔴 1. IMPORT MÀN HÌNH PROFILE & SNACKBAR
 import 'director_company_profile_screen.dart';
 import '../../../../core/utils/custom_snackbar.dart';
 
@@ -36,7 +35,6 @@ class _DirectorHomeViewState extends State<DirectorHomeView> {
     );
   }
 
-  // --- LAYOUT MOBILE ---
   Widget _buildMobileLayout() {
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
@@ -58,7 +56,6 @@ class _DirectorHomeViewState extends State<DirectorHomeView> {
     );
   }
 
-  // --- LAYOUT DESKTOP ---
   Widget _buildDesktopLayout() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(40.0),
@@ -109,9 +106,6 @@ class _DirectorHomeViewState extends State<DirectorHomeView> {
     );
   }
 
-  // ================= CÁC WIDGET CON =================
-
-  // 1. Header
   Widget _buildHeader() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -187,7 +181,6 @@ class _DirectorHomeViewState extends State<DirectorHomeView> {
     );
   }
 
-  // 2. Blue Card
   Widget _buildBlueCard() {
     return Container(
       width: double.infinity,
@@ -266,13 +259,11 @@ class _DirectorHomeViewState extends State<DirectorHomeView> {
     );
   }
 
-  // 🔴 3. SỬA QUICK ACTIONS (Gắn điều hướng)
   Widget _buildQuickActions() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // --- NÚT CONFIG: CHUYỂN SANG MÀN HÌNH EDIT PROFILE ---
         _buildActionItem("Config", PhosphorIconsBold.gear, () {
           Navigator.push(
             context,
@@ -280,7 +271,6 @@ class _DirectorHomeViewState extends State<DirectorHomeView> {
               builder: (context) => const DirectorCompanyProfileScreen(),
             ),
           ).then((_) {
-            // Khi quay lại có thể setState để reload nếu cần
             setState(() {});
           });
         }),
@@ -312,7 +302,6 @@ class _DirectorHomeViewState extends State<DirectorHomeView> {
     );
   }
 
-  // 4. Header: Assigned Tasks
   Widget _buildProgressHeader() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -342,7 +331,6 @@ class _DirectorHomeViewState extends State<DirectorHomeView> {
     );
   }
 
-  // 5. Danh sách việc
   Widget _buildAssignedTaskList() {
     return Column(
       children: [
@@ -372,8 +360,6 @@ class _DirectorHomeViewState extends State<DirectorHomeView> {
       ],
     );
   }
-
-  // ================= HELPER WIDGETS =================
 
   Widget _buildActionItem(String label, IconData icon, VoidCallback onTap) {
     return Column(

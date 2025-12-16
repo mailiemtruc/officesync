@@ -58,7 +58,6 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
     }
   }
 
-  // 🔴 1. HÀM GỌI API KHÓA/MỞ KHÓA USER
   Future<void> _toggleUserStatus(int userId, String currentStatus) async {
     try {
       final newStatus = currentStatus == 'ACTIVE' ? 'LOCKED' : 'ACTIVE';
@@ -70,8 +69,8 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
       );
 
       if (mounted) {
-        Navigator.pop(context); // Đóng BottomSheet
-        _fetchDetail(); // Reload lại danh sách
+        Navigator.pop(context);
+        _fetchDetail();
 
         CustomSnackBar.show(
           context,
@@ -95,7 +94,6 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
     }
   }
 
-  // 🔴 2. HÀM HIỂN THỊ MENU HÀNH ĐỘNG
   void _showUserAction(UserModel user) {
     final isLocked = user.status == 'LOCKED';
 
@@ -160,14 +158,15 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
+        centerTitle: true,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: Colors.black),
+          icon: const Icon(Icons.arrow_back_ios, color: Color(0xFF2260FF)),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          widget.companyName,
+          widget.companyName.toUpperCase(),
           style: const TextStyle(
-            color: Colors.black,
+            color: Color(0xFF2260FF),
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -191,7 +190,6 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
     );
   }
 
-  // --- TAB 1: OVERVIEW (ĐÃ CẬP NHẬT) ---
   Widget _buildOverviewTab() {
     if (_company == null) return const Center(child: Text("No info"));
     return SingleChildScrollView(
@@ -206,7 +204,6 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
             ),
             child: Column(
               children: [
-                // 1. LOGO CÔNG TY (CẬP NHẬT)
                 Container(
                   width: 100,
                   height: 100,
@@ -223,7 +220,7 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
                           )
                         : null,
                   ),
-                  // Nếu không có ảnh -> Hiển thị chữ cái đầu
+
                   child:
                       (_company!.logoUrl == null || _company!.logoUrl!.isEmpty)
                       ? Center(
@@ -241,7 +238,6 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
 
                 const SizedBox(height: 20),
 
-                // Tên công ty
                 Text(
                   _company!.name,
                   textAlign: TextAlign.center,
@@ -253,7 +249,6 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
                 ),
                 const SizedBox(height: 30),
 
-                // 2. DANH SÁCH THÔNG TIN
                 _buildInfoRow(
                   PhosphorIconsBold.globe,
                   "Domain",
@@ -261,7 +256,6 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
                 ),
                 const Divider(),
 
-                // 🔴 Hiển thị Lĩnh vực (Industry)
                 _buildInfoRow(
                   PhosphorIconsBold.buildings,
                   "Industry",
@@ -286,7 +280,6 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
                   "${_users.length}",
                 ),
 
-                // 🔴 Hiển thị Mô tả (Description) - Chỉ hiện nếu có dữ liệu
                 if (_company!.description != null &&
                     _company!.description!.isNotEmpty) ...[
                   const SizedBox(height: 20),
@@ -323,7 +316,6 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
           ),
           const SizedBox(height: 20),
 
-          // Nút Khóa Công ty
           SizedBox(
             width: double.infinity,
             height: 50,
@@ -340,7 +332,7 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
                     data: {"status": newStatus},
                   );
 
-                  _fetchDetail(); // Reload UI
+                  _fetchDetail();
 
                   CustomSnackBar.show(
                     context,
@@ -395,12 +387,11 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 12),
       child: Row(
-        crossAxisAlignment:
-            CrossAxisAlignment.start, // Căn lề trên để nếu xuống dòng vẫn đẹp
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(icon, size: 20, color: Colors.grey),
           const SizedBox(width: 15),
-          // Label giữ nguyên kích thước
+
           Text(
             label,
             style: const TextStyle(
@@ -410,8 +401,8 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
             ),
           ),
 
-          const SizedBox(width: 10), // Khoảng cách nhỏ giữa label và value
-          // 🔴 SỬA: Bỏ Spacer(), dùng Expanded để Value chiếm toàn bộ không gian còn lại
+          const SizedBox(width: 10),
+
           Expanded(
             child: isStatus
                 ? Align(
@@ -437,14 +428,12 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
                   )
                 : Text(
                     value,
-                    textAlign: TextAlign.end, // Canh phải
+                    textAlign: TextAlign.end,
                     style: const TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
-                      color: Colors.black87, // Màu chữ đậm hơn chút cho dễ đọc
+                      color: Colors.black87,
                     ),
-                    // 🔴 QUAN TRỌNG: Bỏ overflow: ellipsis để không bị cắt chữ
-                    // Cho phép xuống dòng thoải mái
                   ),
           ),
         ],
@@ -452,7 +441,6 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
     );
   }
 
-  // --- TAB 2: MEMBERS ---
   Widget _buildMembersTab() {
     final directors = _users.where((u) => u.role == 'COMPANY_ADMIN').toList();
     final managers = _users.where((u) => u.role == 'MANAGER').toList();

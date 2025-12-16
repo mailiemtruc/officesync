@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
-import 'package:dio/dio.dart'; // 🔴 1. Import Dio để upload file
+import 'package:dio/dio.dart';
 import '../../../../core/config/app_colors.dart';
 import '../../../../core/api/api_client.dart';
 import '../../../../core/utils/custom_snackbar.dart';
@@ -81,13 +81,11 @@ class _DirectorCompanyProfileScreenState
     }
   }
 
-  // 🔴 2. HÀM UPLOAD ẢNH SANG STORAGE SERVICE (PORT 8090)
   Future<String?> _uploadImage(File imageFile) async {
     try {
       final dio = Dio();
       String fileName = imageFile.path.split('/').last;
 
-      // Tạo form data chứa file
       FormData formData = FormData.fromMap({
         "file": await MultipartFile.fromFile(
           imageFile.path,
@@ -95,14 +93,12 @@ class _DirectorCompanyProfileScreenState
         ),
       });
 
-      // Gọi API sang Storage Service (Port 8090)
       var response = await dio.post(
         "http://10.0.2.2:8090/api/files/upload",
         data: formData,
       );
 
       if (response.statusCode == 200) {
-        // Trả về URL ảnh (VD: http://10.0.2.2:8090/img/abc.png)
         return response.data['url'];
       }
     } catch (e) {
@@ -119,27 +115,21 @@ class _DirectorCompanyProfileScreenState
     return null;
   }
 
-  // 🔴 3. CẬP NHẬT LOGIC LƯU
   Future<void> _saveChanges() async {
     setState(() => _isSaving = true);
     try {
       String? finalLogoUrl = _serverLogoUrl;
 
-      // BƯỚC 1: Nếu có chọn ảnh mới -> Upload lên Storage Service trước
       if (_localImageFile != null) {
-        // Hiển thị thông báo đang upload (Optional)
-        // CustomSnackBar.show(context, title: "Uploading...", message: "Please wait while we upload your logo.");
-
         String? uploadedUrl = await _uploadImage(_localImageFile!);
 
         if (uploadedUrl != null) {
-          finalLogoUrl = uploadedUrl; // Có link mới thì dùng link mới
+          finalLogoUrl = uploadedUrl;
         } else {
           throw Exception("Image upload failed. Please try again.");
         }
       }
 
-      // BƯỚC 2: Gọi API cập nhật thông tin về Core Service (Port 8080)
       final client = ApiClient();
       await client.put(
         '/company/me',
@@ -147,7 +137,7 @@ class _DirectorCompanyProfileScreenState
           "name": _nameController.text.trim(),
           "industry": _industryController.text.trim(),
           "description": _descController.text.trim(),
-          "logoUrl": finalLogoUrl, // Gửi URL ảnh (cũ hoặc mới)
+          "logoUrl": finalLogoUrl,
         },
       );
 
@@ -181,12 +171,15 @@ class _DirectorCompanyProfileScreenState
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: Colors.black),
+          icon: const Icon(Icons.arrow_back_ios, color: Color(0xFF2260FF)),
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
-          "Company Profile",
-          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+          "COMPANY PROFILE",
+          style: TextStyle(
+            color: Color(0xFF2260FF),
+            fontWeight: FontWeight.bold,
+          ),
         ),
         centerTitle: true,
       ),
@@ -197,7 +190,6 @@ class _DirectorCompanyProfileScreenState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // --- LOGO ---
                   Center(
                     child: Stack(
                       children: [
@@ -235,7 +227,6 @@ class _DirectorCompanyProfileScreenState
                               : null,
                         ),
 
-                        // Nút Camera
                         Positioned(
                           bottom: 0,
                           right: 0,
@@ -260,7 +251,6 @@ class _DirectorCompanyProfileScreenState
                   ),
                   const SizedBox(height: 30),
 
-                  // --- FORM ---
                   _buildSectionTitle("General Information"),
                   const SizedBox(height: 15),
 
@@ -294,7 +284,6 @@ class _DirectorCompanyProfileScreenState
 
                   const SizedBox(height: 30),
 
-                  // --- DESCRIPTION ---
                   _buildSectionTitle("About Company"),
                   const SizedBox(height: 15),
 
@@ -306,7 +295,6 @@ class _DirectorCompanyProfileScreenState
 
                   const SizedBox(height: 40),
 
-                  // --- SAVE BUTTON ---
                   SizedBox(
                     width: double.infinity,
                     height: 55,

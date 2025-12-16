@@ -24,7 +24,6 @@ class _AllCompaniesScreenState extends State<AllCompaniesScreen> {
   Future<void> _fetchAllCompanies() async {
     try {
       final client = ApiClient();
-      // Gọi API lấy TẤT CẢ công ty
       final response = await client.get('/admin/companies');
       if (mounted) {
         setState(() {
@@ -47,13 +46,17 @@ class _AllCompaniesScreenState extends State<AllCompaniesScreen> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
+        centerTitle: true,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios, color: AppColors.primary),
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
-          "All Companies",
-          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+          "ALL COMPANIES",
+          style: TextStyle(
+            color: Color(0xFF2260FF),
+            fontWeight: FontWeight.bold,
+          ),
         ),
       ),
       body: _isLoading
@@ -111,7 +114,6 @@ class _AllCompaniesScreenState extends State<AllCompaniesScreen> {
           ),
         ),
         onTap: () {
-          // Chuyển sang chi tiết và reload list khi quay lại
           Navigator.push(
             context,
             MaterialPageRoute(

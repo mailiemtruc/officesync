@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-// Import Core
+
 import '../../../../core/config/app_colors.dart';
 import '../../../../core/widgets/custom_text_field.dart';
 import '../../../../core/api/api_client.dart';
@@ -17,20 +17,16 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  // --- 1. Biến trạng thái hiệu ứng ---
   bool _isHeaderVisible = false;
   bool _isInputVisible = false;
   bool _isButtonVisible = false;
 
-  // Biến loading
   bool _isLoading = false;
 
-  // --- 2. Controller ---
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isPasswordVisible = false;
 
-  // 🔴 DANH SÁCH CÁC ĐUÔI EMAIL GỢI Ý
   static const List<String> _emailDomains = [
     '@gmail.com',
     '@outlook.com',
@@ -42,7 +38,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
-    // Hiệu ứng xuất hiện
+
     Future.delayed(const Duration(milliseconds: 100), () {
       if (mounted) setState(() => _isHeaderVisible = true);
     });
@@ -61,7 +57,6 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  // 🔴 3. WIDGET AUTOCOMPLETE CHO EMAIL (MỚI THÊM)
   Widget _buildEmailField() {
     return RawAutocomplete<String>(
       textEditingController: _emailController,
@@ -70,8 +65,7 @@ class _LoginScreenState extends State<LoginScreen> {
         if (textEditingValue.text.isEmpty) {
           return const Iterable<String>.empty();
         }
-        // Logic lọc domain:
-        // Nếu đã có @ -> Lọc theo phần sau @
+
         if (textEditingValue.text.contains('@')) {
           final split = textEditingValue.text.split('@');
           final prefix = split[0];
@@ -85,21 +79,18 @@ class _LoginScreenState extends State<LoginScreen> {
               .map((option) => '$prefix$option');
         }
 
-        // Nếu chưa có @ -> Gợi ý tất cả đuôi nối vào
         return _emailDomains.map((option) => '${textEditingValue.text}$option');
       },
-      // Giao diện ô nhập liệu (Dùng lại CustomTextField)
+
       fieldViewBuilder:
           (context, textEditingController, focusNode, onFieldSubmitted) {
             return CustomTextField(
               controller: textEditingController,
-              focusNode:
-                  focusNode, // Yêu cầu CustomTextField đã hỗ trợ focusNode
+              focusNode: focusNode,
               hintText: 'example@example.com',
-              // Không set keyboardType email ở đây để tránh conflict với autocomplete trên một số máy
             );
           },
-      // Giao diện danh sách gợi ý (Popup)
+
       optionsViewBuilder: (context, onSelected, options) {
         return Align(
           alignment: Alignment.topLeft,
@@ -107,7 +98,7 @@ class _LoginScreenState extends State<LoginScreen> {
             elevation: 4.0,
             borderRadius: BorderRadius.circular(12),
             child: Container(
-              width: 300, // Độ rộng popup gợi ý
+              width: 300,
               constraints: const BoxConstraints(maxHeight: 200),
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -135,7 +126,6 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  // --- GIAO DIỆN CHÍNH ---
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.of(context).size.width;
@@ -223,7 +213,6 @@ class _LoginScreenState extends State<LoginScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // HEADER
           SizedBox(
             height: 50,
             child: Stack(
@@ -289,7 +278,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
           const SizedBox(height: 40),
 
-          // INPUTS
           AnimatedSlide(
             offset: _isInputVisible ? Offset.zero : const Offset(0, 0.2),
             duration: const Duration(milliseconds: 800),
@@ -302,7 +290,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 children: [
                   _buildLabel('Email or Mobile Number'),
 
-                  // 🔴 THAY THẾ CUSTOM TEXT FIELD CŨ BẰNG WIDGET MỚI
                   _buildEmailField(),
 
                   const SizedBox(height: 25),
@@ -350,7 +337,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
           const SizedBox(height: 30),
 
-          // BUTTON
           AnimatedSlide(
             offset: _isButtonVisible ? Offset.zero : const Offset(0, 1.0),
             duration: const Duration(milliseconds: 800),
@@ -437,7 +423,6 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  // --- HÀM XỬ LÝ LOGIN ---
   Future<void> _handleLogin() async {
     FocusScope.of(context).unfocus();
 
@@ -449,6 +434,21 @@ class _LoginScreenState extends State<LoginScreen> {
         context,
         title: "Validation Error",
         message: "Please enter your email and password!",
+        isError: true,
+      );
+      return;
+    }
+
+    final emailRegex = RegExp(
+      r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$",
+    );
+
+    if (!emailRegex.hasMatch(email)) {
+      CustomSnackBar.show(
+        context,
+        title: "Invalid Email",
+        message:
+            "Please enter a valid email address (e.g., user@domain.com) without special characters like #, \$, %",
         isError: true,
       );
       return;
