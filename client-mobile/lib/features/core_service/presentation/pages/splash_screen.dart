@@ -3,7 +3,7 @@ import 'dart:async';
 import 'dart:convert'; // Import để xử lý JSON
 import 'package:flutter_secure_storage/flutter_secure_storage.dart'; // 1. Dùng thư viện bảo mật
 import '../../../../core/config/app_colors.dart';
-import 'dashboard_screen.dart';
+import '../../../../dashboard_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});

@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart'; // 1. Import thư viện bảo mật
-import '../../../../core/config/app_colors.dart';
+import 'core/config/app_colors.dart';
 
 // Import 4 màn hình Home con
-import 'staff_home_view.dart';
-import 'manager_home_view.dart';
-import 'director_home_view.dart';
-import 'admin_home_view.dart';
+import 'features/core_service/presentation/pages/staff_home_view.dart';
+import 'features/core_service/presentation/pages/manager_home_view.dart';
+import 'features/core_service/presentation/pages/director_home_view.dart';
+import 'features/core_service/presentation/pages/admin_home_view.dart';
 
 class DashboardScreen extends StatefulWidget {
   final Map<String, dynamic> userInfo;

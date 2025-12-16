@@ -6,7 +6,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../../../core/config/app_colors.dart';
 import '../../../../core/widgets/custom_text_field.dart';
 import '../../../../core/api/api_client.dart';
-import 'dashboard_screen.dart';
+import '../../../../dashboard_screen.dart';
 import '../../../../core/utils/custom_snackbar.dart';
 
 class LoginScreen extends StatefulWidget {
