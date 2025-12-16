@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-// 1. Import các màn hình
 import 'features/core_service/presentation/pages/splash_screen.dart';
 import 'features/core_service/presentation/pages/register_screen.dart';
 import 'features/core_service/presentation/pages/login_screen.dart';
@@ -27,14 +26,11 @@ class OfficeSyncApp extends StatelessWidget {
           brightness: Brightness.light,
         ),
         useMaterial3: true,
-        fontFamily: 'Inter', // Khai báo font mặc định cho toàn app (nếu muốn)
+        fontFamily: 'Inter',
       ),
 
-      // 2. Thiết lập màn hình chạy đầu tiên
-      // Nếu bạn muốn test ngay màn hình Đăng ký, hãy sửa dòng dưới thành: home: const RegisterScreen(),
       home: const SplashScreen(),
 
-      // 3. Khai báo các tuyến đường (Routes) để điều hướng sau này
       routes: {
         '/register': (context) => const RegisterScreen(),
         '/login': (context) => const LoginScreen(),
@@ -42,7 +38,6 @@ class OfficeSyncApp extends StatelessWidget {
         '/forgot_password': (context) => const ForgotPasswordScreen(),
         '/otp_verification': (context) => const OtpVerificationScreen(),
         '/set_password': (context) => const SetPasswordScreen(),
-        // Sau này thêm login thì: '/login': (context) => const LoginScreen(),
       },
     );
   }
