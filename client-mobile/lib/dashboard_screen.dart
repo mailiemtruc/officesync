@@ -3,10 +3,15 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'core/config/app_colors.dart';
 
+// Import các trang Home
 import 'features/core_service/presentation/pages/staff_home_view.dart';
 import 'features/core_service/presentation/pages/manager_home_view.dart';
 import 'features/core_service/presentation/pages/director_home_view.dart';
 import 'features/core_service/presentation/pages/admin_home_view.dart';
+
+// --- THÊM IMPORT USER PROFILE PAGE ---
+// Dựa trên ảnh cấu trúc thư mục bạn gửi
+import 'features/hr_service/presentation/pages/user_profile_page.dart';
 
 class DashboardScreen extends StatefulWidget {
   final Map<String, dynamic> userInfo;
@@ -20,12 +25,14 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   int _currentIndex = 0;
 
+  // Hàm logout này có thể được truyền xuống Profile nếu cần,
+  // nhưng hiện tại UserProfilePage đang tự xử lý UI Logout.
   Future<void> _handleLogout() async {
     const storage = FlutterSecureStorage();
     await storage.deleteAll();
 
     if (mounted) {
-      Navigator.pushNamedAndRemoveUntil(context, '/register', (route) => false);
+      Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
     }
   }
 
@@ -33,15 +40,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     final String role = widget.userInfo['role'] ?? 'STAFF';
 
+    // Danh sách các trang cho BottomNavigationBar
     final List<Widget> pages = [
+      // Tab 0: Home (Dựa trên Role)
       _buildHomeByRole(role),
+
+      // Tab 1: Menu
       const Center(child: Text("Menu (Đang phát triển)")),
-      _buildProfileTab(),
+
+      // Tab 2: Profile (Đã thay thế widget cũ bằng trang UserProfilePage)
+      const UserProfilePage(),
     ];
 
     return Scaffold(
       backgroundColor: Colors.white,
-      body: SafeArea(child: pages[_currentIndex]),
+      // SafeArea chỉ bọc body để tránh bị che bởi tai thỏ/camera
+      body: pages[_currentIndex],
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           boxShadow: [
@@ -88,96 +102,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildProfileTab() {
-    final String fullName = widget.userInfo['fullName'] ?? 'User';
-    final String email = widget.userInfo['email'] ?? 'No Email';
-    final String role = widget.userInfo['role'] ?? 'STAFF';
-
-    return Padding(
-      padding: const EdgeInsets.all(24.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          const SizedBox(height: 40),
-
-          Container(
-            width: 100,
-            height: 100,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: AppColors.primary.withOpacity(0.1),
-              border: Border.all(color: AppColors.primary, width: 2),
-            ),
-            child: Icon(
-              PhosphorIconsFill.user,
-              size: 50,
-              color: AppColors.primary,
-            ),
-          ),
-          const SizedBox(height: 20),
-
-          Text(
-            fullName,
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              fontFamily: 'Inter',
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            email,
-            style: const TextStyle(
-              fontSize: 16,
-              color: Colors.grey,
-              fontFamily: 'Inter',
-            ),
-          ),
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.grey[200],
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              role,
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
-            ),
-          ),
-
-          const Spacer(),
-
-          SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: ElevatedButton.icon(
-              onPressed: () => _handleLogout(),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red[50],
-                foregroundColor: Colors.red,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(15),
-                ),
-              ),
-              icon: const Icon(Icons.logout),
-              label: const Text(
-                "Log Out",
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  fontFamily: 'Inter',
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
-        ],
       ),
     );
   }

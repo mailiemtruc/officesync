@@ -7,6 +7,8 @@ import 'features/core_service/presentation/pages/sign_up_screen.dart';
 import 'features/core_service/presentation/pages/set_password_screen.dart';
 import 'features/core_service/presentation/pages/forgot_password_screen.dart';
 import 'features/core_service/presentation/pages/otp_verification_screen.dart';
+import 'dashboard_screen.dart';
+import 'features/hr_service/presentation/pages/user_profile_page.dart';
 
 void main() {
   runApp(const OfficeSyncApp());
@@ -38,6 +40,15 @@ class OfficeSyncApp extends StatelessWidget {
         '/forgot_password': (context) => const ForgotPasswordScreen(),
         '/otp_verification': (context) => const OtpVerificationScreen(),
         '/set_password': (context) => const SetPasswordScreen(),
+
+        // Thêm route cho User Profile
+        '/user_profile': (context) => const UserProfilePage(),
+
+        // Route Dashboard (Thường dashboard được push trực tiếp kèm data user sau khi login,
+        // nhưng khai báo ở đây để clean code hoặc test UI với data giả)
+        '/dashboard': (context) => const DashboardScreen(
+          userInfo: {'fullName': 'Test User', 'role': 'STAFF'},
+        ),
       },
     );
   }

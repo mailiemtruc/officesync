@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
+// 1. Thêm import thư viện lưu trữ bảo mật
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
 import 'change_password_page.dart';
-// Import config
 import '../../../../core/config/app_colors.dart';
 import 'edit_profile_page.dart';
 
@@ -13,7 +15,27 @@ class UserProfilePage extends StatefulWidget {
 }
 
 class _UserProfilePageState extends State<UserProfilePage> {
-  // 1. Hàm hiện Bottom Sheet chọn ảnh (Camera) - Đã sửa nút Cancel & Icon
+  // --- 2. HÀM XỬ LÝ LOGOUT ---
+  Future<void> _handleLogout() async {
+    try {
+      // Khởi tạo storage
+      const storage = FlutterSecureStorage();
+
+      // Xóa toàn bộ dữ liệu lưu trữ (Token, User Info,...)
+      await storage.deleteAll();
+
+      if (mounted) {
+        // Điều hướng về màn hình Login (hoặc Register như code cũ của bạn)
+        // Lưu ý: Thông thường logout sẽ về '/login', mình để '/login' cho chuẩn luồng,
+        // nếu bạn muốn về register hãy đổi thành '/register'
+        Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+      }
+    } catch (e) {
+      print("Lỗi khi đăng xuất: $e");
+    }
+  }
+
+  // Hàm hiện Bottom Sheet chọn ảnh
   void _showImagePickerOptions(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -25,8 +47,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
             color: Colors.white,
             borderRadius: BorderRadius.vertical(top: Radius.circular(27)),
           ),
-          // --- SỬA LỖI TẠI ĐÂY ---
-          // Bọc Column bằng Material trong suốt để hiển thị hiệu ứng ripple
           child: Material(
             color: Colors.transparent,
             child: Column(
@@ -49,7 +69,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
                   ),
                   onTap: () {
                     Navigator.pop(context);
-                    // TODO: Chụp ảnh
                     print("Profile: Chụp ảnh");
                   },
                 ),
@@ -70,7 +89,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
                   ),
                   onTap: () {
                     Navigator.pop(context);
-                    // TODO: Chọn ảnh
                     print("Profile: Chọn thư viện");
                   },
                 ),
@@ -102,7 +120,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
     );
   }
 
-  // 2. Hàm hiện Bottom Sheet xác nhận đăng xuất (Log Out)
+  // Hàm hiện Bottom Sheet xác nhận đăng xuất
   void _showLogoutConfirmation(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -115,9 +133,8 @@ class _UserProfilePageState extends State<UserProfilePage> {
             borderRadius: BorderRadius.vertical(top: Radius.circular(27)),
           ),
           child: Column(
-            mainAxisSize: MainAxisSize.min, // Chiều cao tự động
+            mainAxisSize: MainAxisSize.min,
             children: [
-              // Tiêu đề
               const Text(
                 'Log Out',
                 style: TextStyle(
@@ -128,7 +145,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
                 ),
               ),
               const SizedBox(height: 16),
-              // Nội dung
               const Text(
                 'Are you sure you want to log out?',
                 textAlign: TextAlign.center,
@@ -140,20 +156,16 @@ class _UserProfilePageState extends State<UserProfilePage> {
                 ),
               ),
               const SizedBox(height: 32),
-
-              // Hai nút bấm: Cancel & Logout
               Row(
                 children: [
-                  // Nút Cancel (Xám)
+                  // Nút Cancel
                   Expanded(
                     child: SizedBox(
                       height: 50,
                       child: ElevatedButton(
                         onPressed: () => Navigator.pop(context),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(
-                            0xFFC9D5FF,
-                          ), // Xám xanh nhạt
+                          backgroundColor: const Color(0xFFC9D5FF),
                           foregroundColor: AppColors.primary,
                           elevation: 0,
                           shape: RoundedRectangleBorder(
@@ -171,17 +183,18 @@ class _UserProfilePageState extends State<UserProfilePage> {
                       ),
                     ),
                   ),
+                  const SizedBox(width: 20),
 
-                  const SizedBox(width: 20), // Khoảng cách giữa 2 nút
-                  // Nút Logout (Xanh đậm)
+                  // --- 3. GỌI HÀM LOGOUT TẠI ĐÂY ---
                   Expanded(
                     child: SizedBox(
                       height: 50,
                       child: ElevatedButton(
                         onPressed: () {
-                          Navigator.pop(context); // Đóng Bottom Sheet
-                          // TODO: Gọi hàm Logout thật (AuthBloc)
-                          print("Đã đăng xuất!");
+                          // Đóng bottom sheet trước
+                          Navigator.pop(context);
+                          // Gọi hàm xử lý logout
+                          _handleLogout();
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.primary,
@@ -204,7 +217,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
                   ),
                 ],
               ),
-              const SizedBox(height: 10), // Padding bottom
+              const SizedBox(height: 10),
             ],
           ),
         );
@@ -228,7 +241,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
             size: 24,
           ),
           onPressed: () {
-            // Navigator.of(context).pop();
+            Navigator.of(context).pop();
           },
         ),
         title: const Text(
@@ -260,12 +273,10 @@ class _UserProfilePageState extends State<UserProfilePage> {
                     const SizedBox(height: 24),
                     const _InfoSection(),
                     const SizedBox(height: 24),
-
-                    // Truyền callback Logout vào phần Action
+                    // Truyền callback để mở popup xác nhận logout
                     _ActionSection(
                       onLogoutTap: () => _showLogoutConfirmation(context),
                     ),
-
                     const SizedBox(height: 40),
                   ],
                 ),
@@ -278,15 +289,17 @@ class _UserProfilePageState extends State<UserProfilePage> {
   }
 }
 
-// --- CÁC WIDGET CON ---
+// ... Các class widget con (_HeaderSection, _InfoSection, _ActionSection, _InfoRow)
+// giữ nguyên như cũ, không cần thay đổi gì.
+// Chỉ cần đảm bảo class _ActionSection vẫn nhận tham số onLogoutTap như code trước.
 
 class _HeaderSection extends StatelessWidget {
   final VoidCallback? onCameraTap;
-
   const _HeaderSection({this.onCameraTap});
-
+  // ... (Code giữ nguyên)
   @override
   Widget build(BuildContext context) {
+    // ... (Code giữ nguyên)
     return Column(
       children: [
         Stack(
@@ -361,9 +374,9 @@ class _HeaderSection extends StatelessWidget {
 
 class _InfoSection extends StatelessWidget {
   const _InfoSection();
-
   @override
   Widget build(BuildContext context) {
+    // ... (Code giữ nguyên như file gốc bạn gửi)
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -455,11 +468,9 @@ class _InfoSection extends StatelessWidget {
 }
 
 class _ActionSection extends StatelessWidget {
-  // Thêm callback onLogoutTap
   final VoidCallback? onLogoutTap;
-
   const _ActionSection({this.onLogoutTap});
-
+  // ... (Code giữ nguyên như file gốc bạn gửi)
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -526,12 +537,10 @@ class _ActionSection extends StatelessWidget {
             ),
           ),
           const Divider(height: 1, thickness: 1, color: Color(0xFFF5F5F5)),
-
-          // Nút Logout
           Material(
             color: Colors.transparent,
             child: InkWell(
-              onTap: onLogoutTap, // GỌI CALLBACK KHI BẤM
+              onTap: onLogoutTap,
               borderRadius: const BorderRadius.vertical(
                 bottom: Radius.circular(32),
               ),
@@ -574,13 +583,12 @@ class _InfoRow extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
-
   const _InfoRow({
     required this.icon,
     required this.label,
     required this.value,
   });
-
+  // ... (Code giữ nguyên như file gốc bạn gửi)
   @override
   Widget build(BuildContext context) {
     return Row(
