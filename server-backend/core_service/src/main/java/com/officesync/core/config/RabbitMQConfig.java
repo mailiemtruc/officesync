@@ -19,6 +19,7 @@ public class RabbitMQConfig {
     public static final String QUEUE_COMPANY_CREATE = "company.create.queue";
     public static final String EXCHANGE_INTERNAL = "internal.exchange";
     public static final String ROUTING_KEY_COMPANY_CREATE = "company.create";
+    public static final String ROUTING_KEY_USER_STATUS = "user.status.update";
 
     @Bean
     public Queue queue() {

@@ -7,7 +7,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.officesync.core.config.RabbitMQConfig;
-import com.officesync.core.dto.UserCreatedEvent; // Import DTO mới
+import com.officesync.core.dto.UserCreatedEvent;
+import com.officesync.core.dto.UserStatusChangedEvent; // Import mới
 
 @Service
 public class RabbitMQProducer {
@@ -17,13 +18,23 @@ public class RabbitMQProducer {
     @Autowired
     private RabbitTemplate rabbitTemplate;
 
-    // Đổi tham số đầu vào thành UserCreatedEvent
+    // Hàm cũ (Giữ nguyên)
     public void sendUserCreatedEvent(UserCreatedEvent event) {
-        LOGGER.info(String.format("--> RabbitMQ Sending User Event: %s", event.toString()));
-        
+        LOGGER.info(String.format("--> RabbitMQ Sending User Create: %s", event.toString()));
         rabbitTemplate.convertAndSend(
             RabbitMQConfig.EXCHANGE_INTERNAL, 
             RabbitMQConfig.ROUTING_KEY_COMPANY_CREATE, 
+            event
+        );
+    }
+
+    // 🔴 HÀM MỚI: Gửi sự kiện khóa/mở khóa tài khoản
+    public void sendUserStatusChangedEvent(UserStatusChangedEvent event) {
+        LOGGER.info(String.format("--> RabbitMQ Sending User Status Change: %s", event.toString()));
+        
+        rabbitTemplate.convertAndSend(
+            RabbitMQConfig.EXCHANGE_INTERNAL, 
+            RabbitMQConfig.ROUTING_KEY_USER_STATUS, // Dùng Key mới
             event
         );
     }
