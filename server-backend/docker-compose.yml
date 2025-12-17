@@ -1,5 +1,5 @@
 services:
-  # 1. DỊCH VỤ RABBITMQ
+  # 1. DỊCH VỤ RABBITMQ (GIỮ NGUYÊN ĐỂ CHẠY TRONG DOCKER)
   rabbitmq:
     image: rabbitmq:3-management
     container_name: rabbitmq-server
@@ -12,43 +12,43 @@ services:
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     networks:
-      - officesync_net # Đã đổi tên mạng
+      - officesync_net
 
-  # 2. DỊCH VỤ MYSQL
-  mysql:
-    image: mysql:8.0
-    container_name: mysql-server
-    ports:
-      - "3307:3306"
-    environment:
-      MYSQL_ROOT_PASSWORD: root # Mật khẩu root
-      MYSQL_DATABASE: officesync_db # Đặt tên DB cho phù hợp dự án (tùy chọn)
-    volumes:
-      - mysql_data:/var/lib/mysql
-    networks:
-      - officesync_net # Đã đổi tên mạng
-    command: --default-authentication-plugin=mysql_native_password
+  # 2. DỊCH VỤ MYSQL (ĐÃ TẮT ĐỂ DÙNG MYSQL TRÊN MÁY TÍNH)
+  # mysql:
+  #   image: mysql:8.0
+  #   container_name: mysql-server
+  #   ports:
+  #     - "3307:3306"
+  #   environment:
+  #     MYSQL_ROOT_PASSWORD: root
+  #     MYSQL_DATABASE: officesync_db
+  #   volumes:
+  #     - mysql_data:/var/lib/mysql
+  #   networks:
+  #     - officesync_net
+  #   command: --default-authentication-plugin=mysql_native_password
 
-  # 3. DỊCH VỤ PHPMYADMIN
-  phpmyadmin:
-    image: phpmyadmin/phpmyadmin
-    container_name: phpmyadmin
-    ports:
-      - "9000:80"
-    environment:
-      PMA_HOST: mysql
-      PMA_PORT: 3306
-    depends_on:
-      - mysql
-    networks:
-      - officesync_net # Đã đổi tên mạng
+  # 3. DỊCH VỤ PHPMYADMIN (ĐÃ TẮT VÌ KHÔNG CẦN THIẾT KHI DÙNG MYSQL LOCAL)
+  # phpmyadmin:
+  #   image: phpmyadmin/phpmyadmin
+  #   container_name: phpmyadmin
+  #   ports:
+  #     - "9000:80"
+  #   environment:
+  #     PMA_HOST: mysql
+  #     PMA_PORT: 3306
+  #   depends_on:
+  #     - mysql
+  #   networks:
+  #     - officesync_net
 
 # Khai báo Volumes
 volumes:
   rabbitmq_data:
-  mysql_data:
+  # mysql_data: # Tắt volume mysql
 
 # ĐỊNH NGHĨA MẠNG
 networks:
-  officesync_net: # Tên mạng mới
+  officesync_net:
     driver: bridge
