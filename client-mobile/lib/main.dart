@@ -10,6 +10,11 @@ import 'features/core_service/presentation/pages/otp_verification_screen.dart';
 import 'dashboard_screen.dart';
 import 'features/hr_service/presentation/pages/user_profile_page.dart';
 
+// --- THÊM IMPORT CÁC TRANG MỚI ---
+import 'features/hr_service/presentation/pages/my_requests_page.dart';
+import 'features/hr_service/presentation/pages/manager_request_list_page.dart';
+import 'features/hr_service/presentation/pages/employee_list_page.dart';
+
 void main() {
   runApp(const OfficeSyncApp());
 }
@@ -34,6 +39,7 @@ class OfficeSyncApp extends StatelessWidget {
       home: const SplashScreen(),
 
       routes: {
+        // Auth Routes
         '/register': (context) => const RegisterScreen(),
         '/login': (context) => const LoginScreen(),
         '/signup': (context) => const SignUpScreen(),
@@ -41,14 +47,19 @@ class OfficeSyncApp extends StatelessWidget {
         '/otp_verification': (context) => const OtpVerificationScreen(),
         '/set_password': (context) => const SetPasswordScreen(),
 
-        // Thêm route cho User Profile
+        // Main Routes
+        '/dashboard': (context) => const DashboardScreen(
+          userInfo: {
+            'fullName': 'Test User',
+            'role': 'STAFF',
+          }, // Default test data
+        ),
         '/user_profile': (context) => const UserProfilePage(),
 
-        // Route Dashboard (Thường dashboard được push trực tiếp kèm data user sau khi login,
-        // nhưng khai báo ở đây để clean code hoặc test UI với data giả)
-        '/dashboard': (context) => const DashboardScreen(
-          userInfo: {'fullName': 'Test User', 'role': 'STAFF'},
-        ),
+        // --- CÁC ROUTE CHỨC NĂNG MỚI (MENU) ---
+        '/my_requests': (context) => const MyRequestsPage(),
+        '/manager_requests': (context) => const ManagerRequestListPage(),
+        '/employees': (context) => const EmployeeListPage(),
       },
     );
   }

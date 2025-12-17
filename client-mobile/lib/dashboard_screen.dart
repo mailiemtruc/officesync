@@ -9,9 +9,14 @@ import 'features/core_service/presentation/pages/manager_home_view.dart';
 import 'features/core_service/presentation/pages/director_home_view.dart';
 import 'features/core_service/presentation/pages/admin_home_view.dart';
 
-// --- THÊM IMPORT USER PROFILE PAGE ---
-// Dựa trên ảnh cấu trúc thư mục bạn gửi
+// Import User Profile
 import 'features/hr_service/presentation/pages/user_profile_page.dart';
+
+// --- THÊM IMPORT CÁC TRANG CHỨC NĂNG ---
+// (Lưu ý: Hãy đảm bảo đường dẫn import đúng với cấu trúc thư mục của bạn)
+import 'features/hr_service/presentation/pages/my_requests_page.dart';
+import 'features/hr_service/presentation/pages/manager_request_list_page.dart';
+import 'features/hr_service/presentation/pages/employee_list_page.dart';
 
 class DashboardScreen extends StatefulWidget {
   final Map<String, dynamic> userInfo;
@@ -25,36 +30,24 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   int _currentIndex = 0;
 
-  // Hàm logout này có thể được truyền xuống Profile nếu cần,
-  // nhưng hiện tại UserProfilePage đang tự xử lý UI Logout.
-  Future<void> _handleLogout() async {
-    const storage = FlutterSecureStorage();
-    await storage.deleteAll();
-
-    if (mounted) {
-      Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final String role = widget.userInfo['role'] ?? 'STAFF';
 
     // Danh sách các trang cho BottomNavigationBar
     final List<Widget> pages = [
-      // Tab 0: Home (Dựa trên Role)
+      // Tab 0: Home
       _buildHomeByRole(role),
 
-      // Tab 1: Menu
-      const Center(child: Text("Menu (Đang phát triển)")),
+      // Tab 1: Menu (Đã cập nhật giao diện)
+      _buildMenuPage(role),
 
-      // Tab 2: Profile (Đã thay thế widget cũ bằng trang UserProfilePage)
+      // Tab 2: Profile
       const UserProfilePage(),
     ];
 
     return Scaffold(
-      backgroundColor: Colors.white,
-      // SafeArea chỉ bọc body để tránh bị che bởi tai thỏ/camera
+      backgroundColor: const Color(0xFFF9F9F9),
       body: pages[_currentIndex],
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
@@ -118,5 +111,135 @@ class _DashboardScreenState extends State<DashboardScreen> {
       default:
         return const StaffHomeView();
     }
+  }
+
+  // --- XÂY DỰNG GIAO DIỆN MENU ---
+  Widget _buildMenuPage(String role) {
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Menu',
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.w700,
+                color: AppColors.primary,
+                fontFamily: 'Inter',
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // Grid các chức năng
+            LayoutBuilder(
+              builder: (context, constraints) {
+                return Wrap(
+                  spacing: 16,
+                  runSpacing: 16,
+                  children: [
+                    // 1. My Requests (Ai cũng thấy)
+                    _buildMenuItem(
+                      context,
+                      title: 'My Requests',
+                      icon: PhosphorIconsFill.fileText,
+                      color: const Color(0xFF3B82F6), // Xanh dương
+                      route: '/my_requests',
+                      width:
+                          (constraints.maxWidth - 16) / 2, // Chia đôi màn hình
+                    ),
+
+                    // 2. Request Management (Chỉ Manager & Admin thấy)
+                    if (role == 'MANAGER' || role == 'COMPANY_ADMIN')
+                      _buildMenuItem(
+                        context,
+                        title: 'Request Management',
+                        icon: PhosphorIconsFill.clipboardText,
+                        color: const Color(0xFFF97316), // Cam
+                        route: '/manager_requests',
+                        width: (constraints.maxWidth - 16) / 2,
+                      ),
+
+                    // 3. HR Management (Chỉ Admin thấy)
+                    if (role == 'COMPANY_ADMIN' || role == 'SUPER_ADMIN')
+                      _buildMenuItem(
+                        context,
+                        title: 'HR Management',
+                        icon: PhosphorIconsFill.usersThree,
+                        color: const Color(0xFF8B5CF6), // Tím
+                        route: '/employees',
+                        width: (constraints.maxWidth - 16) / 2,
+                      ),
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Widget con cho từng ô Menu
+  Widget _buildMenuItem(
+    BuildContext context, {
+    required String title,
+    required IconData icon,
+    required Color color,
+    required String route,
+    required double width,
+  }) {
+    return Container(
+      width: width,
+      height: 140, // Chiều cao cố định cho đẹp
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(20),
+        child: InkWell(
+          onTap: () {
+            Navigator.pushNamed(context, route);
+          },
+          borderRadius: BorderRadius.circular(20),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(icon, color: color, size: 28),
+                ),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF1E293B),
+                    fontFamily: 'Inter',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

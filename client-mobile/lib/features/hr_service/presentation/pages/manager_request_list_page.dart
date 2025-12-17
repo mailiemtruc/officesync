@@ -117,12 +117,81 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
     },
   ];
 
+  // --- HÀM XỬ LÝ ĐIỀU HƯỚNG ---
+  void _onBottomNavTap(int index) {
+    switch (index) {
+      case 0:
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          '/dashboard',
+          (route) => false,
+        );
+        break;
+      case 1:
+        Navigator.pop(context);
+        break;
+      case 2:
+        Navigator.pushNamed(context, '/user_profile');
+        break;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final displayList = _isToReviewTab ? _toReviewList : _historyList;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF9F9F9),
+
+      // --- THANH ĐIỀU HƯỚNG ---
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, -5),
+            ),
+          ],
+        ),
+        child: BottomNavigationBar(
+          backgroundColor: Colors.white,
+          currentIndex: 1, // Đang ở nhánh Menu
+          onTap: _onBottomNavTap,
+          selectedItemColor: AppColors.primary,
+          unselectedItemColor: Colors.grey,
+          showUnselectedLabels: true,
+          type: BottomNavigationBarType.fixed,
+          selectedLabelStyle: const TextStyle(
+            fontFamily: 'Inter',
+            fontWeight: FontWeight.w600,
+            fontSize: 12,
+          ),
+          unselectedLabelStyle: const TextStyle(
+            fontFamily: 'Inter',
+            fontWeight: FontWeight.w500,
+            fontSize: 12,
+          ),
+          items: [
+            BottomNavigationBarItem(
+              icon: Icon(PhosphorIconsRegular.house),
+              activeIcon: Icon(PhosphorIconsFill.house),
+              label: 'Home',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(PhosphorIconsFill.squaresFour),
+              activeIcon: Icon(PhosphorIconsFill.squaresFour),
+              label: 'Menu',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(PhosphorIconsRegular.user),
+              activeIcon: Icon(PhosphorIconsFill.user),
+              label: 'Profile',
+            ),
+          ],
+        ),
+      ),
+
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
@@ -148,7 +217,7 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
                     children: [
                       Expanded(child: _buildSearchBar()),
                       const SizedBox(width: 12),
-                      _buildFilterButton(), // Đã sửa lỗi bấm được
+                      _buildFilterButton(),
                     ],
                   ),
                 ),
@@ -333,7 +402,6 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
     );
   }
 
-  // --- NÚT LỌC ĐÃ SỬA: Bấm được ---
   Widget _buildFilterButton() {
     return Container(
       width: 40,
@@ -348,9 +416,7 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
         borderRadius: BorderRadius.circular(10),
         child: InkWell(
           borderRadius: BorderRadius.circular(10),
-          onTap: () {
-            // Sự kiện bấm nút lọc
-          },
+          onTap: () {},
           child: Center(
             child: Icon(
               PhosphorIcons.funnel(PhosphorIconsStyle.regular),
@@ -403,7 +469,6 @@ class _ManagerRequestCard extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                // 1. Avatar
                 ClipOval(
                   child: Image.network(
                     data['avatar'],
@@ -419,19 +484,15 @@ class _ManagerRequestCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 14),
 
-                // 2. Nội dung chính
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      // Hàng 1: [Tên + Manager Tag (Flow)] ---- [Badge Status]
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        crossAxisAlignment: CrossAxisAlignment
-                            .start, // Căn trên để nếu tên xuống dòng thì badge vẫn ở trên
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Cụm Tên và Tag Manager (Sử dụng Text.rich để wrap dòng mượt mà)
                           Expanded(
                             child: Text.rich(
                               TextSpan(
@@ -446,7 +507,7 @@ class _ManagerRequestCard extends StatelessWidget {
                                     ),
                                   ),
                                   if (isManager) ...[
-                                    const TextSpan(text: ' '), // Khoảng cách
+                                    const TextSpan(text: ' '),
                                     WidgetSpan(
                                       alignment: PlaceholderAlignment.middle,
                                       child: Container(
@@ -474,13 +535,11 @@ class _ManagerRequestCard extends StatelessWidget {
                                   ],
                                 ],
                               ),
-                              // Cho phép xuống hàng không giới hạn hoặc giới hạn 2 dòng tùy bạn
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
 
-                          // Badge Status
                           Container(
                             margin: const EdgeInsets.only(left: 8),
                             padding: const EdgeInsets.symmetric(
@@ -506,7 +565,6 @@ class _ManagerRequestCard extends StatelessWidget {
 
                       const SizedBox(height: 6),
 
-                      // Hàng 2: ID | Dept
                       Text(
                         'Employee ID: ${data['employeeId']} | ${data['dept']}',
                         style: const TextStyle(
@@ -521,7 +579,6 @@ class _ManagerRequestCard extends StatelessWidget {
 
                       const SizedBox(height: 6),
 
-                      // Hàng 3: Loại đơn + Thời gian
                       RichText(
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -583,7 +640,6 @@ class _ManagerRequestCard extends StatelessWidget {
     );
   }
 
-  // --- MÃ MÀU ---
   Color _getExactStatusBgColor(RequestStatus status) {
     switch (status) {
       case RequestStatus.pending:
