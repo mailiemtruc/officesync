@@ -1,0 +1,54 @@
+services:
+  # 1. DỊCH VỤ RABBITMQ
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq-server
+    ports:
+      - "5672:5672" # Port kết nối ứng dụng
+      - "15672:15672" # Port trang quản lý (Web UI)
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - officesync_net # Đã đổi tên mạng
+
+  # 2. DỊCH VỤ MYSQL
+  mysql:
+    image: mysql:8.0
+    container_name: mysql-server
+    ports:
+      - "3307:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root # Mật khẩu root
+      MYSQL_DATABASE: officesync_db # Đặt tên DB cho phù hợp dự án (tùy chọn)
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - officesync_net # Đã đổi tên mạng
+    command: --default-authentication-plugin=mysql_native_password
+
+  # 3. DỊCH VỤ PHPMYADMIN
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: phpmyadmin
+    ports:
+      - "9000:80"
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+    depends_on:
+      - mysql
+    networks:
+      - officesync_net # Đã đổi tên mạng
+
+# Khai báo Volumes
+volumes:
+  rabbitmq_data:
+  mysql_data:
+
+# ĐỊNH NGHĨA MẠNG
+networks:
+  officesync_net: # Tên mạng mới
+    driver: bridge
