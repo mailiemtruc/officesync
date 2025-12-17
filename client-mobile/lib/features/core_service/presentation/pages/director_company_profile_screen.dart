@@ -2,10 +2,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
-import 'package:dio/dio.dart';
+
+// Import cấu hình
 import '../../../../core/config/app_colors.dart';
 import '../../../../core/api/api_client.dart';
-import '../../../../core/utils/custom_snackbar.dart';
+import '../../../../core/utils/custom_snackbar.dart'; // Lưu ý: file này tên custom_snackbar.dart hay utils? check lại đường dẫn
 import '../../../../core/widgets/custom_text_field.dart';
 
 class DirectorCompanyProfileScreen extends StatefulWidget {
@@ -36,6 +37,7 @@ class _DirectorCompanyProfileScreenState
     _fetchCompanyInfo();
   }
 
+  // --- LẤY THÔNG TIN CÔNG TY (Giữ nguyên) ---
   Future<void> _fetchCompanyInfo() async {
     try {
       final client = ApiClient();
@@ -59,6 +61,7 @@ class _DirectorCompanyProfileScreenState
     }
   }
 
+  // --- CHỌN ẢNH TỪ THƯ VIỆN (Giữ nguyên) ---
   Future<void> _pickImage() async {
     try {
       final XFile? pickedFile = await _picker.pickImage(
@@ -81,63 +84,33 @@ class _DirectorCompanyProfileScreenState
     }
   }
 
-  Future<String?> _uploadImage(File imageFile) async {
-    try {
-      final dio = Dio();
-      String fileName = imageFile.path.split('/').last;
+  // 🔴 ĐÃ XÓA HÀM _uploadImage CŨ VÌ KHÔNG CẦN THIẾT NỮA
 
-      FormData formData = FormData.fromMap({
-        "file": await MultipartFile.fromFile(
-          imageFile.path,
-          filename: fileName,
-        ),
-      });
-
-      var response = await dio.post(
-        "http://10.0.2.2:8090/api/files/upload",
-        data: formData,
-      );
-
-      if (response.statusCode == 200) {
-        return response.data['url'];
-      }
-    } catch (e) {
-      print("Upload error: $e");
-      if (mounted) {
-        CustomSnackBar.show(
-          context,
-          title: "Upload Error",
-          message: "Could not upload image to storage service",
-          isError: true,
-        );
-      }
-    }
-    return null;
-  }
-
+  // --- LƯU THAY ĐỔI (LOGIC MỚI) ---
   Future<void> _saveChanges() async {
+    // Ẩn bàn phím
+    FocusScope.of(context).unfocus();
     setState(() => _isSaving = true);
+
     try {
+      final client = ApiClient();
       String? finalLogoUrl = _serverLogoUrl;
 
+      // 1. Nếu có chọn ảnh mới -> Upload sang Storage Service (Port 8090)
       if (_localImageFile != null) {
-        String? uploadedUrl = await _uploadImage(_localImageFile!);
-
-        if (uploadedUrl != null) {
-          finalLogoUrl = uploadedUrl;
-        } else {
-          throw Exception("Image upload failed. Please try again.");
-        }
+        // Gọi hàm chuyên biệt đã viết trong ApiClient
+        // Hàm này tự xử lý việc gọi sang cổng 8090
+        finalLogoUrl = await client.uploadImageToStorage(_localImageFile!.path);
       }
 
-      final client = ApiClient();
+      // 2. Cập nhật thông tin sang Core Service (Port 8080)
       await client.put(
         '/company/me',
         data: {
           "name": _nameController.text.trim(),
           "industry": _industryController.text.trim(),
           "description": _descController.text.trim(),
-          "logoUrl": finalLogoUrl,
+          "logoUrl": finalLogoUrl, // Gửi URL ảnh vừa upload (hoặc ảnh cũ)
         },
       );
 
@@ -151,10 +124,12 @@ class _DirectorCompanyProfileScreenState
       }
     } catch (e) {
       if (mounted) {
+        // Xử lý lỗi gọn gàng (bỏ chữ Exception: nếu có)
+        String msg = e.toString().replaceAll("Exception: ", "");
         CustomSnackBar.show(
           context,
           title: "Update Failed",
-          message: e.toString(),
+          message: msg,
           isError: true,
         );
       }
@@ -209,13 +184,15 @@ class _DirectorCompanyProfileScreenState
                             ],
                             image: _getDecorationImage(),
                           ),
+                          // Hiển thị chữ cái đầu nếu không có ảnh
                           child:
                               (_localImageFile == null &&
-                                  _serverLogoUrl == null)
+                                  (_serverLogoUrl == null ||
+                                      _serverLogoUrl!.isEmpty))
                               ? Center(
                                   child: Text(
                                     _nameController.text.isNotEmpty
-                                        ? _nameController.text[0]
+                                        ? _nameController.text[0].toUpperCase()
                                         : "C",
                                     style: const TextStyle(
                                       fontSize: 40,
@@ -227,6 +204,7 @@ class _DirectorCompanyProfileScreenState
                               : null,
                         ),
 
+                        // Nút Camera nhỏ
                         Positioned(
                           bottom: 0,
                           right: 0,
@@ -274,7 +252,7 @@ class _DirectorCompanyProfileScreenState
                   CustomTextField(
                     controller: _domainController,
                     hintText: "domain",
-                    readOnly: true,
+                    readOnly: true, // Không cho sửa Domain
                     fillColor: Colors.grey[100],
                     prefixIcon: Icon(
                       PhosphorIconsRegular.globe,
@@ -333,13 +311,17 @@ class _DirectorCompanyProfileScreenState
     );
   }
 
+  // Hàm helper để hiển thị ảnh
   DecorationImage? _getDecorationImage() {
+    // 1. Ưu tiên hiển thị ảnh vừa chọn từ máy (Local)
     if (_localImageFile != null) {
       return DecorationImage(
         image: FileImage(_localImageFile!),
         fit: BoxFit.cover,
       );
     }
+    // 2. Nếu không chọn mới, hiển thị ảnh từ Server (URL)
+    // Lưu ý: URL này giờ là http://10.0.2.2:8090/img/... nên NetworkImage load tốt
     if (_serverLogoUrl != null && _serverLogoUrl!.isNotEmpty) {
       return DecorationImage(
         image: NetworkImage(_serverLogoUrl!),
