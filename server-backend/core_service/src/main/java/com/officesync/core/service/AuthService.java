@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.officesync.core.controller.AuthController.AuthResponse;
 import com.officesync.core.controller.AuthController.LoginRequest;
 import com.officesync.core.controller.AuthController.RegisterRequest;
+import com.officesync.core.dto.UserCreatedEvent;
 import com.officesync.core.model.Company;
 import com.officesync.core.model.PasswordHistory;
 import com.officesync.core.model.User;
@@ -38,8 +39,10 @@ public class AuthService {
     @Autowired private JwtTokenProvider tokenProvider;
     @Autowired private JavaMailSender mailSender;
     
-    // Inject Repository quản lý lịch sử mật khẩu
     @Autowired private PasswordHistoryRepository passwordHistoryRepository;
+    
+    // 🔴 INJECT RABBITMQ PRODUCER
+    @Autowired private RabbitMQProducer rabbitMQProducer;
 
     // Cache OTP
     @Data @AllArgsConstructor
@@ -56,7 +59,6 @@ public class AuthService {
             throw new RuntimeException("Incorrect email or password!");
         }
 
-        // Check Company Status
         if (user.getCompanyId() != null) {
             Company company = companyRepository.findById(user.getCompanyId()).orElse(null);
             if (company != null && "LOCKED".equals(company.getStatus())) {
@@ -64,7 +66,6 @@ public class AuthService {
             }
         }
 
-        // Check User Status
         if ("LOCKED".equals(user.getStatus())) {
             throw new RuntimeException("Your account has been locked by Administrator.");
         }
@@ -107,7 +108,6 @@ public class AuthService {
         // Tạo Company
         Company company = new Company();
         company.setName(req.getCompanyName());
-        // Logic tự sinh domain
         String domainSlug = req.getCompanyName().toLowerCase().replaceAll("[^a-z0-9]", "")
                 + String.format("%04d", new Random().nextInt(10000));
         company.setDomain(domainSlug);
@@ -129,13 +129,30 @@ public class AuthService {
             user.setDateOfBirth(LocalDate.parse(req.getDateOfBirth(), formatter));
         }
 
-        userRepository.save(user); // User có ID tại đây
+        User savedUser = userRepository.save(user); // Lưu ý: Lấy user đã save để chắc chắn có ID
         
-        // 🔴 QUAN TRỌNG: Lưu mật khẩu khởi tạo vào lịch sử luôn
-        // Để tránh việc vừa tạo xong đổi pass quay lại pass cũ
         savePasswordHistory(user);
-
         registrationOtpCache.remove(req.getEmail());
+
+        // 🔴 GỬI SỰ KIỆN SANG RABBITMQ (ĐỂ PROFILE SERVICE XỬ LÝ)
+        try {
+            UserCreatedEvent event = new UserCreatedEvent();
+            
+            event.setId(savedUser.getId());              // ID 5
+            event.setCompanyId(savedUser.getCompanyId()); // Company ID
+            event.setEmail(savedUser.getEmail());         // mailiemtruc04@gmail.com
+            event.setFullName(savedUser.getFullName());   // Mai Van L
+            event.setMobileNumber(savedUser.getMobileNumber()); // 0934828105
+            event.setDateOfBirth(savedUser.getDateOfBirth());   // 2000-01-01
+            event.setRole(savedUser.getRole());           // COMPANY_ADMIN
+            event.setStatus(savedUser.getStatus());       // ACTIVE
+
+            // Gửi đi
+            rabbitMQProducer.sendUserCreatedEvent(event);
+            
+        } catch (Exception e) {
+            System.err.println("--> Lỗi gửi RabbitMQ: " + e.getMessage());
+        }
     }
 
     // --- FORGOT PASSWORD ---
@@ -144,12 +161,8 @@ public class AuthService {
                 .orElseThrow(() -> new RuntimeException("Email does not exist!"));
         String otp = String.format("%04d", new Random().nextInt(10000));
         user.setOtpCode(otp);
-        
-
         user.setOtpExpiry(LocalDateTime.now().plusMinutes(5));  
-        
         userRepository.save(user);
-        
         sendEmail(email, "Reset Password OTP", "Your OTP: " + otp + "\nExpires in 5 minutes.");
     }
 
@@ -162,54 +175,34 @@ public class AuthService {
     public void resetPassword(String email, String otp, String newPassword) {
         verifyForgotPasswordOtp(email, otp);
         User user = userRepository.findByEmail(email).get();
-
-        // Kiểm tra lịch sử & trùng lặp
         validateNewPassword(user, newPassword);
-
-        // Lưu mật khẩu cũ vào lịch sử
         savePasswordHistory(user);
-
-        // Cập nhật mật khẩu mới
         user.setPassword(passwordEncoder.encode(newPassword));
         user.setOtpCode(null);
         user.setOtpExpiry(null);
         userRepository.save(user);
     }
 
-    // 🔴 MỚI THÊM: CHANGE PASSWORD (Đổi chủ động khi đã đăng nhập)
+    // --- CHANGE PASSWORD ---
     public void changePassword(Long userId, String currentPassword, String newPassword) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
-
-        // 1. Kiểm tra mật khẩu cũ nhập vào có đúng không
         if (!passwordEncoder.matches(currentPassword, user.getPassword())) {
             throw new RuntimeException("Current password is incorrect!");
         }
-
-        // 2. Kiểm tra lịch sử & trùng lặp (Dùng chung logic với reset)
         validateNewPassword(user, newPassword);
-
-        // 3. Lưu lịch sử
         savePasswordHistory(user);
-
-        // 4. Cập nhật
         user.setPassword(passwordEncoder.encode(newPassword));
         userRepository.save(user);
     }
 
     // --- HELPER FUNCTIONS ---
-    
-    // Hàm validate tách riêng để dùng chung cho cả Reset và Change password
     private void validateNewPassword(User user, String newPassword) {
-        // 1. Kiểm tra có trùng mật khẩu HIỆN TẠI không
         if (passwordEncoder.matches(newPassword, user.getPassword())) {
             throw new RuntimeException("New password cannot be the same as your current password!");
         }
-
-        // 2. Kiểm tra có trùng 2 mật khẩu GẦN NHẤT không
         List<PasswordHistory> historyList = passwordHistoryRepository.findByUserIdOrderByCreatedAtDesc(user.getId());
         int checkLimit = Math.min(historyList.size(), 2);
-        
         for (int i = 0; i < checkLimit; i++) {
             if (passwordEncoder.matches(newPassword, historyList.get(i).getPasswordHash())) {
                 throw new RuntimeException("Password has been used recently. Please choose a different one.");
@@ -217,12 +210,9 @@ public class AuthService {
         }
     }
 
-    // Hàm lưu lịch sử
     private void savePasswordHistory(User user) {
         PasswordHistory history = new PasswordHistory(user, user.getPassword());
         passwordHistoryRepository.save(history);
-
-        // Dọn dẹp: Chỉ giữ lại 2 cái cũ nhất + cái vừa thêm = 3 bản ghi
         List<PasswordHistory> allHistory = passwordHistoryRepository.findByUserIdOrderByCreatedAtDesc(user.getId());
         if (allHistory.size() > 2) {
             passwordHistoryRepository.deleteAll(allHistory.subList(2, allHistory.size()));

@@ -1,11 +1,14 @@
+version: '3.8'  # <--- Nên thêm version
+
 services:
-  # 1. DỊCH VỤ RABBITMQ (GIỮ NGUYÊN ĐỂ CHẠY TRONG DOCKER)
+  # 1. DỊCH VỤ RABBITMQ
   rabbitmq:
     image: rabbitmq:3-management
     container_name: rabbitmq-server
+    restart: always  # <--- Tự động khởi động lại nếu bị crash hoặc restart máy
     ports:
-      - "5672:5672" # Port kết nối ứng dụng
-      - "15672:15672" # Port trang quản lý (Web UI)
+      - "5672:5672"   # App kết nối vào đây
+      - "15672:15672" # Vào web quản lý tại http://localhost:15672
     environment:
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: guest
