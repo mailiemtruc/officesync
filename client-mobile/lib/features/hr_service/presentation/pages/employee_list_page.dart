@@ -1,14 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
-import 'create_department_page.dart'; // <--- Thêm dòng này
-// Import Config & Widgets
+import 'create_department_page.dart';
 import '../../../../core/config/app_colors.dart';
 import '../../widgets/employee_card.widget.dart';
 import '../../data/models/employee_model.dart';
 import '../../widgets/employee_bottom_sheet.dart';
-// Import trang AddEmployeePage (sửa đường dẫn nếu cần)
 import 'add_employee_page.dart';
-// Import mới cho Departments
 import '../../data/models/department_model.dart';
 import '../../widgets/department_card.widget.dart';
 import '../../widgets/department_bottom_sheet.dart';
@@ -21,9 +18,9 @@ class EmployeeListPage extends StatefulWidget {
 }
 
 class _EmployeeListPageState extends State<EmployeeListPage> {
-  bool _isEmployeesTab = true; // Biến trạng thái để switch tab
+  bool _isEmployeesTab = true;
 
-  // Dữ liệu Nhân viên (Giữ nguyên)
+  // Dữ liệu Nhân viên
   final List<Employee> _employees = [
     Employee(
       id: "001",
@@ -59,41 +56,37 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
     ),
   ];
 
-  // Dữ liệu Phòng ban (Mới thêm)
+  // Dữ liệu Phòng ban
   final List<Department> _departments = [
     Department(
       id: "D1",
       name: "Business Department",
       code: "DEP-001",
       managerName: "Nguyen Van A",
-      // Ảnh quản lý (dùng link giống Employee A)
       managerImageUrl: "https://i.pravatar.cc/150?img=11",
       memberCount: 12,
-      themeColor: const Color(0xFF2260FF), // Xanh
+      themeColor: const Color(0xFF2260FF),
     ),
     Department(
       id: "D2",
       name: "HR Department",
       code: "DEP-002",
       managerName: "Nguyen Van E",
-      // Ảnh quản lý (dùng link giống Employee E)
       managerImageUrl: "https://i.pravatar.cc/150?img=8",
       memberCount: 8,
-      themeColor: const Color(0xFFD946EF), // Hồng tím (như thiết kế)
+      themeColor: const Color(0xFFD946EF),
     ),
     Department(
       id: "D3",
       name: "Technical Department",
       code: "DEP-003",
       managerName: "Nguyen Van F",
-      // Ảnh quản lý
       managerImageUrl: "https://i.pravatar.cc/150?img=60",
       memberCount: 9,
-      themeColor: const Color(0xFFF97316), // Cam
+      themeColor: const Color(0xFFF97316),
     ),
   ];
 
-  // Hàm mở BottomSheet Nhân viên
   void _showEmployeeOptions(BuildContext context, int index) {
     showModalBottomSheet(
       context: context,
@@ -119,7 +112,6 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
     );
   }
 
-  // Hàm mở BottomSheet Phòng ban (Mới)
   void _showDepartmentOptions(BuildContext context, int index) {
     showModalBottomSheet(
       context: context,
@@ -141,20 +133,87 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
     );
   }
 
+  // --- HÀM XỬ LÝ ĐIỀU HƯỚNG ---
+  void _onBottomNavTap(int index) {
+    switch (index) {
+      case 0:
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          '/dashboard',
+          (route) => false,
+        );
+        break;
+      case 1:
+        Navigator.pop(context);
+        break;
+      case 2:
+        Navigator.pushNamed(context, '/user_profile');
+        break;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF9F9F9),
+
+      // --- THANH ĐIỀU HƯỚNG ---
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, -5),
+            ),
+          ],
+        ),
+        child: BottomNavigationBar(
+          backgroundColor: Colors.white,
+          currentIndex: 1, // Đang ở nhánh Menu
+          onTap: _onBottomNavTap,
+          selectedItemColor: AppColors.primary,
+          unselectedItemColor: Colors.grey,
+          showUnselectedLabels: true,
+          type: BottomNavigationBarType.fixed,
+          selectedLabelStyle: const TextStyle(
+            fontFamily: 'Inter',
+            fontWeight: FontWeight.w600,
+            fontSize: 12,
+          ),
+          unselectedLabelStyle: const TextStyle(
+            fontFamily: 'Inter',
+            fontWeight: FontWeight.w500,
+            fontSize: 12,
+          ),
+          items: [
+            BottomNavigationBarItem(
+              icon: Icon(PhosphorIconsRegular.house),
+              activeIcon: Icon(PhosphorIconsFill.house),
+              label: 'Home',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(PhosphorIconsFill.squaresFour),
+              activeIcon: Icon(PhosphorIconsFill.squaresFour),
+              label: 'Menu',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(PhosphorIconsRegular.user),
+              activeIcon: Icon(PhosphorIconsFill.user),
+              label: 'Profile',
+            ),
+          ],
+        ),
+      ),
+
       floatingActionButton: FloatingActionButton(
         onPressed: () {
           if (_isEmployeesTab) {
-            // Tab Nhân viên -> Mở trang Thêm Nhân viên
             Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => const AddEmployeePage()),
             );
           } else {
-            // Tab Phòng ban -> Mở trang Tạo Phòng ban (Mới cập nhật)
             Navigator.push(
               context,
               MaterialPageRoute(
@@ -208,10 +267,10 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
                 ),
 
                 const SizedBox(height: 24),
-                _buildTabs(), // Tab Switcher
+                _buildTabs(),
 
                 const SizedBox(height: 24),
-                // Search Bar (Đổi hint text theo tab)
+                // Search Bar
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: Row(
@@ -231,7 +290,7 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
 
                 const SizedBox(height: 20),
 
-                // Nội dung danh sách (Thay đổi theo Tab)
+                // Nội dung danh sách
                 Expanded(
                   child: _isEmployeesTab
                       ? _buildEmployeeList()
@@ -245,7 +304,6 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
     );
   }
 
-  // Widget hiển thị danh sách Nhân viên
   Widget _buildEmployeeList() {
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
@@ -270,7 +328,6 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
     );
   }
 
-  // Widget hiển thị danh sách Phòng ban (Mới)
   Widget _buildDepartmentList() {
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
@@ -290,7 +347,6 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
     );
   }
 
-  // --- Các Widget phụ trợ (Tabs, Search, Filter) giữ nguyên style ---
   Widget _buildTabs() {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 24),

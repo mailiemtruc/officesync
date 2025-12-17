@@ -14,6 +14,8 @@ class MyRequestsPage extends StatefulWidget {
 
 class _MyRequestsPageState extends State<MyRequestsPage> {
   String _selectedFilter = 'All';
+
+  // Dữ liệu mẫu
   final List<RequestModel> _requests = [
     RequestModel(
       id: '1',
@@ -49,10 +51,79 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
     return _requests.where((r) => r.statusText == _selectedFilter).toList();
   }
 
+  // --- HÀM XỬ LÝ ĐIỀU HƯỚNG ---
+  void _onBottomNavTap(int index) {
+    switch (index) {
+      case 0: // Home -> Về Dashboard
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          '/dashboard',
+          (route) => false,
+        );
+        break;
+      case 1: // Menu -> Quay lại Menu (Pop)
+        Navigator.pop(context);
+        break;
+      case 2: // Profile
+        Navigator.pushNamed(context, '/user_profile');
+        break;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF9F9F9),
+
+      // --- THANH ĐIỀU HƯỚNG ---
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, -5),
+            ),
+          ],
+        ),
+        child: BottomNavigationBar(
+          backgroundColor: Colors.white,
+          currentIndex: 1, // Đang ở nhánh Menu
+          onTap: _onBottomNavTap,
+          selectedItemColor: AppColors.primary,
+          unselectedItemColor: Colors.grey,
+          showUnselectedLabels: true,
+          type: BottomNavigationBarType.fixed,
+          selectedLabelStyle: const TextStyle(
+            fontFamily: 'Inter',
+            fontWeight: FontWeight.w600,
+            fontSize: 12,
+          ),
+          unselectedLabelStyle: const TextStyle(
+            fontFamily: 'Inter',
+            fontWeight: FontWeight.w500,
+            fontSize: 12,
+          ),
+          items: [
+            BottomNavigationBarItem(
+              icon: Icon(PhosphorIconsRegular.house),
+              activeIcon: Icon(PhosphorIconsFill.house),
+              label: 'Home',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(PhosphorIconsFill.squaresFour),
+              activeIcon: Icon(PhosphorIconsFill.squaresFour),
+              label: 'Menu',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(PhosphorIconsRegular.user),
+              activeIcon: Icon(PhosphorIconsFill.user),
+              label: 'Profile',
+            ),
+          ],
+        ),
+      ),
+
       floatingActionButton: FloatingActionButton(
         onPressed: () {
           Navigator.push(
@@ -188,7 +259,7 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
 
                 const SizedBox(height: 12),
 
-                // 5. List Requests - ĐÃ CẬP NHẬT HIỆU ỨNG NHẤN
+                // List Requests
                 Expanded(
                   child: ListView.builder(
                     padding: const EdgeInsets.symmetric(
@@ -209,7 +280,6 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
     );
   }
 
-  // --- CẬP NHẬT HÀM NÀY: Dùng Material + InkWell để có hiệu ứng nhấn ---
   Widget _buildRequestCard(RequestModel request) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -224,11 +294,10 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
           ),
         ],
       ),
-      // Material bao bọc để hiển thị InkWell
       child: Material(
-        color: Colors.transparent, // Trong suốt để thấy màu nền của Container
+        color: Colors.transparent,
         borderRadius: BorderRadius.circular(10),
-        clipBehavior: Clip.antiAlias, // Cắt hiệu ứng loang cho bo tròn
+        clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: () {
             Navigator.push(
@@ -238,15 +307,12 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
               ),
             );
           },
-          // Màu hiệu ứng loang (Tùy chọn, mặc định là xám nhạt)
           splashColor: Colors.grey.withOpacity(0.1),
           highlightColor: Colors.grey.withOpacity(0.05),
           child: IntrinsicHeight(
             child: Row(
               children: [
-                // Thanh màu trạng thái
                 Container(width: 6, color: request.statusColor),
-                // Nội dung thẻ
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.all(16),
