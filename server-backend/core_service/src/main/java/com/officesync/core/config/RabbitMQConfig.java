@@ -20,6 +20,7 @@ public class RabbitMQConfig {
     public static final String EXCHANGE_INTERNAL = "internal.exchange";
     public static final String ROUTING_KEY_COMPANY_CREATE = "company.create";
     public static final String ROUTING_KEY_USER_STATUS = "user.status.update";
+    public static final String QUEUE_EMPLOYEE_CREATE = "employee.create.queue";
 
     @Bean
     public Queue queue() {
@@ -58,5 +59,10 @@ public class RabbitMQConfig {
         RabbitTemplate rabbitTemplate = new RabbitTemplate(connectionFactory);
         rabbitTemplate.setMessageConverter(converter);
         return rabbitTemplate;
+    }
+
+    @Bean
+    public Queue employeeQueue() {
+        return new Queue(QUEUE_EMPLOYEE_CREATE);
     }
 }

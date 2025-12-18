@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.officesync.core.controller.AuthController.AuthResponse;
 import com.officesync.core.controller.AuthController.LoginRequest;
 import com.officesync.core.controller.AuthController.RegisterRequest;
+import com.officesync.core.dto.EmployeeSyncEvent;
 import com.officesync.core.dto.UserCreatedEvent;
 import com.officesync.core.model.Company;
 import com.officesync.core.model.PasswordHistory;
@@ -194,6 +195,64 @@ public class AuthService {
         savePasswordHistory(user);
         user.setPassword(passwordEncoder.encode(newPassword));
         userRepository.save(user);
+    }
+
+    // =========================================================
+    // XỬ LÝ ĐỒNG BỘ TỪ HR -> CORE
+    // =========================================================
+    @Transactional
+    public void createEmployeeAccount(EmployeeSyncEvent event) {
+        // 1. Kiểm tra User tồn tại chưa
+        if (userRepository.findByEmail(event.getEmail()).isPresent()) {
+            System.out.println("User đã tồn tại: " + event.getEmail());
+            return;
+        }
+
+        // 2. Map dữ liệu từ Event sang User Entity
+        User newUser = new User();
+        newUser.setCompanyId(event.getCompanyId());
+        newUser.setEmail(event.getEmail());
+        newUser.setFullName(event.getFullName());
+        newUser.setMobileNumber(event.getPhone());
+        newUser.setDateOfBirth(event.getDateOfBirth());
+        
+        // 3. Xử lý Mật khẩu (Hash)
+        // Mật khẩu từ HR gửi sang là bản rõ (raw), cần mã hóa ngay
+        newUser.setPassword(passwordEncoder.encode(event.getPassword()));
+
+        // 4. Map Role & Status
+        // Lưu ý: Cần đảm bảo string Role khớp với Enum hoặc Logic của bạn
+        newUser.setRole(event.getRole()); 
+        newUser.setStatus(event.getStatus()); 
+
+        // 5. Lưu vào DB Core
+        User savedUser = userRepository.save(newUser);
+        
+        // Lưu lịch sử mật khẩu
+        savePasswordHistory(savedUser);
+
+        System.out.println("--> Đã tạo User từ HR: " + savedUser.getEmail() + " (ID: " + savedUser.getId() + ")");
+
+        // 6. BẮN EVENT NGƯỢC LẠI (Broadcast cho các service khác biết)
+        // Profile Service hoặc Notification Service có thể cần thông tin này
+        try {
+            UserCreatedEvent responseEvent = new UserCreatedEvent();
+            
+            responseEvent.setId(savedUser.getId());              // ID mới sinh
+            responseEvent.setCompanyId(savedUser.getCompanyId());
+            responseEvent.setEmail(savedUser.getEmail());
+            responseEvent.setFullName(savedUser.getFullName());
+            responseEvent.setMobileNumber(savedUser.getMobileNumber());
+            responseEvent.setDateOfBirth(savedUser.getDateOfBirth());
+            responseEvent.setRole(savedUser.getRole());
+            responseEvent.setStatus(savedUser.getStatus());
+            
+            // Hàm này bạn đã có ở bài trước
+            rabbitMQProducer.sendUserCreatedEvent(responseEvent);
+            
+        } catch (Exception e) {
+            System.err.println("Lỗi bắn event UserCreated: " + e.getMessage());
+        }
     }
 
     // --- HELPER FUNCTIONS ---
