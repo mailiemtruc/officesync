@@ -2,7 +2,7 @@ package com.officesync.communication_service.controller;
 
 import com.officesync.communication_service.dto.*;
 import com.officesync.communication_service.service.NewsfeedService;
-import com.officesync.core.model.User;
+import com.officesync.communication_service.model.User;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;

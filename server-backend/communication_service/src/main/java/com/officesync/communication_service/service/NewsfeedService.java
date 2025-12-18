@@ -4,7 +4,7 @@ import com.officesync.communication_service.dto.*;
 import com.officesync.communication_service.enums.ReactionType;
 import com.officesync.communication_service.model.*;
 import com.officesync.communication_service.repository.*;
-import com.officesync.core.model.User; 
+import com.officesync.communication_service.model.User; 
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
