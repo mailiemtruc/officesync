@@ -1,19 +1,20 @@
 package com.officesync.hr_service.Service;
-
-import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.DataIntegrityViolationException; // [QUAN TRỌNG] Class sinh ID
 import org.springframework.stereotype.Service;
 
+import com.officesync.hr_service.Config.SnowflakeIdGenerator;
+import com.officesync.hr_service.DTO.EmployeeSyncEvent;
 import com.officesync.hr_service.DTO.UserCreatedEvent;
 import com.officesync.hr_service.Model.Department;
 import com.officesync.hr_service.Model.Employee;
 import com.officesync.hr_service.Model.EmployeeRole;
 import com.officesync.hr_service.Model.EmployeeStatus;
-import com.officesync.hr_service.Repository.DepartmentRepository;
-import com.officesync.hr_service.Repository.EmployeeRepository;
+import com.officesync.hr_service.Producer.EmployeeProducer;
+import com.officesync.hr_service.Repository.DepartmentRepository; // Import DTO mới
+import com.officesync.hr_service.Repository.EmployeeRepository; // Import Producer mới
 
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-
+import lombok.RequiredArgsConstructor; // Import DTO mới
+import lombok.extern.slf4j.Slf4j; // Import Producer mới
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -22,25 +23,63 @@ public class EmployeeService {
     private final EmployeeRepository employeeRepository;
     private final DepartmentRepository departmentRepository;
 
-    // =================================================================
-    // 1. LOGIC CHO API (Controller gọi hàm này)
+   private final SnowflakeIdGenerator idGenerator; // [QUAN TRỌNG] Inject bộ sinh ID
+   private final EmployeeProducer employeeProducer;
+
+   // =================================================================
+    // 1. TẠO NHÂN VIÊN TỪ API -> GỬI SANG CORE
     // =================================================================
     public Employee createEmployee(Employee newEmployee, Long companyId, Long departmentId) {
+        // 1. Gán Company ID
         newEmployee.setCompanyId(companyId);
         
+        // 2. Default values
         if (newEmployee.getRole() == null) newEmployee.setRole(EmployeeRole.STAFF);
         if (newEmployee.getStatus() == null) newEmployee.setStatus(EmployeeStatus.ACTIVE);
 
+        // 3. SINH SNOWFLAKE ID (Lưu cục bộ)
+        if (newEmployee.getId() == null) {
+            long safeId = idGenerator.nextId();
+            newEmployee.setId(safeId);
+        }
+
+        // 4. Gán phòng ban
         if (departmentId != null) {
             Department dept = departmentRepository.findById(departmentId)
-                    .orElseThrow(() -> new RuntimeException("Phòng ban không tồn tại với ID: " + departmentId));
+                    .orElseThrow(() -> new RuntimeException("Phòng ban không tồn tại"));
             newEmployee.setDepartment(dept);
         }
 
-        // Gọi hàm lưu an toàn
-        return saveEmployeeWithRetry(newEmployee);
-    }
+        // 5. Lưu vào DB của HR Service
+        Employee savedEmployee = saveEmployeeWithRetry(newEmployee);
 
+        // 6. GỬI MQ SANG CORE (KÈM MẬT KHẨU)
+        if (savedEmployee != null) {
+            try {
+                // Mật khẩu mặc định cho nhân viên mới
+                String defaultPassword = "123456"; 
+
+                EmployeeSyncEvent event = new EmployeeSyncEvent(
+                    savedEmployee.getEmail(),
+                    savedEmployee.getFullName(),
+                    savedEmployee.getPhone(),
+                    savedEmployee.getDateOfBirth(),
+                    savedEmployee.getCompanyId(),
+                    savedEmployee.getRole().name(),
+                    savedEmployee.getStatus().name(),
+                    defaultPassword // [QUAN TRỌNG] Gửi mật khẩu sang
+                );
+                
+                employeeProducer.sendEmployeeCreatedEvent(event);
+                log.info("--> Đã gửi yêu cầu tạo User sang Core (Email: {})", savedEmployee.getEmail());
+                
+            } catch (Exception e) {
+                log.error("Lỗi gửi MQ sang Core: {}", e.getMessage());
+            }
+        }
+
+        return savedEmployee;
+    }
     // =================================================================
     // 2. LOGIC CHO RABBITMQ (Consumer gọi hàm này)
     // =================================================================
