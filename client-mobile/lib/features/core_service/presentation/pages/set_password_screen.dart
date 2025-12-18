@@ -29,6 +29,11 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
   @override
   void initState() {
     super.initState();
+    _passwordController.addListener(() {
+      setState(
+        () {},
+      ); // Rebuild UI mỗi khi nhập password để cập nhật các dòng check
+    });
     Future.delayed(const Duration(milliseconds: 100), () {
       if (mounted) setState(() => _isTitleVisible = true);
     });
@@ -187,6 +192,69 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
     );
   }
 
+  Widget _buildRuleItem(String text, bool isValid) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(
+            isValid ? Icons.check_circle_rounded : Icons.radio_button_unchecked,
+            color: isValid ? Colors.green : Colors.grey.withOpacity(0.5),
+            size: 18,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(
+                color: isValid ? Colors.black87 : Colors.grey,
+                fontSize: 13,
+                fontFamily: 'Inter',
+                // Gạch ngang chữ nếu chưa thỏa mãn (tuỳ chọn, ở đây tôi để bình thường cho dễ đọc)
+                fontWeight: isValid ? FontWeight.w500 : FontWeight.normal,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPasswordRules(String password) {
+    bool hasMinLength = password.length >= 8;
+    bool hasUppercase = password.contains(RegExp(r'[A-Z]'));
+    bool hasLowercase = password.contains(RegExp(r'[a-z]'));
+    bool hasDigit = password.contains(RegExp(r'[0-9]'));
+    // Lưu ý: Regex này bao gồm _ - + = như file gốc của bạn để khớp với mô tả
+    bool hasSpecialChar = password.contains(
+      RegExp(r'[!@#$%^&*(),.?":{}|<>_+\-=]'),
+    );
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF5F7FF), // Màu nền giống code cũ của bạn
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.grey.shade200,
+        ), // Thêm viền nhẹ cho đẹp
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildRuleItem("Minimum 8 characters", hasMinLength),
+          _buildRuleItem("At least 1 uppercase letter (A-Z)", hasUppercase),
+          _buildRuleItem("At least 1 lowercase letter (a-z)", hasLowercase),
+          _buildRuleItem("At least 1 number (0-9)", hasDigit),
+          _buildRuleItem(
+            "At least 1 special character (@, #, _, - ...)",
+            hasSpecialChar,
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildFormContent() {
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 10),
@@ -254,27 +322,11 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
                   ),
                 ),
                 const SizedBox(height: 15),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF5F7FF),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    '• Minimum 8 characters\n'
-                    '• At least 1 uppercase letter (A-Z)\n'
-                    '• At least 1 lowercase letter (a-z)\n'
-                    '• At least 1 number (0-9)\n'
-                    '• At least 1 special character (@, #, _, - ...)',
-                    style: TextStyle(
-                      color: Colors.black.withOpacity(0.6),
-                      fontSize: 12,
-                      fontFamily: 'Inter',
-                      height: 1.6,
-                    ),
-                  ),
-                ),
+
+                // --- THAY THẾ ĐOẠN CŨ BẰNG ĐOẠN NÀY ---
+                _buildPasswordRules(_passwordController.text),
+
+                // --------------------------------------
                 const SizedBox(height: 20),
                 _buildLabel("Confirm Password"),
                 CustomTextField(
