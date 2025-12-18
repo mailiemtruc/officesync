@@ -2,6 +2,20 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "type": "java",
+      "name": "CoreServiceApplication",
+      "request": "launch",
+      "mainClass": "com.officesync.core.CoreServiceApplication",
+      "projectName": "core_service"
+    },
+    {
+      "type": "java",
+      "name": "CommunicationServiceApplication",
+      "request": "launch",
+      "mainClass": "com.officesync.communication_service.CommunicationServiceApplication",
+      "projectName": "communication_service"
+    },
+    {
       "name": "C/C++ Runner: Debug Session",
       "type": "cppdbg",
       "request": "launch",
