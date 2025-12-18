@@ -138,13 +138,17 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
 
   // --- LOGIC CHÍNH ---
   Future<void> _handleCreateEmployee() async {
+    // 1. Kiểm tra validation (Thêm kiểm tra password ko được trống)
     if (_nameController.text.isEmpty ||
         _emailController.text.isEmpty ||
+        _passwordController.text.isEmpty || // [MỚI] Validate password
         _selectedRole == null ||
         _selectedDepartment == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please fill in all required fields'),
+          content: Text(
+            'Please fill in all required fields (including password)',
+          ),
           backgroundColor: Colors.redAccent,
         ),
       );
@@ -171,15 +175,16 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
         }
       }
 
+      // [QUAN TRỌNG]: Gửi password đi
       final success = await _employeeRepository.createEmployee(
         fullName: _nameController.text.trim(),
         email: _emailController.text.trim(),
         phone: _phoneController.text.trim(),
         dob: formattedDob,
         role: _selectedRole?.toUpperCase() ?? "STAFF",
-        // [SỬA LỖI TẠI ĐÂY]: Thêm dấu ! vì ID lấy từ API chắc chắn không null
         departmentId: _selectedDepartment!.id!,
         currentUserId: currentUserId,
+        password: _passwordController.text.trim(), // [MỚI] Truyền mật khẩu
       );
 
       if (success && mounted) {

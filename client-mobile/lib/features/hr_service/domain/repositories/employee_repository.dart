@@ -11,6 +11,7 @@ abstract class EmployeeRepository {
     required String role,
     required int departmentId,
     required String currentUserId,
+    required String password, // [MỚI] Thêm tham số này
   });
 
   // [Mới] Hàm lấy danh sách nhân viên

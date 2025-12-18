@@ -29,7 +29,7 @@ public class EmployeeService {
    // =================================================================
     // 1. TẠO NHÂN VIÊN TỪ API -> GỬI SANG CORE
     // =================================================================
-    public Employee createEmployee(Employee newEmployee, Long companyId, Long departmentId) {
+   public Employee createEmployee(Employee newEmployee, Long companyId, Long departmentId, String password) {
         // 1. Gán Company ID
         newEmployee.setCompanyId(companyId);
         
@@ -50,14 +50,14 @@ public class EmployeeService {
             newEmployee.setDepartment(dept);
         }
 
-        // 5. Lưu vào DB của HR Service
+        // 5. Lưu vào DB của HR Service (KHÔNG LƯU PASSWORD VÌ MODEL KHÔNG CÓ TRƯỜNG ĐÓ)
         Employee savedEmployee = saveEmployeeWithRetry(newEmployee);
 
-        // 6. GỬI MQ SANG CORE (KÈM MẬT KHẨU)
+        // 6. GỬI MQ SANG CORE (KÈM MẬT KHẨU NHẬN ĐƯỢC TỪ APP)
         if (savedEmployee != null) {
             try {
-                // Mật khẩu mặc định cho nhân viên mới
-                String defaultPassword = "123456"; 
+                // Sử dụng mật khẩu được truyền vào từ App, nếu null thì mới dùng mặc định
+                String passwordToSend = (password != null && !password.isEmpty()) ? password : "123456";
 
                 EmployeeSyncEvent event = new EmployeeSyncEvent(
                     savedEmployee.getEmail(),
@@ -67,7 +67,7 @@ public class EmployeeService {
                     savedEmployee.getCompanyId(),
                     savedEmployee.getRole().name(),
                     savedEmployee.getStatus().name(),
-                    defaultPassword // [QUAN TRỌNG] Gửi mật khẩu sang
+                    passwordToSend // [QUAN TRỌNG] Gửi mật khẩu thật sang Core
                 );
                 
                 employeeProducer.sendEmployeeCreatedEvent(event);

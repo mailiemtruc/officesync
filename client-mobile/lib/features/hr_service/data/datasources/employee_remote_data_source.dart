@@ -12,11 +12,15 @@ class EmployeeRemoteDataSource {
     EmployeeModel employee,
     int deptId,
     String creatorId,
+    String password, // [MỚI] Nhận password
   ) async {
     try {
       final url = Uri.parse('$baseUrl/employees?departmentId=$deptId');
 
       print("--> Creating Employee by User ID: $creatorId");
+
+      Map<String, dynamic> bodyData = employee.toJson();
+      bodyData['password'] = password; // Nhét mật khẩu vào JSON
 
       final response = await http.post(
         url,
@@ -24,7 +28,7 @@ class EmployeeRemoteDataSource {
           "Content-Type": "application/json",
           "X-User-Id": creatorId, // Header để Backend nhận diện công ty
         },
-        body: jsonEncode(employee.toJson()),
+        body: jsonEncode(bodyData), // Gửi Map đã có password
       );
 
       if (response.statusCode == 200 || response.statusCode == 201) {

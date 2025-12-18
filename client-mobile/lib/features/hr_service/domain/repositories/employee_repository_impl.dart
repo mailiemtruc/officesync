@@ -17,6 +17,7 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
     required String role,
     required int departmentId,
     required String currentUserId,
+    required String password, // [MỚI] Nhận password
   }) async {
     final employee = EmployeeModel(
       fullName: fullName,
@@ -26,10 +27,13 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
       role: role,
       status: "ACTIVE",
     );
+
+    // Truyền tiếp password xuống remote data source
     return await remoteDataSource.createEmployee(
       employee,
       departmentId,
       currentUserId,
+      password,
     );
   }
 
