@@ -1,0 +1,57 @@
+version: '3.8'  # <--- Nên thêm version
+
+services:
+  # 1. DỊCH VỤ RABBITMQ
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq-server
+    restart: always  # <--- Tự động khởi động lại nếu bị crash hoặc restart máy
+    ports:
+      - "5672:5672"   # App kết nối vào đây
+      - "15672:15672" # Vào web quản lý tại http://localhost:15672
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - officesync_net
+
+  # 2. DỊCH VỤ MYSQL (ĐÃ TẮT ĐỂ DÙNG MYSQL TRÊN MÁY TÍNH)
+  # mysql:
+  #   image: mysql:8.0
+  #   container_name: mysql-server
+  #   ports:
+  #     - "3307:3306"
+  #   environment:
+  #     MYSQL_ROOT_PASSWORD: root
+  #     MYSQL_DATABASE: officesync_db
+  #   volumes:
+  #     - mysql_data:/var/lib/mysql
+  #   networks:
+  #     - officesync_net
+  #   command: --default-authentication-plugin=mysql_native_password
+
+  # 3. DỊCH VỤ PHPMYADMIN (ĐÃ TẮT VÌ KHÔNG CẦN THIẾT KHI DÙNG MYSQL LOCAL)
+  # phpmyadmin:
+  #   image: phpmyadmin/phpmyadmin
+  #   container_name: phpmyadmin
+  #   ports:
+  #     - "9000:80"
+  #   environment:
+  #     PMA_HOST: mysql
+  #     PMA_PORT: 3306
+  #   depends_on:
+  #     - mysql
+  #   networks:
+  #     - officesync_net
+
+# Khai báo Volumes
+volumes:
+  rabbitmq_data:
+  # mysql_data: # Tắt volume mysql
+
+# ĐỊNH NGHĨA MẠNG
+networks:
+  officesync_net:
+    driver: bridge

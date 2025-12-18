@@ -3,10 +3,20 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'core/config/app_colors.dart';
 
+// Import các trang Home
 import 'features/core_service/presentation/pages/staff_home_view.dart';
 import 'features/core_service/presentation/pages/manager_home_view.dart';
 import 'features/core_service/presentation/pages/director_home_view.dart';
 import 'features/core_service/presentation/pages/admin_home_view.dart';
+
+// Import User Profile
+import 'features/hr_service/presentation/pages/user_profile_page.dart';
+
+// --- THÊM IMPORT CÁC TRANG CHỨC NĂNG ---
+// (Lưu ý: Hãy đảm bảo đường dẫn import đúng với cấu trúc thư mục của bạn)
+import 'features/hr_service/presentation/pages/my_requests_page.dart';
+import 'features/hr_service/presentation/pages/manager_request_list_page.dart';
+import 'features/hr_service/presentation/pages/employee_list_page.dart';
 
 class DashboardScreen extends StatefulWidget {
   final Map<String, dynamic> userInfo;
@@ -20,28 +30,25 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   int _currentIndex = 0;
 
-  Future<void> _handleLogout() async {
-    const storage = FlutterSecureStorage();
-    await storage.deleteAll();
-
-    if (mounted) {
-      Navigator.pushNamedAndRemoveUntil(context, '/register', (route) => false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final String role = widget.userInfo['role'] ?? 'STAFF';
 
+    // Danh sách các trang cho BottomNavigationBar
     final List<Widget> pages = [
+      // Tab 0: Home
       _buildHomeByRole(role),
-      const Center(child: Text("Menu (Đang phát triển)")),
-      _buildProfileTab(),
+
+      // Tab 1: Menu (Đã cập nhật giao diện)
+      _buildMenuPage(role),
+
+      // Tab 2: Profile
+      const UserProfilePage(),
     ];
 
     return Scaffold(
-      backgroundColor: Colors.white,
-      body: SafeArea(child: pages[_currentIndex]),
+      backgroundColor: const Color(0xFFF9F9F9),
+      body: pages[_currentIndex],
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           boxShadow: [
@@ -92,96 +99,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildProfileTab() {
-    final String fullName = widget.userInfo['fullName'] ?? 'User';
-    final String email = widget.userInfo['email'] ?? 'No Email';
-    final String role = widget.userInfo['role'] ?? 'STAFF';
-
-    return Padding(
-      padding: const EdgeInsets.all(24.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          const SizedBox(height: 40),
-
-          Container(
-            width: 100,
-            height: 100,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: AppColors.primary.withOpacity(0.1),
-              border: Border.all(color: AppColors.primary, width: 2),
-            ),
-            child: Icon(
-              PhosphorIconsFill.user,
-              size: 50,
-              color: AppColors.primary,
-            ),
-          ),
-          const SizedBox(height: 20),
-
-          Text(
-            fullName,
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              fontFamily: 'Inter',
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            email,
-            style: const TextStyle(
-              fontSize: 16,
-              color: Colors.grey,
-              fontFamily: 'Inter',
-            ),
-          ),
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.grey[200],
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              role,
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
-            ),
-          ),
-
-          const Spacer(),
-
-          SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: ElevatedButton.icon(
-              onPressed: () => _handleLogout(),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red[50],
-                foregroundColor: Colors.red,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(15),
-                ),
-              ),
-              icon: const Icon(Icons.logout),
-              label: const Text(
-                "Log Out",
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  fontFamily: 'Inter',
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
-        ],
-      ),
-    );
-  }
-
   Widget _buildHomeByRole(String role) {
     switch (role) {
       case 'SUPER_ADMIN':
@@ -194,5 +111,135 @@ class _DashboardScreenState extends State<DashboardScreen> {
       default:
         return const StaffHomeView();
     }
+  }
+
+  // --- XÂY DỰNG GIAO DIỆN MENU ---
+  Widget _buildMenuPage(String role) {
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Menu',
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.w700,
+                color: AppColors.primary,
+                fontFamily: 'Inter',
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // Grid các chức năng
+            LayoutBuilder(
+              builder: (context, constraints) {
+                return Wrap(
+                  spacing: 16,
+                  runSpacing: 16,
+                  children: [
+                    // 1. My Requests (Ai cũng thấy)
+                    _buildMenuItem(
+                      context,
+                      title: 'My Requests',
+                      icon: PhosphorIconsFill.fileText,
+                      color: const Color(0xFF3B82F6), // Xanh dương
+                      route: '/my_requests',
+                      width:
+                          (constraints.maxWidth - 16) / 2, // Chia đôi màn hình
+                    ),
+
+                    // 2. Request Management (Chỉ Manager & Admin thấy)
+                    if (role == 'MANAGER' || role == 'COMPANY_ADMIN')
+                      _buildMenuItem(
+                        context,
+                        title: 'Request Management',
+                        icon: PhosphorIconsFill.clipboardText,
+                        color: const Color(0xFFF97316), // Cam
+                        route: '/manager_requests',
+                        width: (constraints.maxWidth - 16) / 2,
+                      ),
+
+                    // 3. HR Management (Chỉ Admin thấy)
+                    if (role == 'COMPANY_ADMIN' || role == 'SUPER_ADMIN')
+                      _buildMenuItem(
+                        context,
+                        title: 'HR Management',
+                        icon: PhosphorIconsFill.usersThree,
+                        color: const Color(0xFF8B5CF6), // Tím
+                        route: '/employees',
+                        width: (constraints.maxWidth - 16) / 2,
+                      ),
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Widget con cho từng ô Menu
+  Widget _buildMenuItem(
+    BuildContext context, {
+    required String title,
+    required IconData icon,
+    required Color color,
+    required String route,
+    required double width,
+  }) {
+    return Container(
+      width: width,
+      height: 140, // Chiều cao cố định cho đẹp
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(20),
+        child: InkWell(
+          onTap: () {
+            Navigator.pushNamed(context, route);
+          },
+          borderRadius: BorderRadius.circular(20),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(icon, color: color, size: 28),
+                ),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF1E293B),
+                    fontFamily: 'Inter',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
