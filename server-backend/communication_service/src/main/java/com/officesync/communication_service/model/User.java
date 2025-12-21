@@ -7,6 +7,7 @@ import org.springframework.data.domain.Persistable; // Import mới
 @Entity
 @Table(name = "users")
 @Data
+
 public class User implements Persistable<Long> { // ✅ Implement Persistable
     @Id
     // ❌ BỎ @GeneratedValue vì chúng ta lấy ID từ Core, không tự tạo
@@ -26,7 +27,9 @@ public class User implements Persistable<Long> { // ✅ Implement Persistable
 
     @Column(name = "password_hash")
     private String password;
-
+    
+    @Column(name = "avatar_url") // Nếu dùng JPA
+    private String avatarUrl;
     // --- CẤU HÌNH ĐỂ FORCE INSERT ---
     
     @Transient // Không lưu trường này vào DB
@@ -47,4 +50,14 @@ public class User implements Persistable<Long> { // ✅ Implement Persistable
     public void setId(Long id) {
         this.id = id;
     }
+
+   public void setAvatarUrl(String avatarUrl) {
+    // ✅ SỬA THÀNH:
+    this.avatarUrl = avatarUrl;
+}
+
+// 3. Tạo thêm hàm getter nếu chưa có
+public String getAvatarUrl() {
+    return this.avatarUrl;
+}
 }

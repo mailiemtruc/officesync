@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:officesync/features/communication_service/presentation/pages/newsfeed_screen.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'dart:async';
 import '../../../../core/config/app_colors.dart';
+//import '../../../../communication_service/presentation/pages/newsfeed_screen.dart';
 
 import 'director_company_profile_screen.dart';
 import '../../../../core/utils/custom_snackbar.dart';
@@ -291,13 +293,15 @@ class _DirectorHomeViewState extends State<DirectorHomeView> {
           );
         }),
 
-        _buildActionItem("News", PhosphorIconsBold.newspaper, () {
-          CustomSnackBar.show(
-            context,
-            title: "News",
-            message: "Internal news feed.",
-          );
-        }),
+       _buildActionItem("News", PhosphorIconsBold.newspaper, () {
+  // 👇 Thay thế đoạn CustomSnackBar cũ bằng đoạn Navigator này:
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (context) => const NewsfeedScreen(),
+    ),
+  );
+}),
       ],
     );
   }
