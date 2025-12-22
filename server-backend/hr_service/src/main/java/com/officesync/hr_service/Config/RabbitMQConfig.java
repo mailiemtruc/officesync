@@ -54,7 +54,8 @@ public class RabbitMQConfig {
     public static final String EMPLOYEE_EXCHANGE = "employee.exchange";
     public static final String EMPLOYEE_ROUTING_KEY = "employee.create";
     public static final String EMPLOYEE_QUEUE = "employee.create.queue";
-
+    public static final String EMPLOYEE_UPDATE_ROUTING_KEY = "employee.update";
+    public static final String EMPLOYEE_ROUTING_WILDCARD = "employee.#";
     @Bean
     public TopicExchange employeeExchange() {
         return new TopicExchange(EMPLOYEE_EXCHANGE);
@@ -69,6 +70,6 @@ public class RabbitMQConfig {
     public Binding employeeBinding(Queue employeeQueue, TopicExchange employeeExchange) {
         return BindingBuilder.bind(employeeQueue)
                 .to(employeeExchange)
-                .with(EMPLOYEE_ROUTING_KEY);
+                .with(EMPLOYEE_ROUTING_WILDCARD);
     }
 }

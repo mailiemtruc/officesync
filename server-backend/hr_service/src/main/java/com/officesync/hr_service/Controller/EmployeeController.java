@@ -1,6 +1,10 @@
 package com.officesync.hr_service.Controller;
 
+import java.util.List;
+import java.util.Map;
+
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -8,9 +12,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.officesync.hr_service.Model.Employee;
+import com.officesync.hr_service.Model.Employee; // Nhớ import List
 import com.officesync.hr_service.Repository.EmployeeRepository;
-import com.officesync.hr_service.Service.EmployeeService;
+import com.officesync.hr_service.Service.EmployeeService; // [MỚI]
 
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
@@ -23,7 +27,13 @@ public class EmployeeController {
     private final EmployeeService employeeService;
     private final EmployeeRepository employeeRepository;
 
-    // [DTO MỚI] Dùng class này để hứng JSON từ Flutter (vì Employee gốc không có password)
+    @Data
+    public static class UpdateEmployeeRequest {
+        private String fullName;
+        private String phone;
+        private String dateOfBirth; // yyyy-MM-dd
+    }
+     // [DTO MỚI] Dùng class này để hứng JSON từ Flutter (vì Employee gốc không có password)
     @Data
     public static class CreateEmployeeRequest {
         private String fullName;
@@ -34,6 +44,35 @@ public class EmployeeController {
         private String password;    // [QUAN TRỌNG] Hứng mật khẩu
     }
 
+    // [SỬA LẠI HÀM NÀY] Bắt lỗi RuntimeException để trả về JSON đẹp
+    @org.springframework.web.bind.annotation.PutMapping("/{id}")
+    public ResponseEntity<?> updateEmployee(
+            @org.springframework.web.bind.annotation.PathVariable Long id,
+            @RequestBody UpdateEmployeeRequest request
+    ) {
+        try {
+            Employee updated = employeeService.updateEmployee(
+                id,
+                request.getFullName(),
+                request.getPhone(),
+                request.getDateOfBirth()
+            );
+            return ResponseEntity.ok(updated);
+        } catch (RuntimeException e) {
+            // Trả về lỗi 400 kèm message JSON đơn giản
+            // Ví dụ: { "message": "Phone number ... already exists!" }
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+   
+
+    @GetMapping
+    public ResponseEntity<List<Employee>> getEmployees(
+            @RequestHeader("X-User-Id") Long requesterId
+    ) {
+        List<Employee> employees = employeeService.getAllEmployeesByRequester(requesterId);
+        return ResponseEntity.ok(employees);
+    }
     @PostMapping
     public ResponseEntity<Employee> createEmployee(
             @RequestHeader("X-User-Id") Long creatorId,

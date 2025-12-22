@@ -19,7 +19,7 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
     boolean existsByPhone(String phone);
     // Lấy danh sách nhân viên theo phòng ban
     List<Employee> findByDepartmentId(Long departmentId);
-
-    // Tìm quản lý của phòng ban (Logic: departmentId + Role MANAGER)
-    // Optional<Employee> findByDepartmentIdAndRole(Long departmentId, EmployeeRole role);
+ 
+   // [MỚI] Thêm hàm này để lấy danh sách nhân viên theo công ty
+    List<Employee> findByCompanyId(Long companyId);
 }

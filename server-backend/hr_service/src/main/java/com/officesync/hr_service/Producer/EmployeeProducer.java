@@ -25,4 +25,16 @@ public class EmployeeProducer {
             event
         );
     }
+
+    // [MỚI] Hàm gửi sự kiện CẬP NHẬT
+    public void sendEmployeeUpdatedEvent(EmployeeSyncEvent event) {
+        log.info("--> [RabbitMQ] Gửi yêu cầu CẬP NHẬT User sang Core Service: {}", event.getEmail());
+        
+        // Gửi với routing key "employee.update"
+        rabbitTemplate.convertAndSend(
+            RabbitMQConfig.EMPLOYEE_EXCHANGE,
+            RabbitMQConfig.EMPLOYEE_UPDATE_ROUTING_KEY,
+            event
+        );
+    }
 }

@@ -1,10 +1,9 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/employee_model.dart';
-import '../models/department_model.dart'; // Import Model phòng ban
+import '../models/department_model.dart';
 
 class EmployeeRemoteDataSource {
-  // IP 10.0.2.2 cho Android Emulator. Nếu chạy máy thật hãy đổi thành IP LAN (ví dụ 192.168.1.x)
   static const String baseUrl = 'http://10.0.2.2:8081/api';
 
   // 1. TẠO NHÂN VIÊN
@@ -85,6 +84,29 @@ class EmployeeRemoteDataSource {
     } catch (e) {
       print("Error fetching employees: $e");
       return [];
+    }
+  }
+
+  // 4. CẬP NHẬT NHÂN VIÊN
+  Future<bool> updateEmployee(String id, Map<String, dynamic> data) async {
+    try {
+      final url = Uri.parse('$baseUrl/employees/$id');
+      print("--> Updating Employee ID: $id");
+
+      final response = await http.put(
+        url,
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode(data),
+      );
+
+      if (response.statusCode == 200) {
+        return true;
+      } else {
+        throw Exception('Failed to update: ${response.body}');
+      }
+    } catch (e) {
+      print("Update Error: $e");
+      rethrow;
     }
   }
 }

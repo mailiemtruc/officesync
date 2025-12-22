@@ -137,18 +137,17 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
   }
 
   // --- LOGIC CHÍNH ---
+  // --- LOGIC CHÍNH ---
   Future<void> _handleCreateEmployee() async {
-    // 1. Kiểm tra validation (Thêm kiểm tra password ko được trống)
+    // 1. Kiểm tra validation
     if (_nameController.text.isEmpty ||
         _emailController.text.isEmpty ||
-        _passwordController.text.isEmpty || // [MỚI] Validate password
+        _passwordController.text.isEmpty ||
         _selectedRole == null ||
         _selectedDepartment == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Please fill in all required fields (including password)',
-          ),
+          content: Text('Please fill in all required fields'),
           backgroundColor: Colors.redAccent,
         ),
       );
@@ -175,7 +174,6 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
         }
       }
 
-      // [QUAN TRỌNG]: Gửi password đi
       final success = await _employeeRepository.createEmployee(
         fullName: _nameController.text.trim(),
         email: _emailController.text.trim(),
@@ -184,7 +182,7 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
         role: _selectedRole?.toUpperCase() ?? "STAFF",
         departmentId: _selectedDepartment!.id!,
         currentUserId: currentUserId,
-        password: _passwordController.text.trim(), // [MỚI] Truyền mật khẩu
+        password: _passwordController.text.trim(),
       );
 
       if (success && mounted) {
@@ -198,12 +196,38 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
       }
     } catch (e) {
       if (mounted) {
+        // [LOGIC MỚI] Xử lý thông báo lỗi từ Backend cho dễ đọc
+        String errorMessage = e.toString();
+
+        // Backend thường trả về: Exception: Server Error: {"timestamp":..., "message":"Email đã tồn tại", ...}
+        // Ta cần lấy cái "message" bên trong đó.
+        if (errorMessage.contains("Server Error:")) {
+          try {
+            // Lấy phần JSON sau chữ "Server Error:"
+            final String jsonPart = errorMessage
+                .split("Server Error:")[1]
+                .trim();
+            final Map<String, dynamic> errorMap = jsonDecode(jsonPart);
+
+            // Nếu có trường 'message', dùng nó làm thông báo
+            if (errorMap.containsKey('message')) {
+              errorMessage = errorMap['message'];
+            }
+          } catch (_) {
+            // Nếu không parse được JSON thì giữ nguyên, chỉ xóa chữ Exception
+            errorMessage = errorMessage
+                .replaceAll("Exception: ", "")
+                .replaceAll("Server Error: ", "");
+          }
+        } else {
+          errorMessage = errorMessage.replaceAll("Exception: ", "");
+        }
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              'Error: ${e.toString().replaceAll("Exception: ", "")}',
-            ),
+            content: Text(errorMessage), // Hiển thị thông báo sạch đẹp
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
           ),
         );
       }

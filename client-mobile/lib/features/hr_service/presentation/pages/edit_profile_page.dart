@@ -1,24 +1,57 @@
+import 'dart:convert'; // [MỚI] Cần import cái này để xử lý JSON lỗi
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:intl/intl.dart';
 
-// Import Config & Widgets
+// Import Config & Widgets & Data
 import '../../../../core/config/app_colors.dart';
 import '../../../../core/widgets/custom_button.dart';
 import '../../../../core/widgets/custom_text_field.dart';
+import '../../data/models/employee_model.dart';
+import '../../domain/repositories/employee_repository_impl.dart';
+import '../../data/datasources/employee_remote_data_source.dart';
 
 class EditProfilePage extends StatefulWidget {
-  const EditProfilePage({super.key});
+  final EmployeeModel user;
+
+  const EditProfilePage({super.key, required this.user});
 
   @override
   State<EditProfilePage> createState() => _EditProfilePageState();
 }
 
 class _EditProfilePageState extends State<EditProfilePage> {
-  // Controller
-  final _fullNameController = TextEditingController(text: "Nguyen Van A");
-  final _emailController = TextEditingController(text: "nguyenvana@gmail.com");
-  final _phoneController = TextEditingController(text: "0909123456");
-  final _dobController = TextEditingController(text: "01/10/1997");
+  late TextEditingController _fullNameController;
+  late TextEditingController _emailController;
+  late TextEditingController _phoneController;
+  late TextEditingController _dobController;
+
+  bool _isLoading = false;
+  late final EmployeeRepositoryImpl _repository;
+
+  @override
+  void initState() {
+    super.initState();
+    _repository = EmployeeRepositoryImpl(
+      remoteDataSource: EmployeeRemoteDataSource(),
+    );
+
+    _fullNameController = TextEditingController(text: widget.user.fullName);
+    _emailController = TextEditingController(text: widget.user.email);
+    _phoneController = TextEditingController(text: widget.user.phone);
+
+    String dobDisplay = "";
+    if (widget.user.dateOfBirth.isNotEmpty &&
+        widget.user.dateOfBirth != 'N/A') {
+      try {
+        DateTime date = DateTime.parse(widget.user.dateOfBirth);
+        dobDisplay = DateFormat('dd/MM/yyyy').format(date);
+      } catch (_) {
+        dobDisplay = widget.user.dateOfBirth;
+      }
+    }
+    _dobController = TextEditingController(text: dobDisplay);
+  }
 
   @override
   void dispose() {
@@ -29,93 +62,94 @@ class _EditProfilePageState extends State<EditProfilePage> {
     super.dispose();
   }
 
-  // --- HÀM HIỆN MENU CAMERA (BOTTOM SHEET) ---
+  // --- HÀM GỌI API UPDATE (ĐÃ SỬA LỖI HIỂN THỊ MESSAGE) ---
+  Future<void> _handleUpdate() async {
+    setState(() => _isLoading = true);
+
+    try {
+      String dbDob = "";
+      if (_dobController.text.isNotEmpty) {
+        try {
+          DateTime parsed = DateFormat('dd/MM/yyyy').parse(_dobController.text);
+          dbDob = DateFormat('yyyy-MM-dd').format(parsed);
+        } catch (_) {}
+      }
+
+      final success = await _repository.updateEmployee(
+        widget.user.id ?? "",
+        _fullNameController.text.trim(),
+        _phoneController.text.trim(),
+        dbDob,
+      );
+
+      if (success && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Profile updated successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.pop(context, true);
+      }
+    } catch (e) {
+      if (mounted) {
+        // [LOGIC MỚI] Xử lý chuỗi JSON xấu xí thành text đẹp
+        String msg = e.toString().replaceAll("Exception: ", "");
+
+        // Kiểm tra nếu lỗi có chứa JSON từ backend
+        if (msg.contains("Failed to update:")) {
+          // Lấy phần JSON phía sau dấu hai chấm
+          String rawJson = msg.replaceAll("Failed to update:", "").trim();
+          try {
+            // Thử giải mã JSON
+            final decoded = jsonDecode(rawJson);
+            if (decoded is Map && decoded.containsKey('message')) {
+              // Lấy đúng nội dung trong 'message'
+              msg = decoded['message'];
+            } else {
+              // Nếu không đúng định dạng mong đợi thì lấy text thô đã cắt
+              msg = rawJson;
+            }
+          } catch (_) {
+            // Nếu không parse được JSON, dùng text thô
+            msg = rawJson;
+          }
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              msg,
+            ), // Giờ sẽ hiện: "Phone number ... already exists!"
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   void _showImagePickerOptions(BuildContext context) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return Container(
-          padding: const EdgeInsets.symmetric(vertical: 20),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(27)),
-          ),
-          // --- SỬA LỖI TẠI ĐÂY ---
-          // Bọc Column bằng Material trong suốt để hiển thị hiệu ứng ripple
-          child: Material(
-            color: Colors.transparent,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ListTile(
-                  leading: Icon(
-                    PhosphorIcons.camera(PhosphorIconsStyle.regular),
-                    color: AppColors.primary,
-                    size: 24,
-                  ),
-                  title: const Text(
-                    'Take photo',
-                    style: TextStyle(
-                      color: AppColors.primary,
-                      fontSize: 20,
-                      fontFamily: 'Inter',
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  onTap: () {
-                    Navigator.pop(context);
-                    // TODO: Chụp ảnh
-                    print("Profile: Chụp ảnh");
-                  },
-                ),
-                ListTile(
-                  leading: Icon(
-                    PhosphorIcons.image(PhosphorIconsStyle.regular),
-                    color: AppColors.primary,
-                    size: 24,
-                  ),
-                  title: const Text(
-                    'Choose from Library',
-                    style: TextStyle(
-                      color: AppColors.primary,
-                      fontSize: 20,
-                      fontFamily: 'Inter',
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  onTap: () {
-                    Navigator.pop(context);
-                    // TODO: Chọn ảnh
-                    print("Profile: Chọn thư viện");
-                  },
-                ),
-                const SizedBox(height: 10),
-                ListTile(
-                  leading: Icon(
-                    PhosphorIcons.x(PhosphorIconsStyle.regular),
-                    color: const Color(0xFFFF0000),
-                    size: 24,
-                  ),
-                  title: const Text(
-                    'Cancel',
-                    style: TextStyle(
-                      color: Color(0xFFFF0000),
-                      fontSize: 20,
-                      fontFamily: 'Inter',
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  onTap: () {
-                    Navigator.pop(context);
-                  },
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+      builder: (context) => Container(height: 100),
     );
+  }
+
+  Future<void> _selectDate(BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime(2000),
+      firstDate: DateTime(1950),
+      lastDate: DateTime.now(),
+    );
+    if (picked != null) {
+      setState(() {
+        _dobController.text = DateFormat('dd/MM/yyyy').format(picked);
+      });
+    }
   }
 
   @override
@@ -125,7 +159,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        scrolledUnderElevation: 0,
         centerTitle: true,
         leading: IconButton(
           icon: Icon(
@@ -140,7 +173,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
           style: TextStyle(
             color: AppColors.primary,
             fontSize: 20,
-            fontFamily: 'Inter',
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -153,27 +185,22 @@ class _EditProfilePageState extends State<EditProfilePage> {
               padding: const EdgeInsets.only(left: 24, right: 24, bottom: 30),
               child: Column(
                 children: [
-                  // 1. Avatar Section (Truyền hàm mở menu vào đây)
                   _AvatarEditSection(
                     onCameraTap: () => _showImagePickerOptions(context),
                   ),
-
                   const SizedBox(height: 40),
 
-                  // 2. Form Input
                   _buildLabel('Full name'),
                   CustomTextField(
                     controller: _fullNameController,
-                    hintText: 'Enter your full name',
-                    keyboardType: TextInputType.name,
+                    hintText: 'Full Name',
                   ),
-
                   const SizedBox(height: 30),
 
                   _buildLabel('Email'),
                   CustomTextField(
                     controller: _emailController,
-                    hintText: 'Email address',
+                    hintText: 'Email',
                     readOnly: true,
                     fillColor: const Color(0xFFEAEBEE),
                     suffixIcon: Icon(
@@ -182,16 +209,14 @@ class _EditProfilePageState extends State<EditProfilePage> {
                       size: 20,
                     ),
                   ),
-
                   const SizedBox(height: 30),
 
                   _buildLabel('Phone'),
                   CustomTextField(
                     controller: _phoneController,
-                    hintText: 'Enter phone number',
+                    hintText: 'Phone',
                     keyboardType: TextInputType.phone,
                   ),
-
                   const SizedBox(height: 30),
 
                   _buildLabel('Date of birth'),
@@ -203,22 +228,34 @@ class _EditProfilePageState extends State<EditProfilePage> {
                       PhosphorIcons.calendarBlank(),
                       color: AppColors.primary,
                     ),
-                    onTap: () {
-                      _selectDate(context);
-                    },
+                    onTap: () => _selectDate(context),
                   ),
 
-                  // 3. Nút Save
                   const SizedBox(height: 60),
 
-                  CustomButton(
-                    text: 'Save changes',
-                    onPressed: () {
-                      // TODO: Gọi API Update
-                      print("Updating Profile...");
-                    },
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton(
+                      onPressed: _isLoading ? null : _handleUpdate,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30),
+                        ),
+                      ),
+                      child: _isLoading
+                          ? const CircularProgressIndicator(color: Colors.white)
+                          : const Text(
+                              'Save changes',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                    ),
                   ),
-
                   const SizedBox(height: 20),
                 ],
               ),
@@ -239,36 +276,17 @@ class _EditProfilePageState extends State<EditProfilePage> {
           style: const TextStyle(
             color: Colors.black,
             fontSize: 16,
-            fontFamily: 'Inter',
             fontWeight: FontWeight.w600,
           ),
         ),
       ),
     );
   }
-
-  Future<void> _selectDate(BuildContext context) async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: DateTime(1997, 10, 1),
-      firstDate: DateTime(1950),
-      lastDate: DateTime.now(),
-    );
-    if (picked != null) {
-      setState(() {
-        _dobController.text =
-            "${picked.day.toString().padLeft(2, '0')}/${picked.month.toString().padLeft(2, '0')}/${picked.year}";
-      });
-    }
-  }
 }
 
-// --- WIDGET AVATAR (Đã thêm Callback onCameraTap) ---
 class _AvatarEditSection extends StatelessWidget {
-  final VoidCallback? onCameraTap; // Callback
-
+  final VoidCallback? onCameraTap;
   const _AvatarEditSection({this.onCameraTap});
-
   @override
   Widget build(BuildContext context) {
     return Stack(
@@ -278,41 +296,29 @@ class _AvatarEditSection extends StatelessWidget {
           height: 120,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 0,
-                offset: const Offset(0, 4),
-              ),
-            ],
-            border: Border.all(color: const Color(0xFFF5F5F5), width: 3),
+            color: const Color(0xFFE2E8F0),
             image: const DecorationImage(
               image: NetworkImage("https://placehold.co/190x178"),
               fit: BoxFit.cover,
             ),
           ),
+          child: const Icon(Icons.person, size: 60, color: Colors.grey),
         ),
         Positioned(
           bottom: 0,
           right: 0,
-          child: Material(
-            color: AppColors.primary,
-            shape: const CircleBorder(),
-            child: InkWell(
-              customBorder: const CircleBorder(),
-
-              // KHI BẤM NÚT -> GỌI CALLBACK
-              onTap: onCameraTap,
-
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                width: 36,
-                height: 36,
-                child: Icon(
-                  PhosphorIcons.camera(PhosphorIconsStyle.fill),
-                  color: Colors.white,
-                  size: 20,
-                ),
+          child: InkWell(
+            onTap: onCameraTap,
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: const BoxDecoration(
+                color: AppColors.primary,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.camera_alt,
+                color: Colors.white,
+                size: 20,
               ),
             ),
           ),

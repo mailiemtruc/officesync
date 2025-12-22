@@ -34,14 +34,17 @@ public class EmployeeService {
     // =================================================================
     public Employee createEmployee(Employee newEmployee, Long companyId, Long departmentId, String password) {
         
-        // [MỚI] BƯỚC 0: KIỂM TRA TRÙNG LẶP (VALIDATION)
-        // Nếu trùng Email hoặc SĐT -> Báo lỗi ngay lập tức, code phía sau sẽ không chạy
+     
         if (employeeRepository.existsByEmail(newEmployee.getEmail())) {
-            throw new RuntimeException("Email " + newEmployee.getEmail() + " đã tồn tại trong hệ thống!");
+       
+  
+            throw new RuntimeException("Email " + newEmployee.getEmail() + " already exists in the system!");
         }
         
+        // 2. Check Phone
         if (employeeRepository.existsByPhone(newEmployee.getPhone())) {
-            throw new RuntimeException("Số điện thoại " + newEmployee.getPhone() + " đã tồn tại trong hệ thống!");
+            
+            throw new RuntimeException("Phone number " + newEmployee.getPhone() + " already exists in the system!");
         }
 
 
@@ -205,5 +208,89 @@ public class EmployeeService {
     private String generateRandomCode() {
         int randomNum = (int) (Math.random() * 1000000);
         return String.format("NV%06d", randomNum);
+    }
+
+    // [MỚI] Hàm lấy danh sách nhân viên
+    public java.util.List<Employee> getAllEmployeesByRequester(Long requesterId) {
+        // 1. Tìm thông tin người đang gửi yêu cầu
+        Employee requester = employeeRepository.findById(requesterId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        // 2. Lấy Company ID của người đó
+        Long companyId = requester.getCompanyId();
+
+        // 3. Trả về tất cả nhân viên thuộc công ty đó (Hàm findByCompanyId bạn đã có trong Repo)
+        return employeeRepository.findByCompanyId(companyId);
+    }
+
+
+   // 4. CẬP NHẬT THÔNG TIN (CÓ KIỂM TRA TRÙNG LẶP & ĐỒNG BỘ RABBITMQ)
+    public Employee updateEmployee(Long id, String fullName, String phone, String dob) {
+        // 1. Tìm nhân viên hiện tại
+        Employee employee = employeeRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Employee not found"));
+
+        // --- BƯỚC CHUẨN BỊ: Parse ngày sinh ---
+        java.time.LocalDate newDob = null;
+        if (dob != null && !dob.isEmpty()) {
+            try {
+                newDob = java.time.LocalDate.parse(dob);
+            } catch (Exception e) {}
+        }
+
+        // --- BƯỚC KIỂM TRA: So sánh dữ liệu ---
+        boolean isNameChanged = (fullName != null && !fullName.isEmpty() && !fullName.equals(employee.getFullName()));
+        boolean isPhoneChanged = (phone != null && !phone.isEmpty() && !phone.equals(employee.getPhone()));
+        boolean isDobChanged = false;
+        if (newDob != null) {
+            if (employee.getDateOfBirth() == null || !newDob.equals(employee.getDateOfBirth())) {
+                isDobChanged = true;
+            }
+        }
+
+        // Chặn Spam nếu không có gì thay đổi
+        if (!isNameChanged && !isPhoneChanged && !isDobChanged) {
+            throw new RuntimeException("No changes detected.");
+        }
+
+        // --- TIẾN HÀNH UPDATE ---
+        if (isPhoneChanged) {
+            if (employeeRepository.existsByPhone(phone)) {
+                throw new RuntimeException("Phone number " + phone + " already exists!");
+            }
+            employee.setPhone(phone);
+        }
+        if (isNameChanged) {
+            employee.setFullName(fullName);
+        }
+        if (isDobChanged) {
+            employee.setDateOfBirth(newDob);
+        }
+
+        // 2. LƯU VÀO DB (HR SERVICE)
+        Employee updatedEmployee = employeeRepository.save(employee);
+
+        // 3. [MỚI] GỬI ĐỒNG BỘ SANG CORE SERVICE (RABBITMQ)
+        try {
+            EmployeeSyncEvent event = new EmployeeSyncEvent(
+                updatedEmployee.getEmail(),
+                updatedEmployee.getFullName(),
+                updatedEmployee.getPhone(),
+                updatedEmployee.getDateOfBirth(),
+                updatedEmployee.getCompanyId(),
+                updatedEmployee.getRole().name(),
+                updatedEmployee.getStatus().name(),
+                null // Password: gửi null vì đây là update profile, không đổi pass
+            );
+
+            employeeProducer.sendEmployeeUpdatedEvent(event);
+            
+        } catch (Exception e) {
+            // Chỉ log lỗi, không rollback transaction vì DB HR đã lưu thành công rồi.
+            // Có thể thêm logic lưu vào bảng "failed_events" để retry sau.
+            log.error("Lỗi khi gửi sự kiện update sang Core: {}", e.getMessage());
+        }
+
+        return updatedEmployee;
     }
 }

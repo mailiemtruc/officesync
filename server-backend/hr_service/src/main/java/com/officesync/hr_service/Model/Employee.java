@@ -2,6 +2,8 @@ package com.officesync.hr_service.Model;
 
 import java.time.LocalDate;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -12,7 +14,6 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
-
 @Entity
 @Table(name = "employees")
 @Data
@@ -36,6 +37,7 @@ public class Employee extends BaseEntity {
     private String phone;
 
    @Column(name = "date_of_birth") 
+   @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd")
     private LocalDate dateOfBirth;
 
     @Column(name = "avatar_url")
@@ -51,4 +53,9 @@ public class Employee extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "role", nullable = false)
     private EmployeeRole role;
+
+    // [MỚI] THÊM HÀM NÀY ĐỂ JSON TRẢ VỀ CÓ TÊN PHÒNG BAN
+    public String getDepartmentName() {
+        return department != null ? department.getName() : null;
+    }
 }
