@@ -18,6 +18,7 @@ import com.officesync.hr_service.Model.Employee;
 import com.officesync.hr_service.Repository.EmployeeRepository; // Import repo
 import com.officesync.hr_service.Service.DepartmentService;
 
+import lombok.Data;
 import lombok.RequiredArgsConstructor;
 
 @RestController
@@ -28,23 +29,33 @@ public class DepartmentController {
     private final DepartmentService departmentService;
     private final EmployeeRepository employeeRepository; // Inject EmployeeRepo
 
-    // API: Tạo phòng ban (Đã cập nhật logic lấy CompanyId)
+  // [MỚI] Class DTO để hứng dữ liệu tạo phòng ban phức tạp
+    @Data
+    public static class CreateDepartmentRequest {
+        private String name;
+        private String description;
+        private Long managerId;       // ID của người được chọn làm Manager
+        private List<Long> memberIds; // Danh sách ID nhân viên
+    }
+
     @PostMapping
     public ResponseEntity<Department> createDepartment(
-            @RequestHeader("X-User-Id") Long creatorId, // Lấy ID người tạo từ Header
-            @RequestBody Department department
+            @RequestHeader("X-User-Id") Long creatorId,
+            @RequestBody CreateDepartmentRequest request // Sử dụng DTO mới
     ) {
-        // 1. Tìm người tạo để xác định Company
         Employee creator = employeeRepository.findById(creatorId)
-                .orElseThrow(() -> new RuntimeException("User not found with ID: " + creatorId));
+                .orElseThrow(() -> new RuntimeException("User not found"));
         
-        // 2. Lấy CompanyId
-        Long companyId = creator.getCompanyId(); 
-        
-        // 3. Tạo phòng ban
-        Department created = departmentService.createDepartment(department, companyId);
-        
-        // 4. (Tùy chọn) Nếu có Manager được gửi lên, Service đã xử lý mapping ở mức DB nếu JSON đúng chuẩn
+        Long companyId = creator.getCompanyId();
+
+        // Gọi Service xử lý toàn bộ logic
+        Department created = departmentService.createDepartmentFull(
+                request.getName(), 
+                request.getDescription(), 
+                request.getManagerId(), 
+                request.getMemberIds(), 
+                companyId
+        );
         
         return ResponseEntity.ok(created);
     }

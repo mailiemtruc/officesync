@@ -88,15 +88,29 @@ class EmployeeRemoteDataSource {
   }
 
   // 4. CẬP NHẬT NHÂN VIÊN
-  Future<bool> updateEmployee(String id, Map<String, dynamic> data) async {
+  Future<bool> updateEmployee(
+    String id,
+    String fullName,
+    String phone,
+    String dob, {
+    String? avatarUrl,
+  }) async {
     try {
       final url = Uri.parse('$baseUrl/employees/$id');
       print("--> Updating Employee ID: $id");
 
+      // Đóng gói dữ liệu
+      final Map<String, dynamic> body = {
+        "fullName": fullName,
+        "phone": phone,
+        "dateOfBirth": dob,
+        "avatarUrl": avatarUrl, // [QUAN TRỌNG] Gửi avatarUrl lên backend
+      };
+
       final response = await http.put(
         url,
         headers: {"Content-Type": "application/json"},
-        body: jsonEncode(data),
+        body: jsonEncode(body),
       );
 
       if (response.statusCode == 200) {

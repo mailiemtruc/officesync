@@ -1,247 +1,241 @@
-// import 'package:flutter/material.dart';
-// import 'package:phosphor_flutter/phosphor_flutter.dart';
-// import '../../../../core/config/app_colors.dart';
-// import '../../data/models/employee_model.dart';
-// import '../../widgets/employee_card.widget.dart';
-// import '../../widgets/employee_bottom_sheet.dart';
+import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
+import '../../../../core/config/app_colors.dart';
+import '../../data/models/employee_model.dart';
+import '../../widgets/employee_card.widget.dart';
+import '../../widgets/employee_bottom_sheet.dart';
 
-// class SelectManagerPage extends StatefulWidget {
-//   final String? selectedId;
-//   const SelectManagerPage({super.key, this.selectedId});
+class SelectManagerPage extends StatefulWidget {
+  final String? selectedId;
+  final List<EmployeeModel> availableEmployees; // Nhận danh sách từ bên ngoài
 
-//   @override
-//   State<SelectManagerPage> createState() => _SelectManagerPageState();
-// }
+  const SelectManagerPage({
+    super.key,
+    this.selectedId,
+    required this.availableEmployees,
+  });
 
-// class _SelectManagerPageState extends State<SelectManagerPage> {
-//   final List<Employee> _employees = [
-//     Employee(
-//       id: "002",
-//       name: "Tran Thi B",
-//       role: "Staff",
-//       department: "Human resource",
-//       imageUrl: "https://i.pravatar.cc/150?img=5",
-//     ),
-//     Employee(
-//       id: "001",
-//       name: "Nguyen Van A",
-//       role: "Manager",
-//       department: "Business",
-//       imageUrl: "https://i.pravatar.cc/150?img=11",
-//     ),
-//     Employee(
-//       id: "003",
-//       name: "Nguyen Van C",
-//       role: "Staff",
-//       department: "Technical",
-//       imageUrl: "https://i.pravatar.cc/150?img=3",
-//       isLocked: true,
-//     ), // User bị khóa
-//     Employee(
-//       id: "004",
-//       name: "Nguyen Van E",
-//       role: "Manager",
-//       department: "Human resource",
-//       imageUrl: "https://i.pravatar.cc/150?img=8",
-//     ),
-//   ];
+  @override
+  State<SelectManagerPage> createState() => _SelectManagerPageState();
+}
 
-//   void _showEmployeeOptions(Employee emp) {
-//     showModalBottomSheet(
-//       context: context,
-//       isScrollControlled: true,
-//       backgroundColor: Colors.transparent,
-//       builder: (context) => EmployeeBottomSheet(
-//         employee: emp,
-//         onToggleLock: () => setState(() => emp.isLocked = !emp.isLocked),
-//         onDelete: () =>
-//             setState(() => _employees.removeWhere((e) => e.id == emp.id)),
-//       ),
-//     );
-//   }
+class _SelectManagerPageState extends State<SelectManagerPage> {
+  // Biến để search
+  late List<EmployeeModel> _displayList;
+  final TextEditingController _searchController = TextEditingController();
 
-//   @override
-//   Widget build(BuildContext context) {
-//     return Scaffold(
-//       backgroundColor: const Color(0xFFF9F9F9),
-//       body: SafeArea(
-//         child: Center(
-//           child: ConstrainedBox(
-//             constraints: const BoxConstraints(maxWidth: 600),
-//             child: Column(
-//               children: [
-//                 const SizedBox(height: 20),
-//                 // Header
-//                 Padding(
-//                   padding: const EdgeInsets.symmetric(horizontal: 24),
-//                   child: Row(
-//                     children: [
-//                       IconButton(
-//                         icon: const Icon(
-//                           Icons.arrow_back_ios,
-//                           size: 20,
-//                           color: Colors.blue,
-//                         ),
-//                         onPressed: () => Navigator.pop(context),
-//                       ),
-//                       const Expanded(
-//                         child: Center(
-//                           child: Text(
-//                             'SELECT MANAGER',
-//                             style: TextStyle(
-//                               color: AppColors.primary,
-//                               fontSize: 20,
-//                               fontWeight: FontWeight.w700,
-//                             ),
-//                           ),
-//                         ),
-//                       ),
-//                       const SizedBox(width: 40),
-//                     ],
-//                   ),
-//                 ),
-//                 const SizedBox(height: 24),
+  @override
+  void initState() {
+    super.initState();
+    _displayList = widget.availableEmployees;
+    _searchController.addListener(_onSearchChanged);
+  }
 
-//                 // Search & Filter (ĐÃ ĐỒNG BỘ STYLE)
-//                 Padding(
-//                   padding: const EdgeInsets.symmetric(horizontal: 24),
-//                   child: Row(
-//                     children: [
-//                       Expanded(child: _buildSearchBar()),
-//                       const SizedBox(width: 12),
-//                       _buildFilterButton(),
-//                     ],
-//                   ),
-//                 ),
+  void _onSearchChanged() {
+    final query = _searchController.text.toLowerCase();
+    setState(() {
+      _displayList = widget.availableEmployees.where((emp) {
+        final name = emp.fullName.toLowerCase();
+        final id = (emp.id ?? "").toLowerCase();
+        return name.contains(query) || id.contains(query);
+      }).toList();
+    });
+  }
 
-//                 const SizedBox(height: 12),
-//                 const Padding(
-//                   padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-//                   child: Align(
-//                     alignment: Alignment.centerLeft,
-//                     child: Text(
-//                       'ALL EMPLOYEES',
-//                       style: TextStyle(
-//                         color: Color(0xFF6B7280),
-//                         fontSize: 14,
-//                         fontWeight: FontWeight.bold,
-//                       ),
-//                     ),
-//                   ),
-//                 ),
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
-//                 // List
-//                 Expanded(
-//                   child: ListView.builder(
-//                     padding: const EdgeInsets.symmetric(horizontal: 24),
-//                     itemCount: _employees.length,
-//                     itemBuilder: (context, index) {
-//                       final emp = _employees[index];
-//                       final isSelected = emp.id == widget.selectedId;
+  // void _showEmployeeOptions(EmployeeModel emp) {
+  //   // Logic hiển thị bottom sheet (giữ nguyên UI, chỉ đổi Model)
+  //   showModalBottomSheet(
+  //     context: context,
+  //     isScrollControlled: true,
+  //     backgroundColor: Colors.transparent,
+  //     builder: (context) => EmployeeBottomSheet(
+  //       employee: emp,
+  //       onToggleLock:
+  //           () {}, // Tạm thời disable logic lock ở đây nếu không cần thiết
+  //       onDelete: () {},
+  //     ),
+  //   );
+  // }
 
-//                       return EmployeeCard(
-//                         name: emp.name,
-//                         employeeId: emp.id,
-//                         role: emp.role,
-//                         department: emp.department,
-//                         imageUrl: emp.imageUrl,
-//                         isLocked: emp.isLocked,
-//                         isSelected: isSelected,
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF9F9F9),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 600),
+            child: Column(
+              children: [
+                const SizedBox(height: 20),
+                // Header
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(
+                          Icons.arrow_back_ios,
+                          size: 20,
+                          color: Colors.blue,
+                        ),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                      const Expanded(
+                        child: Center(
+                          child: Text(
+                            'SELECT MANAGER',
+                            style: TextStyle(
+                              color: AppColors.primary,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 40),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
 
-//                         // Nếu bị khóa -> onTap là null (không chọn được)
-//                         onTap: emp.isLocked
-//                             ? null
-//                             : () => Navigator.pop(context, emp),
+                // Search & Filter
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Row(
+                    children: [
+                      Expanded(child: _buildSearchBar()),
+                      const SizedBox(width: 12),
+                      _buildFilterButton(),
+                    ],
+                  ),
+                ),
 
-//                         onMenuTap: () => _showEmployeeOptions(emp),
+                const SizedBox(height: 12),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'AVAILABLE STAFF', // Đổi title cho hợp ngữ cảnh
+                      style: TextStyle(
+                        color: Color(0xFF6B7280),
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
 
-//                         // Widget chọn: Radio Button
-//                         selectionWidget: Container(
-//                           width: 24,
-//                           height: 24,
-//                           decoration: BoxDecoration(
-//                             shape: BoxShape.circle,
-//                             color: isSelected
-//                                 ? AppColors.primary
-//                                 : Colors.white,
-//                             border: Border.all(
-//                               color: isSelected
-//                                   ? AppColors.primary
-//                                   : const Color(0xFF9CA3AF),
-//                               width: 1.5,
-//                             ),
-//                           ),
-//                           // Nếu khóa -> không hiện dấu tick kể cả khi (lỡ) chọn
-//                           child: isSelected && !emp.isLocked
-//                               ? const Icon(
-//                                   Icons.check,
-//                                   size: 16,
-//                                   color: Colors.white,
-//                                 )
-//                               : null,
-//                         ),
-//                       );
-//                     },
-//                   ),
-//                 ),
-//               ],
-//             ),
-//           ),
-//         ),
-//       ),
-//     );
-//   }
+                // List
+                Expanded(
+                  child: ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    itemCount: _displayList.length,
+                    itemBuilder: (context, index) {
+                      final emp = _displayList[index];
+                      final isSelected = emp.id == widget.selectedId;
+                      final isLocked = emp.status == "LOCKED";
 
-//   // Widget SearchBar (Đồng bộ font/màu)
-//   Widget _buildSearchBar() {
-//     return Container(
-//       height: 45,
-//       decoration: BoxDecoration(
-//         color: const Color(0xFFF5F5F5),
-//         borderRadius: BorderRadius.circular(12),
-//         border: Border.all(color: const Color(0xFFE0E0E0), width: 1),
-//       ),
-//       child: TextField(
-//         decoration: InputDecoration(
-//           hintText: 'Search name, employee ID...',
-//           hintStyle: const TextStyle(
-//             color: Color(0xFF9E9E9E),
-//             fontSize: 14,
-//             fontWeight: FontWeight.w300,
-//           ), // Font chuẩn
-//           prefixIcon: Icon(
-//             PhosphorIcons.magnifyingGlass(),
-//             color: const Color(0xFF757575),
-//             size: 20,
-//           ), // Icon chuẩn
-//           border: InputBorder.none,
-//           contentPadding: const EdgeInsets.symmetric(vertical: 10),
-//         ),
-//       ),
-//     );
-//   }
+                      return EmployeeCard(
+                        employee:
+                            emp, // Sử dụng widget EmployeeCard mới đã update
+                        isSelected: isSelected,
+                        onTap: isLocked
+                            ? null
+                            : () => Navigator.pop(context, emp),
+                        // onMenuTap: () => _showEmployeeOptions(emp),
+                        selectionWidget: Container(
+                          width: 24,
+                          height: 24,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: isSelected
+                                ? AppColors.primary
+                                : Colors.white,
+                            border: Border.all(
+                              color: isSelected
+                                  ? AppColors.primary
+                                  : const Color(0xFF9CA3AF),
+                              width: 1.5,
+                            ),
+                          ),
+                          child: isSelected && !isLocked
+                              ? const Icon(
+                                  Icons.check,
+                                  size: 16,
+                                  color: Colors.white,
+                                )
+                              : null,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
-//   Widget _buildFilterButton() {
-//     return Container(
-//       width: 45,
-//       height: 45,
-//       decoration: BoxDecoration(
-//         color: const Color(0xFFF5F5F5),
-//         borderRadius: BorderRadius.circular(12),
-//         border: Border.all(color: const Color(0xFFE0E0E0), width: 1),
-//       ),
-//       child: Material(
-//         color: Colors.transparent,
-//         child: InkWell(
-//           borderRadius: BorderRadius.circular(12),
-//           onTap: () {},
-//           child: Icon(
-//             PhosphorIcons.funnel(PhosphorIconsStyle.regular),
-//             color: const Color(0xFF555252),
-//             size: 20,
-//           ),
-//         ),
-//       ),
-//     );
-//   }
-// }
+  Widget _buildSearchBar() {
+    return Container(
+      height: 45,
+      decoration: BoxDecoration(
+        color: const Color(0xFFF5F5F5),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE0E0E0), width: 1),
+      ),
+      child: TextField(
+        controller: _searchController,
+        decoration: InputDecoration(
+          hintText: 'Search name, employee ID...',
+          hintStyle: const TextStyle(
+            color: Color(0xFF9E9E9E),
+            fontSize: 14,
+            fontWeight: FontWeight.w300,
+          ),
+          prefixIcon: Icon(
+            PhosphorIcons.magnifyingGlass(),
+            color: const Color(0xFF757575),
+            size: 20,
+          ),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(vertical: 10),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilterButton() {
+    return Container(
+      width: 45,
+      height: 45,
+      decoration: BoxDecoration(
+        color: const Color(0xFFF5F5F5),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE0E0E0), width: 1),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () {},
+          child: Icon(
+            PhosphorIcons.funnel(PhosphorIconsStyle.regular),
+            color: const Color(0xFF555252),
+            size: 20,
+          ),
+        ),
+      ),
+    );
+  }
+}

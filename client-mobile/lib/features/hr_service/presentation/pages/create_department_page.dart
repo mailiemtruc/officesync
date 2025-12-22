@@ -10,9 +10,14 @@ import '../../data/models/department_model.dart';
 import '../../data/datasources/department_remote_data_source.dart';
 import '../../domain/repositories/department_repository.dart';
 
-// [TẠM ẨN CÁC TRANG CHƯA CÓ ĐỂ TRÁNH LỖI]
-// import 'select_manager_page.dart';
-// import 'add_members_page.dart';
+// Import Employee Repository
+import '../../domain/repositories/employee_repository.dart';
+import '../../domain/repositories/employee_repository_impl.dart';
+import '../../data/datasources/employee_remote_data_source.dart';
+
+// Import các trang chọn
+import 'select_manager_page.dart';
+import 'add_members_page.dart';
 
 class CreateDepartmentPage extends StatefulWidget {
   const CreateDepartmentPage({super.key});
@@ -30,7 +35,11 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
   List<EmployeeModel> _selectedMembers = [];
   bool _isLoading = false;
 
+  // Dữ liệu danh sách nhân viên để lọc
+  List<EmployeeModel> _allEmployees = [];
+
   late final DepartmentRepository _departmentRepository;
+  late final EmployeeRepository _employeeRepository;
   final _storage = const FlutterSecureStorage();
 
   @override
@@ -39,6 +48,28 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
     _departmentRepository = DepartmentRepository(
       remoteDataSource: DepartmentRemoteDataSource(),
     );
+
+    _employeeRepository = EmployeeRepositoryImpl(
+      remoteDataSource: EmployeeRemoteDataSource(),
+    );
+
+    _fetchAllEmployees();
+  }
+
+  Future<void> _fetchAllEmployees() async {
+    try {
+      String? currentUserId = await _getCurrentUserId();
+      if (currentUserId != null) {
+        final emps = await _employeeRepository.getEmployees(currentUserId);
+        if (mounted) {
+          setState(() {
+            _allEmployees = emps;
+          });
+        }
+      }
+    } catch (e) {
+      print("Error fetching employees: $e");
+    }
   }
 
   Future<String?> _getCurrentUserId() async {
@@ -72,11 +103,13 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
       if (currentUserId == null)
         throw Exception("Session expired. Please login again.");
 
+      List<String> memberIds = _selectedMembers.map((e) => e.id!).toList();
+
       final newDept = DepartmentModel(
-        // id null vì là tạo mới
         id: null,
         name: _nameController.text.trim(),
         manager: _selectedManager,
+        memberIds: memberIds,
       );
 
       final success = await _departmentRepository.createDepartment(
@@ -107,42 +140,52 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
     }
   }
 
-  // --- TÍNH NĂNG TẠM ẨN ---
   Future<void> _pickManager() async {
-    // Tạm thời hiển thị thông báo thay vì chuyển trang
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("Tính năng chọn Quản lý đang được phát triển"),
+    final staffOnly = _allEmployees.where((e) {
+      bool isStaff = e.role == 'STAFF';
+      bool notInMembers = !_selectedMembers.any((m) => m.id == e.id);
+      return isStaff && notInMembers;
+    }).toList();
+
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => SelectManagerPage(
+          selectedId: _selectedManager?.id,
+          availableEmployees: staffOnly,
+        ),
       ),
     );
 
-    /* Code cũ chờ khi có file select_manager_page.dart
-    final result = await Navigator.push(context, MaterialPageRoute(builder: (context) => SelectManagerPage(selectedId: _selectedManager?.id)));
     if (result != null && result is EmployeeModel) {
       setState(() => _selectedManager = result);
     }
-    */
   }
 
   Future<void> _pickMembers() async {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("Tính năng thêm thành viên đang được phát triển"),
+    final staffOnly = _allEmployees.where((e) {
+      bool isStaff = e.role == 'STAFF';
+      bool isNotManager = (e.id != _selectedManager?.id);
+      return isStaff && isNotManager;
+    }).toList();
+
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AddMembersPage(
+          alreadySelectedMembers: _selectedMembers,
+          availableEmployees: staffOnly,
+        ),
       ),
     );
 
-    /* Code cũ chờ khi có file add_members_page.dart
-    final result = await Navigator.push(context, MaterialPageRoute(builder: (context) => AddMembersPage(alreadySelectedMembers: _selectedMembers)));
     if (result != null && result is List<EmployeeModel>) {
       setState(() => _selectedMembers = result);
     }
-    */
   }
 
-  // --- UI BUILDER ---
   @override
   Widget build(BuildContext context) {
-    // Giữ nguyên UI của bạn
     return Scaffold(
       backgroundColor: const Color(0xFFF9F9F9),
       body: Stack(
@@ -156,6 +199,7 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // --- HEADER ---
                       Row(
                         children: [
                           IconButton(
@@ -183,13 +227,20 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
                         ],
                       ),
                       const SizedBox(height: 32),
+
+                      // --- [CẬP NHẬT] TOP ICON (AVATAR) ---
+                      // Đồng bộ style với AddEmployeePage (Xám/Viền) nhưng giữ Icon Buildings
                       Center(
                         child: Container(
                           width: 110,
                           height: 110,
                           decoration: BoxDecoration(
-                            color: const Color(0xFFF3E8FF),
                             shape: BoxShape.circle,
+                            border: Border.all(
+                              color: const Color(0xFFD8DEEC), // Viền xám nhạt
+                              width: 2,
+                            ),
+                            color: const Color(0xFFE2E8F0), // Nền xám
                             boxShadow: [
                               BoxShadow(
                                 color: Colors.black.withOpacity(0.1),
@@ -199,9 +250,11 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
                             ],
                           ),
                           child: Icon(
-                            PhosphorIcons.buildings(PhosphorIconsStyle.fill),
-                            size: 50,
-                            color: const Color(0xFFD946EF),
+                            PhosphorIcons.buildings(
+                              PhosphorIconsStyle.fill,
+                            ), // Vẫn giữ icon Buildings
+                            size: 60, // Kích thước đồng bộ với bên Employee
+                            color: const Color(0xFF94A3B8), // Màu icon xám
                           ),
                         ),
                       ),
@@ -268,10 +321,24 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
                                     width: 46,
                                     height: 46,
                                     color: AppColors.primary.withOpacity(0.1),
-                                    child: const Icon(
-                                      Icons.person,
-                                      color: AppColors.primary,
-                                    ),
+                                    child:
+                                        (_selectedManager!.avatarUrl != null &&
+                                            _selectedManager!
+                                                .avatarUrl!
+                                                .isNotEmpty)
+                                        ? Image.network(
+                                            _selectedManager!.avatarUrl!,
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (ctx, err, stack) =>
+                                                const Icon(
+                                                  Icons.person,
+                                                  color: AppColors.primary,
+                                                ),
+                                          )
+                                        : const Icon(
+                                            Icons.person,
+                                            color: AppColors.primary,
+                                          ),
                                   ),
                                 ),
                                 const SizedBox(width: 16),
@@ -287,8 +354,9 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
                                           fontSize: 16,
                                         ),
                                       ),
+                                      // [CẬP NHẬT] HIỂN THỊ EMPLOYEE CODE THAY VÌ ID
                                       Text(
-                                        'ID: ${_selectedManager!.id ?? "N/A"}',
+                                        'Code: ${_selectedManager!.employeeCode ?? "N/A"}',
                                         style: const TextStyle(
                                           color: Colors.grey,
                                           fontSize: 13,

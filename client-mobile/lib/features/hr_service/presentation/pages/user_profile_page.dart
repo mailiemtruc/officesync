@@ -1,14 +1,16 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:intl/intl.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:http/http.dart' as http;
 
 import 'change_password_page.dart';
 import '../../../../core/config/app_colors.dart';
 import 'edit_profile_page.dart';
 
-// Import Repository & Model
 import '../../domain/repositories/employee_repository_impl.dart';
 import '../../data/datasources/employee_remote_data_source.dart';
 import '../../data/models/employee_model.dart';
@@ -25,6 +27,8 @@ class UserProfilePage extends StatefulWidget {
 class _UserProfilePageState extends State<UserProfilePage> {
   EmployeeModel? _detailedEmployee;
   bool _isLoadingProfile = false;
+  bool _isUploading = false;
+  final ImagePicker _picker = ImagePicker();
   final _storage = const FlutterSecureStorage();
 
   @override
@@ -33,7 +37,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
     _fetchEmployeeDetail();
   }
 
-  // Hàm format ngày (yyyy-MM-dd -> dd/MM/yyyy)
+  // --- HÀM HỖ TRỢ ---
   String _formatDate(String? dateStr) {
     if (dateStr == null || dateStr.isEmpty || dateStr == 'N/A') return 'N/A';
     try {
@@ -56,7 +60,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
     }
   }
 
-  // Hàm lấy ID người dùng an toàn
   Future<String?> _getUserIdSafe() async {
     if (widget.userInfo.containsKey('id') && widget.userInfo['id'] != null) {
       return widget.userInfo['id'].toString();
@@ -73,11 +76,11 @@ class _UserProfilePageState extends State<UserProfilePage> {
     return null;
   }
 
+  // --- LOGIC LẤY DATA ---
   Future<void> _fetchEmployeeDetail() async {
     setState(() => _isLoadingProfile = true);
     try {
       final String? userId = await _getUserIdSafe();
-
       if (userId == null) {
         _handleLogout();
         return;
@@ -86,12 +89,13 @@ class _UserProfilePageState extends State<UserProfilePage> {
       final repo = EmployeeRepositoryImpl(
         remoteDataSource: EmployeeRemoteDataSource(),
       );
-
       final employees = await repo.getEmployees(userId);
 
       String? emailToFind = widget.userInfo['email'];
+      EmployeeModel? found;
+
       if (emailToFind == null) {
-        final foundById = employees.firstWhere(
+        found = employees.firstWhere(
           (e) => e.id == userId,
           orElse: () => EmployeeModel(
             id: userId,
@@ -102,13 +106,8 @@ class _UserProfilePageState extends State<UserProfilePage> {
             role: 'STAFF',
           ),
         );
-        if (mounted) {
-          setState(() {
-            _detailedEmployee = foundById;
-          });
-        }
       } else {
-        final found = employees.firstWhere(
+        found = employees.firstWhere(
           (e) => e.email == emailToFind,
           orElse: () => EmployeeModel(
             id: userId,
@@ -119,19 +118,111 @@ class _UserProfilePageState extends State<UserProfilePage> {
             role: 'STAFF',
           ),
         );
-        if (mounted) {
-          setState(() {
-            _detailedEmployee = found;
-          });
-        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _detailedEmployee = found;
+          _isLoadingProfile = false;
+        });
       }
     } catch (e) {
       print("Error fetching profile detail: $e");
-    } finally {
       if (mounted) setState(() => _isLoadingProfile = false);
     }
   }
 
+  // --- LOGIC UPLOAD ẢNH ---
+  Future<void> _pickImage(ImageSource source) async {
+    Navigator.pop(context);
+    try {
+      final XFile? image = await _picker.pickImage(
+        source: source,
+        imageQuality: 80,
+      );
+      if (image != null) {
+        _uploadAvatar(File(image.path));
+      }
+    } catch (e) {
+      print("Error picking image: $e");
+    }
+  }
+
+  Future<void> _uploadAvatar(File file) async {
+    setState(() => _isUploading = true);
+    try {
+      // IP 10.0.2.2 cho Emulator, máy thật dùng IP LAN
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse('http://10.0.2.2:8090/api/files/upload'),
+      );
+      request.files.add(await http.MultipartFile.fromPath('file', file.path));
+
+      var streamedResponse = await request.send();
+      var response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = jsonDecode(response.body);
+        String fileUrl = data['url'];
+        print("--> Upload Storage success: $fileUrl");
+        await _updateAvatarUrlInProfile(fileUrl);
+      } else {
+        throw Exception("Upload failed: ${response.body}");
+      }
+    } catch (e) {
+      print("Upload error: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        // [TIẾNG ANH]
+        SnackBar(
+          content: Text("Upload failed: $e"),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isUploading = false);
+    }
+  }
+
+  Future<void> _updateAvatarUrlInProfile(String avatarUrl) async {
+    if (_detailedEmployee == null) return;
+    try {
+      final url = Uri.parse(
+        'http://10.0.2.2:8081/api/employees/${_detailedEmployee!.id}',
+      );
+      final response = await http.put(
+        url,
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({
+          "fullName": _detailedEmployee!.fullName,
+          "phone": _detailedEmployee!.phone,
+          "dateOfBirth": _detailedEmployee!.dateOfBirth,
+          "avatarUrl": avatarUrl,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        print("--> Update HR Profile success!");
+        ScaffoldMessenger.of(context).showSnackBar(
+          // [TIẾNG ANH]
+          const SnackBar(
+            content: Text("Profile picture updated successfully!"),
+            backgroundColor: Colors.green,
+          ),
+        );
+        _fetchEmployeeDetail();
+      } else {
+        if (response.body.contains("No changes detected")) {
+          print("No changes detected.");
+        } else {
+          throw Exception("Update HR failed: ${response.body}");
+        }
+      }
+    } catch (e) {
+      print("Error saving profile: $e");
+    }
+  }
+
+  // --- UI & DIALOGS ---
   Future<void> _handleLogout() async {
     try {
       await _storage.deleteAll();
@@ -139,7 +230,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
         Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
       }
     } catch (e) {
-      print("Lỗi khi đăng xuất: $e");
+      print("Logout error: $e");
     }
   }
 
@@ -163,16 +254,17 @@ class _UserProfilePageState extends State<UserProfilePage> {
                   color: AppColors.primary,
                   size: 24,
                 ),
+                // [TIẾNG ANH]
                 title: const Text(
-                  'Take photo',
+                  'Take a photo',
                   style: TextStyle(
                     color: AppColors.primary,
-                    fontSize: 20,
+                    fontSize: 18,
                     fontFamily: 'Inter',
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                onTap: () => Navigator.pop(context),
+                onTap: () => _pickImage(ImageSource.camera),
               ),
               ListTile(
                 leading: Icon(
@@ -180,16 +272,17 @@ class _UserProfilePageState extends State<UserProfilePage> {
                   color: AppColors.primary,
                   size: 24,
                 ),
+                // [TIẾNG ANH]
                 title: const Text(
-                  'Choose from Library',
+                  'Choose from gallery',
                   style: TextStyle(
                     color: AppColors.primary,
-                    fontSize: 20,
+                    fontSize: 18,
                     fontFamily: 'Inter',
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                onTap: () => Navigator.pop(context),
+                onTap: () => _pickImage(ImageSource.gallery),
               ),
               const SizedBox(height: 10),
               ListTile(
@@ -198,11 +291,12 @@ class _UserProfilePageState extends State<UserProfilePage> {
                   color: const Color(0xFFFF0000),
                   size: 24,
                 ),
+                // [TIẾNG ANH]
                 title: const Text(
                   'Cancel',
                   style: TextStyle(
                     color: Color(0xFFFF0000),
-                    fontSize: 20,
+                    fontSize: 18,
                     fontFamily: 'Inter',
                     fontWeight: FontWeight.w600,
                   ),
@@ -320,6 +414,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
         _detailedEmployee?.fullName ?? widget.userInfo['fullName'] ?? 'User';
     final role =
         _detailedEmployee?.role ?? widget.userInfo['role'] ?? 'Employee';
+    final avatarUrl = _detailedEmployee?.avatarUrl;
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -334,13 +429,11 @@ class _UserProfilePageState extends State<UserProfilePage> {
             color: AppColors.primary,
             size: 24,
           ),
-          onPressed: () {
-            Navigator.pushNamedAndRemoveUntil(
-              context,
-              '/dashboard',
-              (route) => false,
-            );
-          },
+          onPressed: () => Navigator.pushNamedAndRemoveUntil(
+            context,
+            '/dashboard',
+            (route) => false,
+          ),
         ),
         title: const Text(
           'PERSONAL INFORMATION',
@@ -368,10 +461,11 @@ class _UserProfilePageState extends State<UserProfilePage> {
                     _HeaderSection(
                       fullName: fullName,
                       role: role,
+                      avatarUrl: avatarUrl,
+                      isUploading: _isUploading,
                       onCameraTap: () => _showImagePickerOptions(context),
                     ),
                     const SizedBox(height: 24),
-
                     _isLoadingProfile
                         ? const Padding(
                             padding: EdgeInsets.all(20.0),
@@ -381,10 +475,8 @@ class _UserProfilePageState extends State<UserProfilePage> {
                             userInfo: widget.userInfo,
                             detailedEmployee: _detailedEmployee,
                             dateFormatter: _formatDate,
-                            // [SỬA LỖI 1] Truyền hàm reload xuống để khi edit xong thì gọi
                             onRefresh: _fetchEmployeeDetail,
                           ),
-
                     const SizedBox(height: 24),
                     _ActionSection(
                       onLogoutTap: () => _showLogoutConfirmation(context),
@@ -405,11 +497,15 @@ class _HeaderSection extends StatelessWidget {
   final VoidCallback? onCameraTap;
   final String fullName;
   final String role;
+  final String? avatarUrl;
+  final bool isUploading;
 
   const _HeaderSection({
     this.onCameraTap,
     required this.fullName,
     required this.role,
+    this.avatarUrl,
+    this.isUploading = false,
   });
 
   @override
@@ -432,7 +528,26 @@ class _HeaderSection extends StatelessWidget {
                 ],
                 color: const Color(0xFFE2E8F0),
               ),
-              child: const Icon(Icons.person, size: 60, color: Colors.grey),
+              child: ClipOval(
+                child: isUploading
+                    ? const Padding(
+                        padding: EdgeInsets.all(35),
+                        child: CircularProgressIndicator(strokeWidth: 3),
+                      )
+                    : (avatarUrl != null && avatarUrl!.isNotEmpty)
+                    ? Image.network(
+                        avatarUrl!,
+                        fit: BoxFit.cover,
+                        width: 110,
+                        height: 110,
+                        errorBuilder: (ctx, err, stack) => const Icon(
+                          Icons.person,
+                          size: 60,
+                          color: Colors.grey,
+                        ),
+                      )
+                    : const Icon(Icons.person, size: 60, color: Colors.grey),
+              ),
             ),
             Positioned(
               bottom: 0,
@@ -488,7 +603,7 @@ class _InfoSection extends StatelessWidget {
   final Map<String, dynamic> userInfo;
   final EmployeeModel? detailedEmployee;
   final String Function(String?) dateFormatter;
-  final VoidCallback onRefresh; // [SỬA LỖI 2] Thêm biến hứng callback
+  final VoidCallback onRefresh;
 
   const _InfoSection({
     required this.userInfo,
@@ -565,8 +680,6 @@ class _InfoSection extends StatelessWidget {
               child: InkWell(
                 borderRadius: BorderRadius.circular(8),
                 onTap: () async {
-                  // [SỬA LỖI 3] Logic cập nhật thời gian thực
-                  // Chuẩn bị data user hiện tại để gửi sang trang edit
                   final currentUser =
                       detailedEmployee ??
                       EmployeeModel(
@@ -577,21 +690,13 @@ class _InfoSection extends StatelessWidget {
                         dateOfBirth: userInfo['dateOfBirth'] ?? '',
                         role: userInfo['role'] ?? '',
                       );
-
-                  // Chuyển trang và ĐỢI (await) kết quả trả về
                   final result = await Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => EditProfilePage(
-                        user: currentUser,
-                      ), // Truyền đúng tham số user
+                      builder: (context) => EditProfilePage(user: currentUser),
                     ),
                   );
-
-                  // Nếu kết quả trả về là true (đã bấm Save changes) -> Gọi reload
-                  if (result == true) {
-                    onRefresh();
-                  }
+                  if (result == true) onRefresh();
                 },
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
@@ -658,7 +763,7 @@ class _ActionSection extends StatelessWidget {
                   children: [
                     Icon(
                       PhosphorIcons.lockKey(),
-                      color: Colors.black, // Giữ nguyên màu gốc
+                      color: Colors.black,
                       size: 22,
                     ),
                     const SizedBox(width: 16),
@@ -666,7 +771,7 @@ class _ActionSection extends StatelessWidget {
                       child: Text(
                         'Change password',
                         style: TextStyle(
-                          color: Colors.black, // Giữ nguyên màu gốc
+                          color: Colors.black,
                           fontSize: 16,
                           fontFamily: 'Inter',
                           fontWeight: FontWeight.w400,
@@ -676,7 +781,7 @@ class _ActionSection extends StatelessWidget {
                     Icon(
                       PhosphorIcons.caretRight(),
                       size: 18,
-                      color: Colors.black, // Giữ nguyên màu gốc
+                      color: Colors.black,
                     ),
                   ],
                 ),
@@ -735,7 +840,6 @@ class _InfoRow extends StatelessWidget {
     required this.label,
     required this.value,
   });
-
   @override
   Widget build(BuildContext context) {
     return Row(

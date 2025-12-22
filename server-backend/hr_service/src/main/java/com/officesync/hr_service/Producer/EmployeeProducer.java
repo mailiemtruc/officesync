@@ -37,4 +37,13 @@ public class EmployeeProducer {
             event
         );
     }
+
+    public void sendDeleteFileEvent(String fileName) {
+        log.info("--> [RabbitMQ] Gửi yêu cầu XÓA file sang Storage: {}", fileName);
+        rabbitTemplate.convertAndSend(
+            RabbitMQConfig.FILE_EXCHANGE,
+            RabbitMQConfig.FILE_DELETE_ROUTING_KEY,
+            fileName // Chỉ cần gửi chuỗi tên file
+        );
+    }
 }

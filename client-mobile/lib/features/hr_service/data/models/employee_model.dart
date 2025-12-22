@@ -8,6 +8,7 @@ class EmployeeModel {
   final String role;
   final String status;
   final String? departmentName; // [MỚI] Thêm trường này
+  final String? avatarUrl; // [MỚI] Thêm trường này để fix lỗi gạch đỏ
 
   EmployeeModel({
     this.id,
@@ -19,6 +20,7 @@ class EmployeeModel {
     required this.role,
     this.status = "ACTIVE",
     this.departmentName,
+    this.avatarUrl, // [MỚI]
   });
 
   // 1. Gửi lên Server
@@ -32,6 +34,7 @@ class EmployeeModel {
       "dateOfBirth": dateOfBirth,
       "role": role,
       "status": status,
+      "avatarUrl": avatarUrl, // [MỚI] Gửi avatarUrl nếu cần
       // Không cần gửi departmentName lên
     };
   }
@@ -56,6 +59,7 @@ class EmployeeModel {
       role: json['role'] ?? 'STAFF',
       status: json['status'] ?? 'ACTIVE',
       departmentName: deptName, // [MỚI] Gán tên phòng ban
+      avatarUrl: json['avatarUrl'], // [MỚI] Map dữ liệu từ backend
     );
   }
 }

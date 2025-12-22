@@ -56,6 +56,9 @@ public class RabbitMQConfig {
     public static final String EMPLOYEE_QUEUE = "employee.create.queue";
     public static final String EMPLOYEE_UPDATE_ROUTING_KEY = "employee.update";
     public static final String EMPLOYEE_ROUTING_WILDCARD = "employee.#";
+    public static final String FILE_EXCHANGE = "file.exchange"; // Hoặc dùng chung employee.exchange cũng được
+    public static final String FILE_DELETE_ROUTING_KEY = "file.delete";
+    public static final String FILE_DELETE_QUEUE = "file.delete.queue";
     @Bean
     public TopicExchange employeeExchange() {
         return new TopicExchange(EMPLOYEE_EXCHANGE);
@@ -71,5 +74,22 @@ public class RabbitMQConfig {
         return BindingBuilder.bind(employeeQueue)
                 .to(employeeExchange)
                 .with(EMPLOYEE_ROUTING_WILDCARD);
+    }
+
+
+
+    @Bean
+    public Queue fileDeleteQueue() {
+        return new Queue(FILE_DELETE_QUEUE);
+    }
+    
+    @Bean 
+    public TopicExchange fileExchange() {
+        return new TopicExchange(FILE_EXCHANGE);
+    }
+
+    @Bean
+    public Binding fileBinding(Queue fileDeleteQueue, TopicExchange fileExchange) {
+        return BindingBuilder.bind(fileDeleteQueue).to(fileExchange).with(FILE_DELETE_ROUTING_KEY);
     }
 }

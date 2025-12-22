@@ -19,10 +19,12 @@ abstract class EmployeeRepository {
 
   // [Mới] Hàm lấy danh sách phòng ban
   Future<List<DepartmentModel>> getDepartments();
+
   Future<bool> updateEmployee(
     String id,
     String fullName,
     String phone,
-    String dob,
-  );
+    String dob, {
+    String? avatarUrl,
+  });
 }

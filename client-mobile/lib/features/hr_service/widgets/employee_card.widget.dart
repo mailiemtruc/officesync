@@ -1,15 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../../core/config/app_colors.dart';
+import '../data/models/employee_model.dart';
 
 class EmployeeCard extends StatelessWidget {
-  final String name;
-  final String employeeId;
-  final String role;
-  final String department;
-  final String imageUrl;
-  final bool isLocked;
-
+  final EmployeeModel employee;
   final bool isSelected;
   final Widget? selectionWidget;
   final VoidCallback? onTap;
@@ -17,12 +12,7 @@ class EmployeeCard extends StatelessWidget {
 
   const EmployeeCard({
     super.key,
-    required this.name,
-    required this.employeeId,
-    required this.role,
-    required this.department,
-    this.imageUrl = "https://placehold.co/46x46",
-    this.isLocked = false,
+    required this.employee,
     this.isSelected = false,
     this.selectionWidget,
     this.onTap,
@@ -31,7 +21,21 @@ class EmployeeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    bool isManager = role == "Manager" || role == "Management";
+    // --- XỬ LÝ DỮ LIỆU ---
+    final String name = employee.fullName;
+
+    // 1. Hiển thị Employee Code
+    final String displayCode = employee.employeeCode ?? employee.id ?? "N/A";
+
+    final String role = employee.role;
+    final bool isLocked = employee.status == "LOCKED";
+
+    // [CẬP NHẬT] Kiểm tra Avatar có tồn tại không
+    final bool hasAvatar =
+        employee.avatarUrl != null && employee.avatarUrl!.isNotEmpty;
+
+    final String department = employee.departmentName ?? "No Dept";
+
     double opacity = isLocked ? 0.5 : 1.0;
 
     return Container(
@@ -54,7 +58,6 @@ class EmployeeCard extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(20),
-          // Nếu bị khóa -> không cho chọn (onTap = null)
           onTap: isLocked ? null : onTap,
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -63,29 +66,40 @@ class EmployeeCard extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  // Avatar
-                  ClipOval(
-                    child: Image.network(
-                      imageUrl,
-                      width: 46,
-                      height: 46,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(
-                        width: 46,
-                        height: 46,
-                        color: Colors.grey[300],
-                        child: Icon(Icons.person, color: Colors.grey[600]),
-                      ),
+                  // [CẬP NHẬT] Avatar Circle đồng bộ với DepartmentCard
+                  Container(
+                    width: 46,
+                    height: 46,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      // Nếu không có ảnh thì nền xám nhạt, có ảnh thì trong suốt
+                      color: hasAvatar
+                          ? Colors.transparent
+                          : const Color(0xFFEFF1F5),
+                      border: Border.all(color: Colors.grey.shade200, width: 1),
+                    ),
+                    child: ClipOval(
+                      child: hasAvatar
+                          ? Image.network(
+                              employee.avatarUrl!,
+                              width: 46,
+                              height: 46,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) =>
+                                  _buildDefaultAvatar(),
+                            )
+                          : _buildDefaultAvatar(), // Dùng Widget icon thay vì ảnh mạng
                     ),
                   ),
 
                   const SizedBox(width: 16),
 
-                  // Info
+                  // Info Column
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // Tên nhân viên
                         Row(
                           children: [
                             Flexible(
@@ -100,7 +114,6 @@ class EmployeeCard extends StatelessWidget {
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            // --- SỬA LẠI: HIỂN THỊ CHỮ (Locked) ---
                             if (isLocked) ...[
                               const SizedBox(width: 6),
                               const Text(
@@ -114,12 +127,13 @@ class EmployeeCard extends StatelessWidget {
                                 ),
                               ),
                             ],
-                            // ---------------------------------------
                           ],
                         ),
                         const SizedBox(height: 4),
+
+                        // Employee Code
                         Text(
-                          'Employee ID: $employeeId',
+                          'Employee Code: $displayCode',
                           style: const TextStyle(
                             color: Color(0xFF555252),
                             fontSize: 13,
@@ -129,14 +143,13 @@ class EmployeeCard extends StatelessWidget {
                         ),
                         const SizedBox(height: 8),
 
-                        // Badges
+                        // Badges (Role & Dept)
                         Wrap(
                           spacing: 8,
                           runSpacing: 4,
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
-                            if (role.isNotEmpty)
-                              _buildStatusBadge(role, isManager),
+                            if (role.isNotEmpty) _buildStatusBadge(role),
                             if (department.isNotEmpty)
                               _buildBadge(
                                 text: department,
@@ -149,7 +162,7 @@ class EmployeeCard extends StatelessWidget {
                     ),
                   ),
 
-                  // Trailing: Menu trước, Select sau
+                  // Menu Button
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -165,9 +178,7 @@ class EmployeeCard extends StatelessWidget {
                           ),
                         ),
                       ),
-
                       const SizedBox(width: 4),
-
                       if (selectionWidget != null) selectionWidget!,
                     ],
                   ),
@@ -180,30 +191,42 @@ class EmployeeCard extends StatelessWidget {
     );
   }
 
-  Widget _buildStatusBadge(String role, bool isManager) {
-    if (role == "Unassigned") {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: const Color(0xFFDCFCE7),
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: Text(
-          role,
-          style: const TextStyle(
-            color: Color(0xFF166534),
-            fontSize: 12,
-            fontFamily: 'Inter',
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      );
-    }
-    return _buildBadge(
-      text: role,
-      textColor: isManager ? AppColors.primary : const Color(0xFF767676),
-      bgColor: isManager ? const Color(0xFFECF1FF) : const Color(0xFFEAEBEE),
+  // [MỚI] Hàm tạo Avatar mặc định (Icon xám trên nền xám nhạt)
+  // Giống hệt bên DepartmentCard
+  Widget _buildDefaultAvatar() {
+    return Container(
+      alignment: Alignment.center,
+      color: const Color(0xFFEFF1F5), // Màu nền xám nhạt
+      child: const Icon(
+        Icons.person,
+        color: Color(0xFF9CA3AF), // Màu icon xám đậm hơn
+        size: 24, // Size icon bên này để 24 là vừa với khung 46
+      ),
     );
+  }
+
+  // 4. Logic màu badge: Manager/Admin => Xanh dương
+  Widget _buildStatusBadge(String role) {
+    final List<String> highLevelRoles = [
+      "MANAGER",
+      "ADMIN",
+      "COMPANY_ADMIN",
+      "MANAGEMENT",
+    ];
+
+    bool isHighLevel = highLevelRoles.contains(role.toUpperCase());
+
+    Color textColor = isHighLevel ? AppColors.primary : const Color(0xFF767676);
+    Color bgColor = isHighLevel
+        ? const Color(0xFFECF1FF)
+        : const Color(0xFFEAEBEE);
+
+    if (role == "Unassigned") {
+      textColor = const Color(0xFF166534);
+      bgColor = const Color(0xFFDCFCE7);
+    }
+
+    return _buildBadge(text: role, textColor: textColor, bgColor: bgColor);
   }
 
   Widget _buildBadge({
@@ -212,7 +235,7 @@ class EmployeeCard extends StatelessWidget {
     required Color bgColor,
   }) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(6),

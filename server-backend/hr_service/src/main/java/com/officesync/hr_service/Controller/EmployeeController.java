@@ -5,7 +5,9 @@ import java.util.Map;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -31,9 +33,10 @@ public class EmployeeController {
     public static class UpdateEmployeeRequest {
         private String fullName;
         private String phone;
-        private String dateOfBirth; // yyyy-MM-dd
+        private String dateOfBirth;
+        private String avatarUrl; // [QUAN TRỌNG] Thêm trường này
     }
-     // [DTO MỚI] Dùng class này để hứng JSON từ Flutter (vì Employee gốc không có password)
+     
     @Data
     public static class CreateEmployeeRequest {
         private String fullName;
@@ -44,10 +47,9 @@ public class EmployeeController {
         private String password;    // [QUAN TRỌNG] Hứng mật khẩu
     }
 
-    // [SỬA LẠI HÀM NÀY] Bắt lỗi RuntimeException để trả về JSON đẹp
-    @org.springframework.web.bind.annotation.PutMapping("/{id}")
+   @PutMapping("/{id}")
     public ResponseEntity<?> updateEmployee(
-            @org.springframework.web.bind.annotation.PathVariable Long id,
+            @PathVariable Long id,
             @RequestBody UpdateEmployeeRequest request
     ) {
         try {
@@ -55,12 +57,11 @@ public class EmployeeController {
                 id,
                 request.getFullName(),
                 request.getPhone(),
-                request.getDateOfBirth()
+                request.getDateOfBirth(),
+                request.getAvatarUrl() // Truyền avatarUrl xuống Service
             );
             return ResponseEntity.ok(updated);
         } catch (RuntimeException e) {
-            // Trả về lỗi 400 kèm message JSON đơn giản
-            // Ví dụ: { "message": "Phone number ... already exists!" }
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }
     }

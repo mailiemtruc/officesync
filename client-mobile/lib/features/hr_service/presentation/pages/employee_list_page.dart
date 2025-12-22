@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-// --- IMPORTS (Kiểm tra lại đường dẫn cho đúng với project của bạn) ---
+// --- IMPORTS ---
 import '../../../../core/config/app_colors.dart';
 import '../../data/models/employee_model.dart';
 import '../../data/models/department_model.dart';
@@ -12,6 +12,7 @@ import '../../domain/repositories/employee_repository.dart';
 import '../../data/datasources/employee_remote_data_source.dart';
 
 import '../../widgets/employee_card.widget.dart';
+import '../../widgets/department_card.widget.dart';
 import 'add_employee_page.dart';
 import 'create_department_page.dart';
 
@@ -26,7 +27,6 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
   bool _isEmployeesTab = true;
   bool _isLoading = true;
 
-  // Dữ liệu thật từ Backend
   List<EmployeeModel> _employees = [];
   List<DepartmentModel> _departments = [];
 
@@ -36,7 +36,6 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
   @override
   void initState() {
     super.initState();
-    // Khởi tạo Repository
     _employeeRepository = EmployeeRepositoryImpl(
       remoteDataSource: EmployeeRemoteDataSource(),
     );
@@ -45,22 +44,31 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
 
   // --- LOGIC GỌI API ---
   Future<void> _fetchData() async {
-    setState(() => _isLoading = true);
+    // Chỉ set loading nếu widget vẫn đang hiển thị
+    if (mounted) setState(() => _isLoading = true);
+
     try {
       if (_isEmployeesTab) {
-        // 1. Lấy ID người dùng hiện tại
         String? currentUserId = await _getCurrentUserId();
         if (currentUserId != null) {
           final data = await _employeeRepository.getEmployees(currentUserId);
-          setState(() => _employees = data);
+          if (mounted) setState(() => _employees = data);
         }
       } else {
-        // 2. Lấy danh sách phòng ban
         final data = await _employeeRepository.getDepartments();
-        setState(() => _departments = data);
+        if (mounted) setState(() => _departments = data);
       }
     } catch (e) {
       print("Error fetching data: $e");
+      // Có thể hiện thông báo lỗi nếu cần
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading data: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -79,9 +87,8 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
     return null;
   }
 
-  // --- LOGIC ĐIỀU HƯỚNG (ĐÃ SỬA LỖI) ---
+  // --- [SỬA] LOGIC ĐIỀU HƯỚNG ---
   Future<void> _navigateToAddPage() async {
-    // 1. Khai báo rõ ràng Route này sẽ trả về kiểu bool
     Route<bool> route;
 
     if (_isEmployeesTab) {
@@ -90,34 +97,31 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
       );
     } else {
       route = MaterialPageRoute<bool>(
-        // 2. Xóa 'const' để tránh lỗi nếu Page chưa có const constructor
-        builder: (context) => CreateDepartmentPage(),
+        builder: (context) => const CreateDepartmentPage(),
       );
     }
 
-    // 3. Gọi push
+    // Chờ kết quả trả về từ trang tạo
     final bool? result = await Navigator.push(context, route);
 
-    // 4. Reload data nếu kết quả trả về là true
+    // [QUAN TRỌNG] Kiểm tra mounted trước khi gọi hàm refresh
+    if (!mounted) return;
+
+    // Nếu tạo thành công (result == true), load lại dữ liệu
     if (result == true) {
       _fetchData();
     }
   }
 
   void _onBottomNavTap(int index) {
-    switch (index) {
-      case 0:
-        Navigator.pushNamedAndRemoveUntil(
-          context,
-          '/dashboard',
-          (route) => false,
-        );
-        break;
-      case 1:
-        break; // Đang ở trang này
-      case 2:
-        Navigator.pushNamed(context, '/user_profile');
-        break;
+    if (index == 0) {
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        '/dashboard',
+        (route) => false,
+      );
+    } else if (index == 2) {
+      Navigator.pushNamed(context, '/user_profile');
     }
   }
 
@@ -168,15 +172,9 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
     );
   }
 
-  // --- DANH SÁCH NHÂN VIÊN ---
   Widget _buildEmployeeList() {
     if (_employees.isEmpty) {
-      return const Center(
-        child: Text(
-          "No employees found.",
-          style: TextStyle(color: Colors.grey),
-        ),
-      );
+      return _buildEmptyState("No employees found.");
     }
 
     return ListView.builder(
@@ -189,28 +187,18 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
               ? const EdgeInsets.only(bottom: 80)
               : EdgeInsets.zero,
           child: EmployeeCard(
-            name: emp.fullName,
-            employeeId: emp.id ?? "N/A",
-            role: emp.role,
-            department: "Active Dept",
-            imageUrl: "https://i.pravatar.cc/150?u=${emp.id}",
-            isLocked: emp.status == "LOCKED",
+            employee: emp,
             onMenuTap: () => _showOptions(context, "Employee: ${emp.fullName}"),
+            onTap: () {},
           ),
         );
       },
     );
   }
 
-  // --- DANH SÁCH PHÒNG BAN ---
   Widget _buildDepartmentList() {
     if (_departments.isEmpty) {
-      return const Center(
-        child: Text(
-          "No departments found.",
-          style: TextStyle(color: Colors.grey),
-        ),
-      );
+      return _buildEmptyState("No departments found.");
     }
 
     return ListView.builder(
@@ -222,18 +210,34 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
           padding: index == _departments.length - 1
               ? const EdgeInsets.only(bottom: 80)
               : EdgeInsets.zero,
-          child: _DepartmentCardSimple(
-            name: dept.name,
-            code: dept.code ?? "N/A",
+          child: DepartmentCard(
+            department: dept,
             onMenuTap: () => _showOptions(context, "Department: ${dept.name}"),
+            onTap: () {},
           ),
         );
       },
     );
   }
 
-  // --- WIDGET CON & HELPERS ---
+  // Helper hiển thị trạng thái rỗng đẹp hơn để biết không phải lỗi render
+  Widget _buildEmptyState(String message) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(PhosphorIcons.ghost(), size: 48, color: Colors.grey[300]),
+          const SizedBox(height: 12),
+          Text(
+            message,
+            style: TextStyle(color: Colors.grey[500], fontSize: 16),
+          ),
+        ],
+      ),
+    );
+  }
 
+  // --- CÁC WIDGET CON KHÁC (GIỮ NGUYÊN) ---
   void _showOptions(BuildContext context, String title) {
     showModalBottomSheet(
       context: context,
@@ -344,7 +348,7 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
           if (_isEmployeesTab != isEmployeeTab) {
             setState(() {
               _isEmployeesTab = isEmployeeTab;
-              _employees = [];
+              _employees = []; // Reset list để hiện loading
               _departments = [];
             });
             _fetchData();
@@ -437,67 +441,6 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(vertical: 10),
         ),
-      ),
-    );
-  }
-}
-
-// Widget đơn giản hiển thị phòng ban (thay thế DepartmentCard cũ nếu không tương thích)
-class _DepartmentCardSimple extends StatelessWidget {
-  final String name;
-  final String code;
-  final VoidCallback onMenuTap;
-
-  const _DepartmentCardSimple({
-    required this.name,
-    required this.code,
-    required this.onMenuTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 50,
-            height: 50,
-            decoration: BoxDecoration(
-              color: Colors.blue.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Icon(Icons.business, color: Colors.blue),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                ),
-                Text(
-                  code,
-                  style: const TextStyle(color: Colors.grey, fontSize: 12),
-                ),
-              ],
-            ),
-          ),
-          IconButton(icon: const Icon(Icons.more_vert), onPressed: onMenuTap),
-        ],
       ),
     );
   }
