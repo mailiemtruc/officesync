@@ -21,6 +21,8 @@ public class RabbitMQConfig {
     public static final String ROUTING_KEY_COMPANY_CREATE = "company.create";
     public static final String ROUTING_KEY_USER_STATUS = "user.status.update";
     public static final String QUEUE_EMPLOYEE_CREATE = "employee.create.queue";
+    public static final String QUEUE_EMPLOYEE_UPDATE = "employee.update.queue";
+    public static final String ROUTING_KEY_EMPLOYEE_UPDATE = "employee.update";
 
     @Bean
     public Queue queue() {
@@ -64,5 +66,25 @@ public class RabbitMQConfig {
     @Bean
     public Queue employeeQueue() {
         return new Queue(QUEUE_EMPLOYEE_CREATE);
+    }
+
+    @Bean
+    public Queue employeeUpdateQueue() {
+        return new Queue(QUEUE_EMPLOYEE_UPDATE);
+    }
+    
+    // 🔴 [MỚI] Binding: Nối Queue Update vào Exchange
+    // Lưu ý: Exchange ở đây phải là Exchange mà HR bắn tới (employee.exchange). 
+    // Tuy nhiên, nếu bạn dùng chung 1 Exchange nội bộ thì cấu hình Binding như sau:
+    @Bean
+    public TopicExchange employeeExchange() {
+        return new TopicExchange("employee.exchange"); // Tên exchange phải trùng với bên HR
+    }
+
+    @Bean
+    public Binding bindingEmployeeUpdate(Queue employeeUpdateQueue, TopicExchange employeeExchange) {
+        return BindingBuilder.bind(employeeUpdateQueue)
+                .to(employeeExchange)
+                .with(ROUTING_KEY_EMPLOYEE_UPDATE);
     }
 }

@@ -255,6 +255,39 @@ public class AuthService {
         }
     }
 
+    public void updateEmployeeAccount(EmployeeSyncEvent event) {
+        // 1. Tìm user
+        User user = userRepository.findByEmail(event.getEmail())
+                .orElseThrow(() -> new RuntimeException("User not found: " + event.getEmail()));
+
+        // 2. Cập nhật thông tin cơ bản
+        user.setFullName(event.getFullName());
+        user.setMobileNumber(event.getPhone());
+        user.setDateOfBirth(event.getDateOfBirth());
+
+        // 3. LOGIC CẬP NHẬT QUYỀN (ROLE) [MỚI]
+        // Kiểm tra: Nếu Role gửi sang KHÁC NULL và KHÁC với Role hiện tại thì mới cập nhật
+        if (event.getRole() != null && !event.getRole().equals(user.getRole())) {
+            System.out.println("--> [Core] Phát hiện thay đổi quyền: " + user.getRole() + " -> " + event.getRole());
+            user.setRole(event.getRole());
+        }
+
+        // 4. LOGIC CẬP NHẬT TRẠNG THÁI (STATUS) (Tương tự Role)
+        if (event.getStatus() != null && !event.getStatus().equals(user.getStatus())) {
+            System.out.println("--> [Core] Phát hiện thay đổi trạng thái: " + user.getStatus() + " -> " + event.getStatus());
+            user.setStatus(event.getStatus());
+        }
+
+        // 5. Cập nhật mật khẩu (chỉ khi có password mới)
+        if (event.getPassword() != null && !event.getPassword().isEmpty()) {
+            user.setPassword(passwordEncoder.encode(event.getPassword()));
+        }
+
+        // 6. Lưu thay đổi
+        userRepository.save(user);
+        System.out.println("--> [Core] Đã đồng bộ xong User: " + user.getEmail());
+    }
+
     // --- HELPER FUNCTIONS ---
     private void validateNewPassword(User user, String newPassword) {
         if (passwordEncoder.matches(newPassword, user.getPassword())) {

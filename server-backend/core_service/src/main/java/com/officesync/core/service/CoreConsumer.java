@@ -21,4 +21,10 @@ public class CoreConsumer {
         // Gọi Service xử lý
         authService.createEmployeeAccount(event);
     }
+
+    @RabbitListener(queues = RabbitMQConfig.QUEUE_EMPLOYEE_UPDATE)
+    public void receiveEmployeeUpdateEvent(EmployeeSyncEvent event) {
+        System.out.println("--> [RabbitMQ] Core nhận yêu cầu CẬP NHẬT User: " + event.getEmail());
+        authService.updateEmployeeAccount(event);
+    }
 }
