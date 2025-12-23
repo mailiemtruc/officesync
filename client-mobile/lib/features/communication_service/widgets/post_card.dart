@@ -1,24 +1,76 @@
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../data/models/post_model.dart';
-import '../../../../core/config/app_colors.dart';
+import '../data/newsfeed_api.dart'; // Import API để gọi thả tim
 
-class PostCard extends StatelessWidget {
+class PostCard extends StatefulWidget {
   final PostModel post;
   final VoidCallback? onTap;
 
   const PostCard({super.key, required this.post, this.onTap});
 
   @override
+  State<PostCard> createState() => _PostCardState();
+}
+
+class _PostCardState extends State<PostCard> {
+  // Biến trạng thái local để phản hồi ngay lập tức (Optimistic UI)
+  late bool _isLiked;
+  late int _reactionCount;
+  final _api = NewsfeedApi();
+
+  @override
+  void initState() {
+    super.initState();
+    // Khởi tạo trạng thái từ dữ liệu bài viết
+    _isLiked =
+        widget.post.myReaction != null; // Nếu khác null tức là đã thả reaction
+    _reactionCount = widget.post.reactionCount;
+  }
+
+  // Hàm xử lý khi bấm Like
+  void _handleLike() {
+    // 1. Lưu lại trạng thái cũ để lỡ lỗi thì revert
+    final previousState = _isLiked;
+    final previousCount = _reactionCount;
+
+    // 2. Cập nhật giao diện NGAY LẬP TỨC (Optimistic Update)
+    setState(() {
+      if (_isLiked) {
+        // Nếu đang Like -> Bỏ Like
+        _isLiked = false;
+        _reactionCount--;
+      } else {
+        // Nếu chưa Like -> Thả Like (Mặc định là 'LIKE' hoặc 'LOVE')
+        _isLiked = true;
+        _reactionCount++;
+      }
+    });
+
+    // 3. Gọi API ngầm bên dưới
+    // Nếu đang like -> gửi "LIKE" (hoặc "LOVE" tùy bạn chọn icon)
+    // Server của bạn đã xử lý logic: Gửi trùng type = Bỏ like
+    _api.reactToPost(widget.post.id, "LOVE").then((success) {
+      if (!success) {
+        // Nếu API lỗi -> Revert về trạng thái cũ
+        setState(() {
+          _isLiked = previousState;
+          _reactionCount = previousCount;
+        });
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap, // Để sau này bấm vào xem chi tiết
+      onTap: widget.onTap,
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(20), // Bo góc 20
+          borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.04),
@@ -36,7 +88,7 @@ class PostCard extends StatelessWidget {
                 CircleAvatar(
                   radius: 22,
                   backgroundColor: const Color(0xFFF1F5F9),
-                  backgroundImage: NetworkImage(post.authorAvatar),
+                  backgroundImage: NetworkImage(widget.post.authorAvatar),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -44,14 +96,14 @@ class PostCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        post.authorName,
+                        widget.post.authorName,
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
                         ),
                       ),
                       Text(
-                        post.createdAt, // Bạn có thể format lại ví dụ: "1 Day"
+                        widget.post.createdAt,
                         style: const TextStyle(
                           color: Colors.grey,
                           fontSize: 12,
@@ -64,12 +116,12 @@ class PostCard extends StatelessWidget {
             ),
             const SizedBox(height: 12),
 
-            // 2. Content Text
-            if (post.content.isNotEmpty)
+            // 2. Content
+            if (widget.post.content.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: Text(
-                  post.content,
+                  widget.post.content,
                   style: const TextStyle(
                     fontSize: 15,
                     height: 1.4,
@@ -78,8 +130,9 @@ class PostCard extends StatelessWidget {
                 ),
               ),
 
-            // 3. Image (Nếu có) - Hiển thị to như design
-            if (post.imageUrl != null && post.imageUrl!.isNotEmpty)
+            // 3. Image
+            if (widget.post.imageUrl != null &&
+                widget.post.imageUrl!.isNotEmpty)
               Container(
                 width: double.infinity,
                 height: 220,
@@ -87,12 +140,11 @@ class PostCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(16),
                   color: const Color(0xFFF1F5F9),
                   image: DecorationImage(
-                    image: NetworkImage(post.imageUrl!),
+                    image: NetworkImage(widget.post.imageUrl!),
                     fit: BoxFit.cover,
                   ),
                 ),
               )
-            // Placeholder hình cái máy ảnh nếu không có ảnh (cho giống design Figma của bạn)
             else
               Container(
                 width: double.infinity,
@@ -114,44 +166,67 @@ class PostCard extends StatelessWidget {
             const Divider(height: 1, color: Color(0xFFF1F5F9)),
             const SizedBox(height: 12),
 
-            // 4. Footer (Like / Comment)
+            // 4. Action Buttons (Like & Comment)
             Row(
               children: [
-                _buildAction(
-                  post.myReaction != null
-                      ? PhosphorIconsFill.heart
-                      : PhosphorIconsRegular.heart,
-                  "${post.reactionCount}",
-                  post.myReaction != null ? Colors.red : Colors.black87,
+                // --- NÚT LIKE (Đã tương tác) ---
+                InkWell(
+                  onTap: _handleLike, // Gọi hàm xử lý like
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          _isLiked
+                              ? PhosphorIconsFill.heart
+                              : PhosphorIconsRegular.heart,
+                          size: 24,
+                          color: _isLiked ? Colors.red : Colors.black87,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          "$_reactionCount",
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                            color: _isLiked ? Colors.red : Colors.black87,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
+
                 const SizedBox(width: 20),
-                _buildAction(
-                  PhosphorIconsRegular.chatCircle,
-                  "${post.commentCount}",
-                  Colors.black87,
+
+                // --- NÚT COMMENT ---
+                Row(
+                  children: [
+                    const Icon(
+                      PhosphorIconsRegular.chatCircle,
+                      size: 24,
+                      color: Colors.black87,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      "${widget.post.commentCount}",
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                        color: Colors.black87,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildAction(IconData icon, String count, Color color) {
-    return Row(
-      children: [
-        Icon(icon, size: 22, color: color),
-        const SizedBox(width: 6),
-        Text(
-          count,
-          style: TextStyle(
-            fontWeight: FontWeight.w600,
-            fontSize: 14,
-            color: color,
-          ),
-        ),
-      ],
     );
   }
 }

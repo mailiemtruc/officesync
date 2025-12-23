@@ -4,7 +4,6 @@ import com.officesync.communication_service.dto.*;
 import com.officesync.communication_service.enums.ReactionType;
 import com.officesync.communication_service.model.*;
 import com.officesync.communication_service.repository.*;
-import com.officesync.communication_service.model.User; 
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -18,7 +17,8 @@ public class NewsfeedService {
     @Autowired private PostRepository postRepository;
     @Autowired private PostReactionRepository reactionRepository;
     @Autowired private PostCommentRepository commentRepository;
-
+    @Autowired private UserRepository userRepository;
+    @Autowired private PostViewRepository viewRepository;
     // 1. Tạo bài viết
     public Post createPost(PostRequestDTO request, User currentUser) {
         Post post = new Post();
@@ -80,8 +80,28 @@ public class NewsfeedService {
         }
     }
 
-    // 4. Bình luận
-    public PostComment addComment(Long postId, Long userId, CommentRequestDTO request) {
+
+// 1. HÀM MỚI: LẤY DANH SÁCH COMMENT
+    public List<CommentResponseDTO> getComments(Long postId) {
+        List<PostComment> comments = commentRepository.findByPostIdOrderByCreatedAtAsc(postId);
+
+        return comments.stream().map(comment -> {
+            User user = userRepository.findById(comment.getUserId()).orElse(null);
+            
+            return CommentResponseDTO.builder()
+                    .id(comment.getId())
+                    .content(comment.getContent())
+                    .parentId(comment.getParentComment() != null ? comment.getParentComment().getId() : null)
+                    .userId(comment.getUserId())
+                    .authorName(user != null ? user.getFullName() : "Unknown User")
+                    .authorAvatar(user != null ? user.getAvatarUrl() : "https://ui-avatars.com/api/?name=U")
+                    .createdAt(comment.getCreatedAt())
+                    .build();
+        }).collect(Collectors.toList());
+    }
+
+    // 2. CẬP NHẬT HÀM: THÊM BÌNH LUẬN (Trả về DTO)
+    public CommentResponseDTO addComment(Long postId, Long userId, CommentRequestDTO request) {
         PostComment comment = new PostComment();
         comment.setPostId(postId);
         comment.setUserId(userId);
@@ -93,6 +113,36 @@ public class NewsfeedService {
             comment.setParentComment(parent);
         }
 
-        return commentRepository.save(comment);
+        PostComment savedComment = commentRepository.save(comment);
+        User user = userRepository.findById(userId).orElse(null);
+
+        return CommentResponseDTO.builder()
+                .id(savedComment.getId())
+                .content(savedComment.getContent())
+                .parentId(request.getParentId())
+                .userId(userId)
+                .authorName(user != null ? user.getFullName() : "Unknown User")
+                .authorAvatar(user != null ? user.getAvatarUrl() : "https://ui-avatars.com/api/?name=U")
+                .createdAt(savedComment.getCreatedAt())
+                .build();
+    }
+    // Hàm đếm lượt xem
+    public void viewPost(Long postId, Long userId) {
+        // 1. Kiểm tra xem đã xem chưa để tránh spam view
+        if (!viewRepository.existsByPostIdAndUserId(postId, userId)) {
+            
+            // 2. Lưu lịch sử xem vào bảng post_views
+            PostView view = new PostView();
+            view.setPostId(postId);
+            view.setUserId(userId);
+            viewRepository.save(view);
+
+            // 3. Tăng viewCount trong bảng posts
+            Post post = postRepository.findById(postId).orElse(null);
+            if (post != null) {
+                post.setViewCount(post.getViewCount() + 1);
+                postRepository.save(post);
+            }
+        }
     }
 }

@@ -35,10 +35,24 @@ public class NewsfeedController {
         return ResponseEntity.ok("Success");
     }
 
+    
+    // ✅ API MỚI: Lấy danh sách bình luận
+    @GetMapping("/{postId}/comments")
+    public ResponseEntity<?> getComments(@PathVariable Long postId) {
+        return ResponseEntity.ok(newsfeedService.getComments(postId));
+    }
+
+    // ✅ CẬP NHẬT API: Đăng bình luận
     @PostMapping("/{postId}/comments")
     public ResponseEntity<?> comment(@PathVariable Long postId,
                                      @RequestBody CommentRequestDTO request,
                                      @AuthenticationPrincipal User currentUser) {
         return ResponseEntity.ok(newsfeedService.addComment(postId, currentUser.getId(), request));
+    }
+    @PostMapping("/{postId}/view")
+    public ResponseEntity<?> viewPost(@PathVariable Long postId, 
+                                      @AuthenticationPrincipal User currentUser) {
+        newsfeedService.viewPost(postId, currentUser.getId());
+        return ResponseEntity.ok("View counted");
     }
 }
