@@ -84,6 +84,7 @@ public class AuthService {
         }
 
         String otp = String.format("%04d", new Random().nextInt(10000));
+        
         registrationOtpCache.put(email, new OtpData(otp, System.currentTimeMillis() + 300000));
         sendEmail(email, "Verify Email - OfficeSync", "Your registration code is: " + otp + "\nValid for 5 minutes.");
     }
