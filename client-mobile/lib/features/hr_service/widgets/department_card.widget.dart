@@ -3,7 +3,7 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../data/models/department_model.dart';
 
 class DepartmentCard extends StatelessWidget {
-  final Department department;
+  final DepartmentModel department;
   final VoidCallback? onTap;
   final VoidCallback? onMenuTap;
 
@@ -14,22 +14,47 @@ class DepartmentCard extends StatelessWidget {
     this.onMenuTap,
   });
 
+  // Hàm chuyển đổi mã Hex (#RRGGBB) sang Color object
+  Color _parseColor(String? hexColor) {
+    if (hexColor == null || hexColor.isEmpty) {
+      return Colors.blue;
+    }
+    try {
+      final buffer = StringBuffer();
+      if (hexColor.length == 6 || hexColor.length == 7) buffer.write('ff');
+      buffer.write(hexColor.replaceFirst('#', ''));
+      return Color(int.parse(buffer.toString(), radix: 16));
+    } catch (e) {
+      return Colors.blue;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    // 1. Lấy màu sắc từ model
+    final Color themeColor = _parseColor(department.color);
+
+    // 2. Lấy tên quản lý
+    final String managerName = department.manager?.fullName ?? "No Manager";
+
+    // 3. Logic Avatar
+    final String? avatarUrl = department.manager?.avatarUrl;
+    final bool hasAvatar = avatarUrl != null && avatarUrl.isNotEmpty;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20), // Bo góc thẻ
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            // [CẬP NHẬT] Đổ bóng đậm hơn (0.1)
+            color: Colors.black.withOpacity(0.1),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
         ],
       ),
-      // ClipRRect để cắt thanh màu bên trái cho gọn trong góc bo
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
         child: Material(
@@ -37,23 +62,18 @@ class DepartmentCard extends StatelessWidget {
           child: InkWell(
             onTap: onTap,
             child: IntrinsicHeight(
-              // Giúp thanh màu bên trái cao bằng thẻ
               child: Row(
                 children: [
-                  // 1. THANH MÀU BÊN TRÁI (Vertical Color Bar)
-                  Container(
-                    width: 4, // Độ dày thanh màu
-                    color: department.themeColor, // Màu theo phòng ban
-                  ),
+                  // --- THANH MÀU BÊN TRÁI ---
+                  Container(width: 4, color: themeColor),
 
-                  // 2. NỘI DUNG CHÍNH
                   Expanded(
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+                      padding: const EdgeInsets.all(16),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // --- HEADER: Tên phòng + Code + Menu ---
+                          // --- HEADER: Tên phòng ban & Code ---
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -66,27 +86,26 @@ class DepartmentCard extends StatelessWidget {
                                       department.name,
                                       style: const TextStyle(
                                         color: Colors.black,
-                                        fontSize: 16, // Font size tiêu đề
+                                        fontSize: 16,
                                         fontFamily: 'Inter',
                                         fontWeight: FontWeight.w600,
                                       ),
                                     ),
                                     const SizedBox(height: 4),
+                                    // [CẬP NHẬT] Code đậm hơn (w500)
                                     Text(
-                                      'Code: ${department.code}',
+                                      'Code: ${department.code ?? "N/A"}',
                                       style: const TextStyle(
-                                        color: Color(
-                                          0xFF9E9E9E,
-                                        ), // Màu xám nhạt
+                                        color: Color(0xFF9E9E9E),
                                         fontSize: 13,
                                         fontFamily: 'Inter',
-                                        fontWeight: FontWeight.w300,
+                                        fontWeight:
+                                            FontWeight.w500, // Đậm hơn xíu
                                       ),
                                     ),
                                   ],
                                 ),
                               ),
-                              // Nút 3 chấm
                               GestureDetector(
                                 onTap: onMenuTap,
                                 child: Icon(
@@ -102,33 +121,35 @@ class DepartmentCard extends StatelessWidget {
 
                           const SizedBox(height: 20),
 
-                          // --- BOTTOM: Avatar + Manager Info + Member Badge ---
+                          // --- FOOTER: Manager Info & Member Count ---
                           Row(
                             children: [
-                              // AVATAR: Kích thước 46x46 (Giống Employee Card)
-                              ClipOval(
-                                child: Image.network(
-                                  department.managerImageUrl,
-                                  width: 46,
-                                  height: 46,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) {
-                                    return Container(
-                                      width: 46,
-                                      height: 46,
-                                      color: Colors.grey[300],
-                                      child: const Icon(
-                                        Icons.person,
-                                        color: Colors.grey,
-                                      ),
-                                    );
-                                  },
+                              // [CẬP NHẬT] Avatar Manager
+                              Container(
+                                width: 40,
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  // Nếu không có ảnh thì nền xám nhạt
+                                  color: hasAvatar
+                                      ? Colors.transparent
+                                      : const Color(0xFFE0E0E0),
+                                ),
+                                child: ClipOval(
+                                  child: hasAvatar
+                                      ? Image.network(
+                                          avatarUrl!,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (ctx, err, stack) =>
+                                              _buildDefaultAvatar(),
+                                        )
+                                      : _buildDefaultAvatar(), // Gọi hàm tạo icon mặc định
                                 ),
                               ),
 
                               const SizedBox(width: 12),
 
-                              // THÔNG TIN QUẢN LÝ
+                              // Tên & Chức danh Manager
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -136,10 +157,8 @@ class DepartmentCard extends StatelessWidget {
                                     const Text(
                                       'MANAGER',
                                       style: TextStyle(
-                                        color: Color(
-                                          0xFF9E9E9E,
-                                        ), // Màu xám tiêu đề nhỏ
-                                        fontSize: 11,
+                                        color: Color(0xFF9E9E9E),
+                                        fontSize: 10,
                                         fontFamily: 'Inter',
                                         fontWeight: FontWeight.w600,
                                         letterSpacing: 0.5,
@@ -147,10 +166,10 @@ class DepartmentCard extends StatelessWidget {
                                     ),
                                     const SizedBox(height: 2),
                                     Text(
-                                      department.managerName,
+                                      managerName,
                                       style: const TextStyle(
                                         color: Colors.black,
-                                        fontSize: 14,
+                                        fontSize: 13,
                                         fontFamily: 'Inter',
                                         fontWeight: FontWeight.w600,
                                       ),
@@ -161,15 +180,14 @@ class DepartmentCard extends StatelessWidget {
                                 ),
                               ),
 
-                              // BADGE SỐ LƯỢNG THÀNH VIÊN
+                              // Badge số lượng thành viên
                               Container(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 10,
                                   vertical: 6,
                                 ),
                                 decoration: BoxDecoration(
-                                  // Màu nền nhạt (Opacity 0.1)
-                                  color: department.themeColor.withOpacity(0.1),
+                                  color: themeColor.withOpacity(0.1),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Row(
@@ -178,14 +196,14 @@ class DepartmentCard extends StatelessWidget {
                                       PhosphorIcons.usersThree(
                                         PhosphorIconsStyle.fill,
                                       ),
-                                      size: 16,
-                                      color: department.themeColor,
+                                      size: 14,
+                                      color: themeColor,
                                     ),
                                     const SizedBox(width: 4),
                                     Text(
                                       '${department.memberCount} Members',
                                       style: TextStyle(
-                                        color: department.themeColor,
+                                        color: themeColor,
                                         fontSize: 12,
                                         fontFamily: 'Inter',
                                         fontWeight: FontWeight.w600,
@@ -205,6 +223,19 @@ class DepartmentCard extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  // [MỚI] Hàm tạo Avatar mặc định (Icon xám trên nền xám nhạt)
+  Widget _buildDefaultAvatar() {
+    return Container(
+      alignment: Alignment.center,
+      color: const Color(0xFFEFF1F5), // Màu nền xám nhạt
+      child: const Icon(
+        Icons.person,
+        color: Color(0xFF9CA3AF), // Màu icon xám đậm hơn
+        size: 24,
       ),
     );
   }

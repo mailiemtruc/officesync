@@ -1,6 +1,15 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
-import 'dart:math'; // Import thư viện để random mật khẩu
+import 'package:intl/intl.dart';
+import 'dart:math';
+
+// --- IMPORT PATHS ---
+import '../../data/datasources/employee_remote_data_source.dart';
+import '../../domain/repositories/employee_repository_impl.dart';
+import '../../domain/repositories/employee_repository.dart';
+import '../../data/models/department_model.dart';
 import '../../../../core/config/app_colors.dart';
 import '../../widgets/selection_bottom_sheet.dart';
 
@@ -12,21 +21,61 @@ class AddEmployeePage extends StatefulWidget {
 }
 
 class _AddEmployeePageState extends State<AddEmployeePage> {
+  // 1. Controllers
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _dobController = TextEditingController();
-  // Thêm controller cho Password
   late TextEditingController _passwordController;
 
-  String? _selectedDepartment;
+  // 2. State Variables
+  DepartmentModel? _selectedDepartment;
   String? _selectedRole;
+  bool _isLoading = false;
+
+  // Danh sách phòng ban lấy từ API
+  List<DepartmentModel> _departments = [];
+
+  // Repository & Storage
+  late final EmployeeRepository _employeeRepository;
+  final _storage = const FlutterSecureStorage();
 
   @override
   void initState() {
     super.initState();
-    // Khởi tạo mật khẩu mặc định
-    _passwordController = TextEditingController(text: "123456");
+    _passwordController = TextEditingController(text: "Abc123@ejk");
+
+    _employeeRepository = EmployeeRepositoryImpl(
+      remoteDataSource: EmployeeRemoteDataSource(),
+    );
+
+    _fetchDepartments();
+  }
+
+  Future<void> _fetchDepartments() async {
+    try {
+      final depts = await _employeeRepository.getDepartments();
+      if (mounted) {
+        setState(() {
+          _departments = depts;
+        });
+      }
+    } catch (e) {
+      print("Error fetching departments: $e");
+    }
+  }
+
+  Future<String?> _getCurrentUserId() async {
+    try {
+      String? userInfoStr = await _storage.read(key: 'user_info');
+      if (userInfoStr != null) {
+        Map<String, dynamic> userMap = jsonDecode(userInfoStr);
+        return userMap['id'].toString();
+      }
+    } catch (e) {
+      print("Error reading user info: $e");
+    }
+    return null;
   }
 
   @override
@@ -39,43 +88,190 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
     super.dispose();
   }
 
-  // Hàm tạo mật khẩu ngẫu nhiên (6 số)
+  // Tìm hàm cũ và thay thế bằng hàm này
   void _generateRandomPassword() {
-    var rng = Random();
-    var code = rng.nextInt(900000) + 100000; // Random từ 100000 -> 999999
+    final random = Random();
+    const length = 10; // Độ dài mật khẩu (lớn hơn 8)
+
+    // Các bộ ký tự
+    const upperCase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const lowerCase = 'abcdefghijklmnopqrstuvwxyz';
+    const numbers = '0123456789';
+    const specialChars = '@#_-.!';
+
+    // 1. Đảm bảo mỗi loại có ít nhất 1 ký tự
+    String chars = '';
+    chars += upperCase[random.nextInt(upperCase.length)];
+    chars += lowerCase[random.nextInt(lowerCase.length)];
+    chars += numbers[random.nextInt(numbers.length)];
+    chars += specialChars[random.nextInt(specialChars.length)];
+
+    // 2. Điền nốt các ký tự còn lại ngẫu nhiên từ tất cả các bộ
+    const allChars = upperCase + lowerCase + numbers + specialChars;
+    for (int i = 4; i < length; i++) {
+      chars += allChars[random.nextInt(allChars.length)];
+    }
+
+    // 3. Trộn ngẫu nhiên vị trí các ký tự để không theo quy luật cố định
+    List<String> charList = chars.split('');
+    charList.shuffle(random);
+    String password = charList.join('');
+
     setState(() {
-      _passwordController.text = code.toString();
+      _passwordController.text = password;
     });
   }
 
-  // ... (Các hàm _showDepartmentSelector, _showRoleSelector, _selectDate giữ nguyên)
+  Future<void> _selectDate() async {
+    DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now().subtract(const Duration(days: 365 * 18)),
+      firstDate: DateTime(1950),
+      lastDate: DateTime.now(),
+    );
+    if (picked != null) {
+      setState(() {
+        _dobController.text = DateFormat("dd/MM/yyyy").format(picked);
+      });
+    }
+  }
+
+  // --- LOGIC CHÍNH ---
+  // --- LOGIC CHÍNH ---
+  Future<void> _handleCreateEmployee() async {
+    // 1. Kiểm tra validation
+    if (_nameController.text.isEmpty ||
+        _emailController.text.isEmpty ||
+        _passwordController.text.isEmpty ||
+        _selectedRole == null ||
+        _selectedDepartment == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please fill in all required fields'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      String? currentUserId = await _getCurrentUserId();
+      if (currentUserId == null) {
+        throw Exception("Session expired. Please login again.");
+      }
+
+      String formattedDob = "";
+      if (_dobController.text.isNotEmpty) {
+        try {
+          DateTime parsedDate = DateFormat(
+            "dd/MM/yyyy",
+          ).parse(_dobController.text);
+          formattedDob = DateFormat("yyyy-MM-dd").format(parsedDate);
+        } catch (e) {
+          print("Date parse error: $e");
+        }
+      }
+
+      final success = await _employeeRepository.createEmployee(
+        fullName: _nameController.text.trim(),
+        email: _emailController.text.trim(),
+        phone: _phoneController.text.trim(),
+        dob: formattedDob,
+        role: _selectedRole?.toUpperCase() ?? "STAFF",
+        departmentId: _selectedDepartment!.id!,
+        currentUserId: currentUserId,
+        password: _passwordController.text.trim(),
+      );
+
+      if (success && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Employee created successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.pop(context, true);
+      }
+    } catch (e) {
+      if (mounted) {
+        // [LOGIC MỚI] Xử lý thông báo lỗi từ Backend cho dễ đọc
+        String errorMessage = e.toString();
+
+        // Backend thường trả về: Exception: Server Error: {"timestamp":..., "message":"Email đã tồn tại", ...}
+        // Ta cần lấy cái "message" bên trong đó.
+        if (errorMessage.contains("Server Error:")) {
+          try {
+            // Lấy phần JSON sau chữ "Server Error:"
+            final String jsonPart = errorMessage
+                .split("Server Error:")[1]
+                .trim();
+            final Map<String, dynamic> errorMap = jsonDecode(jsonPart);
+
+            // Nếu có trường 'message', dùng nó làm thông báo
+            if (errorMap.containsKey('message')) {
+              errorMessage = errorMap['message'];
+            }
+          } catch (_) {
+            // Nếu không parse được JSON thì giữ nguyên, chỉ xóa chữ Exception
+            errorMessage = errorMessage
+                .replaceAll("Exception: ", "")
+                .replaceAll("Server Error: ", "");
+          }
+        } else {
+          errorMessage = errorMessage.replaceAll("Exception: ", "");
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage), // Hiển thị thông báo sạch đẹp
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  // --- UI HELPER ---
   void _showDepartmentSelector() {
+    if (_departments.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Loading departments or no data available...'),
+        ),
+      );
+      _fetchDepartments();
+      return;
+    }
+
+    final List<Map<String, String>> deptItems = _departments
+        .map(
+          (dept) => {
+            'id': dept.id
+                .toString(), // id có thể null nhưng lấy từ API về thì ko null
+            'title': dept.name,
+            'desc': dept.code ?? '',
+          },
+        )
+        .toList();
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (context) => SelectionBottomSheet(
         title: 'Select Department',
-        items: const [
-          {
-            'id': 'Sales',
-            'title': 'Sales & Marketing',
-            'desc': 'Focus on revenue & branding',
-          },
-          {
-            'id': 'HR',
-            'title': 'Human Resources (HR)',
-            'desc': 'Recruitment & Employee welfare',
-          },
-          {
-            'id': 'IT',
-            'title': 'IT & Technology',
-            'desc': 'System admin & Development',
-          },
-        ],
-        selectedId: _selectedDepartment,
-        onSelected: (id) {
-          setState(() => _selectedDepartment = id);
+        items: deptItems,
+        selectedId: _selectedDepartment?.id.toString(),
+        onSelected: (idStr) {
+          final selectedDept = _departments.firstWhere(
+            (d) => d.id.toString() == idStr,
+          );
+          setState(() => _selectedDepartment = selectedDept);
           Navigator.pop(context);
         },
       ),
@@ -93,12 +289,12 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
           {
             'id': 'Staff',
             'title': 'Staff',
-            'desc': 'Submit requests, track tasks, and view internal news.',
+            'desc': 'Submit requests, track tasks.',
           },
           {
             'id': 'Manager',
             'title': 'Manager',
-            'desc': 'Approve requests, assign tasks, and manage members.',
+            'desc': 'Approve requests, manage members.',
           },
         ],
         selectedId: _selectedRole,
@@ -108,20 +304,6 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
         },
       ),
     );
-  }
-
-  Future<void> _selectDate() async {
-    DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: DateTime.now().subtract(const Duration(days: 365 * 18)),
-      firstDate: DateTime(1950),
-      lastDate: DateTime.now(),
-    );
-    if (picked != null) {
-      setState(() {
-        _dobController.text = "${picked.day}/${picked.month}/${picked.year}";
-      });
-    }
   }
 
   BoxDecoration _buildBlockDecoration() {
@@ -143,287 +325,287 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF9F9F9),
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 600),
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 1. Header
-                  Row(
+      body: Stack(
+        children: [
+          SafeArea(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 600),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      IconButton(
-                        icon: Icon(
-                          PhosphorIcons.caretLeft(PhosphorIconsStyle.bold),
-                          color: AppColors.primary,
-                          size: 24,
-                        ),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                      const Expanded(
-                        child: Center(
-                          child: Text(
-                            'ADD EMPLOYEE',
-                            style: TextStyle(
+                      Row(
+                        children: [
+                          IconButton(
+                            icon: Icon(
+                              PhosphorIcons.caretLeft(PhosphorIconsStyle.bold),
                               color: AppColors.primary,
-                              fontSize: 24,
-                              fontFamily: 'Inter',
-                              fontWeight: FontWeight.w700,
+                              size: 24,
                             ),
+                            onPressed: () => Navigator.pop(context),
                           ),
-                        ),
-                      ),
-                      const SizedBox(width: 40),
-                    ],
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  // 2. Avatar Placeholder
-                  Center(
-                    child: Container(
-                      width: 110,
-                      height: 110,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: const Color(0xFFD8DEEC),
-                          width: 2,
-                        ),
-                        color: const Color(0xFFE2E8F0),
-                        // --- THÊM ĐỔ BÓNG TẠI ĐÂY ---
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(
-                              0.1,
-                            ), // Độ mờ 0.1 như bạn muốn
-                            blurRadius:
-                                10, // Độ lan của bóng (càng lớn bóng càng mềm)
-                            offset: const Offset(
-                              0,
-                              5,
-                            ), // Đổ bóng lệch xuống dưới một chút
-                          ),
-                        ],
-                        // -----------------------------
-                      ),
-                      child: ClipOval(
-                        child: Icon(
-                          PhosphorIcons.user(PhosphorIconsStyle.fill),
-                          size: 60,
-                          color: const Color(0xFF94A3B8),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 32),
-
-                  // 3. Basic Information
-                  _buildSectionTitle('BASIC INFORMATION'),
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: _buildBlockDecoration(),
-                    child: Column(
-                      children: [
-                        _buildTextField(
-                          label: 'Full Name',
-                          hint: 'e.g. John Doe',
-                          controller: _nameController,
-                        ),
-                        const SizedBox(height: 20),
-                        _buildTextField(
-                          label: 'Employee ID',
-                          hint: 'Auto (EMP-XXX)',
-                          enabled: false,
-                          textColor: const Color(0xFFBDC6DE),
-                        ),
-                        const SizedBox(height: 20),
-                        _buildTextField(
-                          label: 'Phone',
-                          hint: 'Enter phone number',
-                          controller: _phoneController,
-                          inputType: TextInputType.phone,
-                        ),
-                        const SizedBox(height: 20),
-                        GestureDetector(
-                          onTap: _selectDate,
-                          child: AbsorbPointer(
-                            child: _buildTextField(
-                              label: 'Date of Birth',
-                              hint: 'DD / MM / YYYY',
-                              controller: _dobController,
-                              icon: PhosphorIcons.calendarBlank(),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  // 4. Account & Login
-                  _buildSectionTitle('ACCOUNT & LOGIN'),
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: _buildBlockDecoration(),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildTextField(
-                          label: 'Email',
-                          hint: 'email@company.com',
-                          controller: _emailController,
-                          inputType: TextInputType.emailAddress,
-                        ),
-                        const SizedBox(height: 20),
-
-                        // --- SỬA LẠI: PASSWORD CÓ THỂ NHẬP TAY + NÚT ICON ---
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text(
-                              'Password',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 16,
-                                color: Colors.black,
+                          const Expanded(
+                            child: Center(
+                              child: Text(
+                                'ADD EMPLOYEE',
+                                style: TextStyle(
+                                  color: AppColors.primary,
+                                  fontSize: 24,
+                                  fontFamily: 'Inter',
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
                             ),
-                            // Container chứa Input + Icon
+                          ),
+                          const SizedBox(width: 40),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+
+                      Center(
+                        child: Container(
+                          width: 110,
+                          height: 110,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: const Color(0xFFD8DEEC),
+                              width: 2,
+                            ),
+                            color: const Color(0xFFE2E8F0),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.1),
+                                blurRadius: 10,
+                                offset: const Offset(0, 5),
+                              ),
+                            ],
+                          ),
+                          child: ClipOval(
+                            child: Icon(
+                              PhosphorIcons.user(PhosphorIconsStyle.fill),
+                              size: 60,
+                              color: const Color(0xFF94A3B8),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 32),
+
+                      _buildSectionTitle('BASIC INFORMATION'),
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: _buildBlockDecoration(),
+                        child: Column(
+                          children: [
+                            _buildTextField(
+                              label: 'Full Name',
+                              hint: 'e.g. John Doe',
+                              controller: _nameController,
+                            ),
+                            const SizedBox(height: 20),
+                            _buildTextField(
+                              label: 'Employee ID',
+                              hint: 'Auto (EMP-XXX)',
+                              enabled: false,
+                              textColor: const Color(0xFFBDC6DE),
+                            ),
+                            const SizedBox(height: 20),
+                            _buildTextField(
+                              label: 'Phone',
+                              hint: 'Enter phone number',
+                              controller: _phoneController,
+                              inputType: TextInputType.phone,
+                            ),
+                            const SizedBox(height: 20),
+                            GestureDetector(
+                              onTap: _selectDate,
+                              child: AbsorbPointer(
+                                child: _buildTextField(
+                                  label: 'Date of Birth',
+                                  hint: 'DD / MM / YYYY',
+                                  controller: _dobController,
+                                  icon: PhosphorIcons.calendarBlank(),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      _buildSectionTitle('ACCOUNT & LOGIN'),
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: _buildBlockDecoration(),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildTextField(
+                              label: 'Email',
+                              hint: 'email@company.com',
+                              controller: _emailController,
+                              inputType: TextInputType.emailAddress,
+                            ),
+                            const SizedBox(height: 20),
                             Row(
-                              mainAxisSize: MainAxisSize.min,
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                // Input nhập tay
-                                SizedBox(
-                                  width: 120, // Độ rộng vừa phải cho password
-                                  child: TextField(
-                                    controller: _passwordController,
-                                    textAlign: TextAlign.end,
-                                    style: const TextStyle(
-                                      color: AppColors.primary, // Màu xanh
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 16,
-                                      fontFamily: 'Inter',
-                                    ),
-                                    decoration: const InputDecoration(
-                                      border: InputBorder.none,
-                                      contentPadding: EdgeInsets.zero,
-                                      isDense: true,
-                                      hintText: '......',
-                                    ),
+                                const Text(
+                                  'Password',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 16,
+                                    color: Colors.black,
                                   ),
                                 ),
-                                const SizedBox(width: 8),
-                                // Nút Icon Refresh riêng biệt
-                                InkWell(
-                                  onTap: _generateRandomPassword,
-                                  borderRadius: BorderRadius.circular(20),
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(4.0),
-                                    child: Icon(
-                                      PhosphorIcons.arrowsClockwise(
-                                        PhosphorIconsStyle.regular,
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    // Tìm đoạn code UI phần Password và thay thế TextField bằng đoạn này:
+                                    SizedBox(
+                                      width: 180,
+                                      child: TextField(
+                                        controller: _passwordController,
+                                        textAlign: TextAlign.end,
+                                        readOnly: false, // Cho phép nhập tay
+                                        // 1. Style cho MẬT KHẨU NHẬP VÀO (Xanh + Đậm)
+                                        style: const TextStyle(
+                                          color: AppColors.primary,
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 16,
+                                          fontFamily: 'Inter',
+                                        ),
+
+                                        decoration: const InputDecoration(
+                                          hintText: 'Enter password',
+
+                                          // 2. Style cho CHỮ GỢI Ý (Enter password)
+                                          // Đã chỉnh lên w500 để đậm hơn, giống với trường Email
+                                          hintStyle: TextStyle(
+                                            color: Color(0xFFBDC6DE),
+                                            fontSize: 16,
+                                            fontWeight: FontWeight
+                                                .w500, // Tăng độ đậm lên Medium
+                                            fontFamily: 'Inter',
+                                          ),
+
+                                          border: InputBorder.none,
+                                          contentPadding: EdgeInsets.zero,
+                                          isDense: true,
+                                        ),
                                       ),
-                                      size: 20,
-                                      color: const Color(0xFF9CA3AF), // Màu xám
                                     ),
-                                  ),
+                                    const SizedBox(width: 8),
+                                    InkWell(
+                                      onTap: _generateRandomPassword,
+                                      borderRadius: BorderRadius.circular(20),
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(4.0),
+                                        child: Icon(
+                                          PhosphorIcons.arrowsClockwise(
+                                            PhosphorIconsStyle.regular,
+                                          ),
+                                          size: 20,
+                                          color: const Color(0xFF9CA3AF),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
                           ],
                         ),
+                      ),
+                      const SizedBox(height: 24),
 
-                        // ---------------------------------------------------
-                        const SizedBox(height: 8),
-                        const Text(
-                          '*Default password is 123456. User must change it upon login.',
-                          style: TextStyle(
-                            color: Colors.black54,
-                            fontSize: 12,
-                            fontStyle: FontStyle.italic,
+                      _buildSectionTitle('ORGANIZATION'),
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: _buildBlockDecoration(),
+                        child: Column(
+                          children: [
+                            _buildSelectorItem(
+                              label: 'Department',
+                              value: _selectedDepartment?.name ?? 'Select Dept',
+                              isPlaceholder: _selectedDepartment == null,
+                              onTap: _showDepartmentSelector,
+                            ),
+                            const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 16),
+                              child: Divider(
+                                height: 1,
+                                color: Color(0xFFF1F5F9),
+                              ),
+                            ),
+                            _buildSelectorItem(
+                              label: 'Role',
+                              value: _selectedRole ?? 'Select Role',
+                              isPlaceholder: _selectedRole == null,
+                              onTap: _showRoleSelector,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 32),
+
+                      SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: ElevatedButton(
+                          onPressed: _isLoading ? null : _handleCreateEmployee,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            disabledBackgroundColor: AppColors.primary
+                                .withOpacity(0.6),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(25),
+                            ),
+                            elevation: 4,
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  // 5. Organization
-                  _buildSectionTitle('ORGANIZATION'),
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: _buildBlockDecoration(),
-                    child: Column(
-                      children: [
-                        _buildSelectorItem(
-                          label: 'Department',
-                          value: _selectedDepartment ?? 'Select Dept',
-                          isPlaceholder: _selectedDepartment == null,
-                          onTap: _showDepartmentSelector,
-                        ),
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 16),
-                          child: Divider(height: 1, color: Color(0xFFF1F5F9)),
-                        ),
-                        _buildSelectorItem(
-                          label: 'Role',
-                          value: _selectedRole ?? 'Select Role',
-                          isPlaceholder: _selectedRole == null,
-                          onTap: _showRoleSelector,
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 32),
-
-                  // 6. Create Button
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton(
-                      onPressed: () {
-                        // TODO: Handle Create Logic
-                        Navigator.pop(context);
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(25),
-                        ),
-                        elevation: 4,
-                      ),
-                      child: const Text(
-                        'Create Employee',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
+                          child: _isLoading
+                              ? const SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Text(
+                                  'Create Employee',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
                         ),
                       ),
-                    ),
+                      const SizedBox(height: 40),
+                    ],
                   ),
-                  const SizedBox(height: 40),
-                ],
+                ),
               ),
             ),
           ),
-        ),
+          if (_isLoading)
+            Container(
+              color: Colors.black.withOpacity(0.3),
+              child: const Center(
+                child: CircularProgressIndicator(color: Colors.white),
+              ),
+            ),
+        ],
       ),
     );
   }
-
-  // --- UI COMPONENTS ---
 
   Widget _buildSectionTitle(String title) {
     return Text(
@@ -532,11 +714,10 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
                 ),
               ),
               const SizedBox(width: 8),
-
               const Icon(
                 Icons.arrow_forward_ios,
                 size: 16,
-                color: Color(0xFFBDC6DE), // Màu xám nhạt
+                color: Color(0xFFBDC6DE),
               ),
             ],
           ),

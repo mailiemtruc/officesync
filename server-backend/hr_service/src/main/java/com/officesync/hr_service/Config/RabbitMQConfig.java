@@ -1,6 +1,8 @@
 package com.officesync.hr_service.Config;
-
+import org.springframework.amqp.core.Binding;
+import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.Queue;
+import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
@@ -43,5 +45,51 @@ public class RabbitMQConfig {
         RabbitTemplate rabbitTemplate = new RabbitTemplate(connectionFactory);
         rabbitTemplate.setMessageConverter(converter);
         return rabbitTemplate;
+    }
+
+    // =========================================================
+    // CẤU HÌNH MỚI CHO CHIỀU: HR -> CORE
+    // =========================================================
+    
+    public static final String EMPLOYEE_EXCHANGE = "employee.exchange";
+    public static final String EMPLOYEE_ROUTING_KEY = "employee.create";
+    public static final String EMPLOYEE_QUEUE = "employee.create.queue";
+    public static final String EMPLOYEE_UPDATE_ROUTING_KEY = "employee.update";
+    public static final String EMPLOYEE_ROUTING_WILDCARD = "employee.#";
+    public static final String FILE_EXCHANGE = "file.exchange"; // Hoặc dùng chung employee.exchange cũng được
+    public static final String FILE_DELETE_ROUTING_KEY = "file.delete";
+    public static final String FILE_DELETE_QUEUE = "file.delete.queue";
+    @Bean
+    public TopicExchange employeeExchange() {
+        return new TopicExchange(EMPLOYEE_EXCHANGE);
+    }
+
+    @Bean
+    public Queue employeeQueue() {
+        return new Queue(EMPLOYEE_QUEUE);
+    }
+
+    @Bean
+    public Binding employeeBinding(Queue employeeQueue, TopicExchange employeeExchange) {
+        return BindingBuilder.bind(employeeQueue)
+                .to(employeeExchange)
+                .with(EMPLOYEE_ROUTING_WILDCARD);
+    }
+
+
+
+    @Bean
+    public Queue fileDeleteQueue() {
+        return new Queue(FILE_DELETE_QUEUE);
+    }
+    
+    @Bean 
+    public TopicExchange fileExchange() {
+        return new TopicExchange(FILE_EXCHANGE);
+    }
+
+    @Bean
+    public Binding fileBinding(Queue fileDeleteQueue, TopicExchange fileExchange) {
+        return BindingBuilder.bind(fileDeleteQueue).to(fileExchange).with(FILE_DELETE_ROUTING_KEY);
     }
 }

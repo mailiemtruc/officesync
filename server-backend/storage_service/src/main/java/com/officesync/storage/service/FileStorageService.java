@@ -51,4 +51,14 @@ public class FileStorageService {
             throw new RuntimeException("Could not upload file: " + ex.getMessage());
         }
     }
+
+    // [MỚI] Hàm xóa file
+    public void deleteFile(String fileName) {
+        try {
+            Path filePath = this.fileStorageLocation.resolve(fileName).normalize();
+            Files.deleteIfExists(filePath);
+        } catch (IOException ex) {
+            throw new RuntimeException("File not found " + fileName, ex);
+        }
+    }
 }

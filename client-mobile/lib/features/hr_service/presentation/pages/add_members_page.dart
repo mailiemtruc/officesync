@@ -6,87 +6,65 @@ import '../../widgets/employee_card.widget.dart';
 import '../../widgets/employee_bottom_sheet.dart';
 
 class AddMembersPage extends StatefulWidget {
-  final List<Employee> alreadySelectedMembers;
-  const AddMembersPage({super.key, required this.alreadySelectedMembers});
+  final List<EmployeeModel> alreadySelectedMembers;
+  final List<EmployeeModel> availableEmployees; // Nhận danh sách đã lọc
+
+  const AddMembersPage({
+    super.key,
+    required this.alreadySelectedMembers,
+    required this.availableEmployees,
+  });
 
   @override
   State<AddMembersPage> createState() => _AddMembersPageState();
 }
 
 class _AddMembersPageState extends State<AddMembersPage> {
-  final List<Employee> _allEmployees = [
-    Employee(
-      id: "012",
-      name: "Nguyen Van Cuong",
-      role: "Unassigned",
-      department: "",
-      imageUrl: "https://i.pravatar.cc/150?img=12",
-    ),
-    Employee(
-      id: "067",
-      name: "Tran Thi Trang",
-      role: "Unassigned",
-      department: "",
-      imageUrl: "https://i.pravatar.cc/150?img=5",
-    ),
-    Employee(
-      id: "017",
-      name: "Nguyen Van J",
-      role: "Staff",
-      department: "Technical",
-      imageUrl: "https://i.pravatar.cc/150?img=15",
-      isLocked: true,
-    ), // User bị khóa
-    Employee(
-      id: "061",
-      name: "Nguyen Van K",
-      role: "Staff",
-      department: "Human resource",
-      imageUrl: "https://i.pravatar.cc/150?img=60",
-    ),
-  ];
-
   late Set<String> _selectedIds;
+  late List<EmployeeModel> _displayList;
   String _currentFilter = 'All';
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _selectedIds = widget.alreadySelectedMembers.map((e) => e.id).toSet();
+    _selectedIds = widget.alreadySelectedMembers.map((e) => e.id!).toSet();
+    _displayList = widget.availableEmployees;
+    _searchController.addListener(_onSearchChanged);
   }
 
-  void _showEmployeeOptions(Employee emp) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => EmployeeBottomSheet(
-        employee: emp,
-        onToggleLock: () => setState(() {
-          emp.isLocked = !emp.isLocked;
-          // Nếu khóa -> tự động bỏ chọn
-          if (emp.isLocked) _selectedIds.remove(emp.id);
-        }),
-        onDelete: () => setState(() {
-          _allEmployees.removeWhere((e) => e.id == emp.id);
-          _selectedIds.remove(emp.id);
-        }),
-      ),
-    );
+  void _onSearchChanged() {
+    setState(() {}); // Rebuild để filter lại trong getter _filteredEmployees
   }
 
-  List<Employee> get _filteredEmployees {
-    if (_currentFilter == 'Unassigned')
-      return _allEmployees.where((e) => e.role == "Unassigned").toList();
-    return _allEmployees;
+  // Logic lọc hiển thị
+  List<EmployeeModel> get _filteredEmployees {
+    List<EmployeeModel> list = widget.availableEmployees;
+
+    // 1. Filter theo Tab
+    if (_currentFilter == 'Unassigned') {
+      list = list
+          .where((e) => e.role == "Unassigned" || e.departmentName == null)
+          .toList();
+    }
+
+    // 2. Filter theo Search
+    final query = _searchController.text.toLowerCase();
+    if (query.isNotEmpty) {
+      list = list.where((e) {
+        final name = e.fullName.toLowerCase();
+        return name.contains(query);
+      }).toList();
+    }
+
+    return list;
   }
 
   void _toggleSelectAll() {
     setState(() {
-      // Chỉ chọn những người KHÔNG BỊ KHÓA
       final availableIds = _filteredEmployees
-          .where((e) => !e.isLocked)
-          .map((e) => e.id)
+          .where((e) => e.status != "LOCKED")
+          .map((e) => e.id!)
           .toList();
 
       if (_selectedIds.containsAll(availableIds)) {
@@ -99,12 +77,14 @@ class _AddMembersPageState extends State<AddMembersPage> {
 
   @override
   Widget build(BuildContext context) {
-    final availableEmployees = _filteredEmployees
-        .where((e) => !e.isLocked)
+    final currentList = _filteredEmployees;
+    final validMembers = currentList
+        .where((e) => e.status != "LOCKED")
         .toList();
+
     final isAllSelected =
-        availableEmployees.isNotEmpty &&
-        _selectedIds.containsAll(availableEmployees.map((e) => e.id));
+        validMembers.isNotEmpty &&
+        _selectedIds.containsAll(validMembers.map((e) => e.id));
 
     return Scaffold(
       backgroundColor: const Color(0xFFF9F9F9),
@@ -145,7 +125,7 @@ class _AddMembersPageState extends State<AddMembersPage> {
                   ),
                 ),
                 const SizedBox(height: 24),
-                // Search & Filter (Đồng bộ)
+                // Search & Filter
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: Row(
@@ -176,7 +156,7 @@ class _AddMembersPageState extends State<AddMembersPage> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text(
-                        'AVAILABLE EMPLOYEES',
+                        'AVAILABLE STAFF',
                         style: TextStyle(
                           color: Color(0xFF6B7280),
                           fontSize: 14,
@@ -203,35 +183,25 @@ class _AddMembersPageState extends State<AddMembersPage> {
                 Expanded(
                   child: ListView.builder(
                     padding: const EdgeInsets.symmetric(horizontal: 24),
-                    itemCount: _filteredEmployees.length,
+                    itemCount: currentList.length,
                     itemBuilder: (context, index) {
-                      final emp = _filteredEmployees[index];
+                      final emp = currentList[index];
                       final isSelected = _selectedIds.contains(emp.id);
+                      final isLocked = emp.status == "LOCKED";
 
                       return EmployeeCard(
-                        name: emp.name,
-                        employeeId: emp.id,
-                        role: emp.role,
-                        department: emp.department,
-                        imageUrl: emp.imageUrl,
-                        isLocked: emp.isLocked,
+                        employee: emp,
                         isSelected: isSelected,
-
-                        // Nếu bị khóa -> onTap là null
-                        onTap: emp.isLocked
+                        onTap: isLocked
                             ? null
                             : () {
                                 setState(() {
                                   if (isSelected)
                                     _selectedIds.remove(emp.id);
                                   else
-                                    _selectedIds.add(emp.id);
+                                    _selectedIds.add(emp.id!);
                                 });
                               },
-
-                        onMenuTap: () => _showEmployeeOptions(emp),
-
-                        // Widget chọn: Checkbox
                         selectionWidget: Container(
                           width: 24,
                           height: 24,
@@ -247,7 +217,7 @@ class _AddMembersPageState extends State<AddMembersPage> {
                               width: 1.5,
                             ),
                           ),
-                          child: isSelected && !emp.isLocked
+                          child: isSelected && !isLocked
                               ? const Icon(
                                   Icons.check,
                                   size: 16,
@@ -268,7 +238,8 @@ class _AddMembersPageState extends State<AddMembersPage> {
                     height: 50,
                     child: ElevatedButton(
                       onPressed: () {
-                        final result = _allEmployees
+                        // Trả về danh sách full object
+                        final result = widget.availableEmployees
                             .where((e) => _selectedIds.contains(e.id))
                             .toList();
                         Navigator.pop(context, result);
@@ -321,7 +292,6 @@ class _AddMembersPageState extends State<AddMembersPage> {
     );
   }
 
-  // (Widget search & filter giống trang select manager)
   Widget _buildSearchBar() => Container(
     height: 45,
     decoration: BoxDecoration(
@@ -330,6 +300,7 @@ class _AddMembersPageState extends State<AddMembersPage> {
       border: Border.all(color: const Color(0xFFE0E0E0)),
     ),
     child: TextField(
+      controller: _searchController,
       decoration: InputDecoration(
         hintText: 'Search name, employee ID...',
         hintStyle: const TextStyle(
@@ -347,27 +318,21 @@ class _AddMembersPageState extends State<AddMembersPage> {
       ),
     ),
   );
-  Widget _buildFilterButton() => Container(
-    width: 45,
-    height: 45,
-    decoration: BoxDecoration(
-      color: const Color(0xFFF5F5F5),
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: const Color(0xFFE0E0E0)),
-    ),
-    child: Material(
-      color: Colors.transparent,
-      child: InkWell(
+
+  Widget _buildFilterButton() {
+    // Giữ nguyên UI cũ
+    return Container(
+      width: 45,
+      height: 45,
+      decoration: BoxDecoration(
+        color: const Color(0xFFF5F5F5),
         borderRadius: BorderRadius.circular(12),
-        onTap: () {},
-        child: Icon(
-          PhosphorIcons.funnel(PhosphorIconsStyle.regular),
-          color: const Color(0xFF555252),
-          size: 20,
-        ),
+        border: Border.all(color: const Color(0xFFE0E0E0)),
       ),
-    ),
-  );
+      child: const Icon(Icons.filter_list, color: Color(0xFF555252)),
+    );
+  }
+
   Widget _buildTabButton(String label) {
     bool isSelected = _currentFilter == label;
     return GestureDetector(

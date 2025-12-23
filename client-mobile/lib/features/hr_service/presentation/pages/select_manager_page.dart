@@ -7,58 +7,61 @@ import '../../widgets/employee_bottom_sheet.dart';
 
 class SelectManagerPage extends StatefulWidget {
   final String? selectedId;
-  const SelectManagerPage({super.key, this.selectedId});
+  final List<EmployeeModel> availableEmployees; // Nhận danh sách từ bên ngoài
+
+  const SelectManagerPage({
+    super.key,
+    this.selectedId,
+    required this.availableEmployees,
+  });
 
   @override
   State<SelectManagerPage> createState() => _SelectManagerPageState();
 }
 
 class _SelectManagerPageState extends State<SelectManagerPage> {
-  final List<Employee> _employees = [
-    Employee(
-      id: "002",
-      name: "Tran Thi B",
-      role: "Staff",
-      department: "Human resource",
-      imageUrl: "https://i.pravatar.cc/150?img=5",
-    ),
-    Employee(
-      id: "001",
-      name: "Nguyen Van A",
-      role: "Manager",
-      department: "Business",
-      imageUrl: "https://i.pravatar.cc/150?img=11",
-    ),
-    Employee(
-      id: "003",
-      name: "Nguyen Van C",
-      role: "Staff",
-      department: "Technical",
-      imageUrl: "https://i.pravatar.cc/150?img=3",
-      isLocked: true,
-    ), // User bị khóa
-    Employee(
-      id: "004",
-      name: "Nguyen Van E",
-      role: "Manager",
-      department: "Human resource",
-      imageUrl: "https://i.pravatar.cc/150?img=8",
-    ),
-  ];
+  // Biến để search
+  late List<EmployeeModel> _displayList;
+  final TextEditingController _searchController = TextEditingController();
 
-  void _showEmployeeOptions(Employee emp) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => EmployeeBottomSheet(
-        employee: emp,
-        onToggleLock: () => setState(() => emp.isLocked = !emp.isLocked),
-        onDelete: () =>
-            setState(() => _employees.removeWhere((e) => e.id == emp.id)),
-      ),
-    );
+  @override
+  void initState() {
+    super.initState();
+    _displayList = widget.availableEmployees;
+    _searchController.addListener(_onSearchChanged);
   }
+
+  void _onSearchChanged() {
+    final query = _searchController.text.toLowerCase();
+    setState(() {
+      _displayList = widget.availableEmployees.where((emp) {
+        final name = emp.fullName.toLowerCase();
+        final id = (emp.id ?? "").toLowerCase();
+        return name.contains(query) || id.contains(query);
+      }).toList();
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  // void _showEmployeeOptions(EmployeeModel emp) {
+  //   // Logic hiển thị bottom sheet (giữ nguyên UI, chỉ đổi Model)
+  //   showModalBottomSheet(
+  //     context: context,
+  //     isScrollControlled: true,
+  //     backgroundColor: Colors.transparent,
+  //     builder: (context) => EmployeeBottomSheet(
+  //       employee: emp,
+  //       onToggleLock:
+  //           () {}, // Tạm thời disable logic lock ở đây nếu không cần thiết
+  //       onDelete: () {},
+  //     ),
+  //   );
+  // }
 
   @override
   Widget build(BuildContext context) {
@@ -102,7 +105,7 @@ class _SelectManagerPageState extends State<SelectManagerPage> {
                 ),
                 const SizedBox(height: 24),
 
-                // Search & Filter (ĐÃ ĐỒNG BỘ STYLE)
+                // Search & Filter
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: Row(
@@ -120,7 +123,7 @@ class _SelectManagerPageState extends State<SelectManagerPage> {
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
-                      'ALL EMPLOYEES',
+                      'AVAILABLE STAFF', // Đổi title cho hợp ngữ cảnh
                       style: TextStyle(
                         color: Color(0xFF6B7280),
                         fontSize: 14,
@@ -134,28 +137,20 @@ class _SelectManagerPageState extends State<SelectManagerPage> {
                 Expanded(
                   child: ListView.builder(
                     padding: const EdgeInsets.symmetric(horizontal: 24),
-                    itemCount: _employees.length,
+                    itemCount: _displayList.length,
                     itemBuilder: (context, index) {
-                      final emp = _employees[index];
+                      final emp = _displayList[index];
                       final isSelected = emp.id == widget.selectedId;
+                      final isLocked = emp.status == "LOCKED";
 
                       return EmployeeCard(
-                        name: emp.name,
-                        employeeId: emp.id,
-                        role: emp.role,
-                        department: emp.department,
-                        imageUrl: emp.imageUrl,
-                        isLocked: emp.isLocked,
+                        employee:
+                            emp, // Sử dụng widget EmployeeCard mới đã update
                         isSelected: isSelected,
-
-                        // Nếu bị khóa -> onTap là null (không chọn được)
-                        onTap: emp.isLocked
+                        onTap: isLocked
                             ? null
                             : () => Navigator.pop(context, emp),
-
-                        onMenuTap: () => _showEmployeeOptions(emp),
-
-                        // Widget chọn: Radio Button
+                        // onMenuTap: () => _showEmployeeOptions(emp),
                         selectionWidget: Container(
                           width: 24,
                           height: 24,
@@ -171,8 +166,7 @@ class _SelectManagerPageState extends State<SelectManagerPage> {
                               width: 1.5,
                             ),
                           ),
-                          // Nếu khóa -> không hiện dấu tick kể cả khi (lỡ) chọn
-                          child: isSelected && !emp.isLocked
+                          child: isSelected && !isLocked
                               ? const Icon(
                                   Icons.check,
                                   size: 16,
@@ -192,7 +186,6 @@ class _SelectManagerPageState extends State<SelectManagerPage> {
     );
   }
 
-  // Widget SearchBar (Đồng bộ font/màu)
   Widget _buildSearchBar() {
     return Container(
       height: 45,
@@ -202,18 +195,19 @@ class _SelectManagerPageState extends State<SelectManagerPage> {
         border: Border.all(color: const Color(0xFFE0E0E0), width: 1),
       ),
       child: TextField(
+        controller: _searchController,
         decoration: InputDecoration(
           hintText: 'Search name, employee ID...',
           hintStyle: const TextStyle(
             color: Color(0xFF9E9E9E),
             fontSize: 14,
             fontWeight: FontWeight.w300,
-          ), // Font chuẩn
+          ),
           prefixIcon: Icon(
             PhosphorIcons.magnifyingGlass(),
             color: const Color(0xFF757575),
             size: 20,
-          ), // Icon chuẩn
+          ),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(vertical: 10),
         ),

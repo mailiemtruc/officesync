@@ -1,41 +1,239 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
-// 1. Thêm import thư viện lưu trữ bảo mật
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:intl/intl.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:http/http.dart' as http;
 
 import 'change_password_page.dart';
 import '../../../../core/config/app_colors.dart';
 import 'edit_profile_page.dart';
 
+import '../../domain/repositories/employee_repository_impl.dart';
+import '../../data/datasources/employee_remote_data_source.dart';
+import '../../data/models/employee_model.dart';
+
 class UserProfilePage extends StatefulWidget {
-  const UserProfilePage({super.key});
+  final Map<String, dynamic> userInfo;
+
+  const UserProfilePage({super.key, this.userInfo = const {}});
 
   @override
   State<UserProfilePage> createState() => _UserProfilePageState();
 }
 
 class _UserProfilePageState extends State<UserProfilePage> {
-  // --- 2. HÀM XỬ LÝ LOGOUT ---
-  Future<void> _handleLogout() async {
+  EmployeeModel? _detailedEmployee;
+  bool _isLoadingProfile = false;
+  bool _isUploading = false;
+  final ImagePicker _picker = ImagePicker();
+  final _storage = const FlutterSecureStorage();
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchEmployeeDetail();
+  }
+
+  // --- HÀM HỖ TRỢ ---
+  String _formatDate(String? dateStr) {
+    if (dateStr == null || dateStr.isEmpty || dateStr == 'N/A') return 'N/A';
     try {
-      // Khởi tạo storage
-      const storage = FlutterSecureStorage();
-
-      // Xóa toàn bộ dữ liệu lưu trữ (Token, User Info,...)
-      await storage.deleteAll();
-
-      if (mounted) {
-        // Điều hướng về màn hình Login (hoặc Register như code cũ của bạn)
-        // Lưu ý: Thông thường logout sẽ về '/login', mình để '/login' cho chuẩn luồng,
-        // nếu bạn muốn về register hãy đổi thành '/register'
-        Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+      if (dateStr.startsWith('[')) {
+        final parts = dateStr
+            .replaceAll('[', '')
+            .replaceAll(']', '')
+            .split(',');
+        if (parts.length >= 3) {
+          final year = int.parse(parts[0].trim());
+          final month = int.parse(parts[1].trim());
+          final day = int.parse(parts[2].trim());
+          return DateFormat('dd/MM/yyyy').format(DateTime(year, month, day));
+        }
       }
+      DateTime parsedDate = DateTime.parse(dateStr);
+      return DateFormat('dd/MM/yyyy').format(parsedDate);
     } catch (e) {
-      print("Lỗi khi đăng xuất: $e");
+      return dateStr;
     }
   }
 
-  // Hàm hiện Bottom Sheet chọn ảnh
+  Future<String?> _getUserIdSafe() async {
+    if (widget.userInfo.containsKey('id') && widget.userInfo['id'] != null) {
+      return widget.userInfo['id'].toString();
+    }
+    try {
+      String? userInfoStr = await _storage.read(key: 'user_info');
+      if (userInfoStr != null) {
+        Map<String, dynamic> userMap = jsonDecode(userInfoStr);
+        return userMap['id']?.toString();
+      }
+    } catch (e) {
+      print("Error reading storage: $e");
+    }
+    return null;
+  }
+
+  // --- LOGIC LẤY DATA ---
+  Future<void> _fetchEmployeeDetail() async {
+    setState(() => _isLoadingProfile = true);
+    try {
+      final String? userId = await _getUserIdSafe();
+      if (userId == null) {
+        _handleLogout();
+        return;
+      }
+
+      final repo = EmployeeRepositoryImpl(
+        remoteDataSource: EmployeeRemoteDataSource(),
+      );
+      final employees = await repo.getEmployees(userId);
+
+      String? emailToFind = widget.userInfo['email'];
+      EmployeeModel? found;
+
+      if (emailToFind == null) {
+        found = employees.firstWhere(
+          (e) => e.id == userId,
+          orElse: () => EmployeeModel(
+            id: userId,
+            fullName: 'Unknown',
+            email: 'N/A',
+            phone: '',
+            dateOfBirth: '',
+            role: 'STAFF',
+          ),
+        );
+      } else {
+        found = employees.firstWhere(
+          (e) => e.email == emailToFind,
+          orElse: () => EmployeeModel(
+            id: userId,
+            fullName: 'Unknown',
+            email: emailToFind,
+            phone: '',
+            dateOfBirth: '',
+            role: 'STAFF',
+          ),
+        );
+      }
+
+      if (mounted) {
+        setState(() {
+          _detailedEmployee = found;
+          _isLoadingProfile = false;
+        });
+      }
+    } catch (e) {
+      print("Error fetching profile detail: $e");
+      if (mounted) setState(() => _isLoadingProfile = false);
+    }
+  }
+
+  // --- LOGIC UPLOAD ẢNH ---
+  Future<void> _pickImage(ImageSource source) async {
+    Navigator.pop(context);
+    try {
+      final XFile? image = await _picker.pickImage(
+        source: source,
+        imageQuality: 80,
+      );
+      if (image != null) {
+        _uploadAvatar(File(image.path));
+      }
+    } catch (e) {
+      print("Error picking image: $e");
+    }
+  }
+
+  Future<void> _uploadAvatar(File file) async {
+    setState(() => _isUploading = true);
+    try {
+      // IP 10.0.2.2 cho Emulator, máy thật dùng IP LAN
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse('http://10.0.2.2:8090/api/files/upload'),
+      );
+      request.files.add(await http.MultipartFile.fromPath('file', file.path));
+
+      var streamedResponse = await request.send();
+      var response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = jsonDecode(response.body);
+        String fileUrl = data['url'];
+        print("--> Upload Storage success: $fileUrl");
+        await _updateAvatarUrlInProfile(fileUrl);
+      } else {
+        throw Exception("Upload failed: ${response.body}");
+      }
+    } catch (e) {
+      print("Upload error: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        // [TIẾNG ANH]
+        SnackBar(
+          content: Text("Upload failed: $e"),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isUploading = false);
+    }
+  }
+
+  Future<void> _updateAvatarUrlInProfile(String avatarUrl) async {
+    if (_detailedEmployee == null) return;
+    try {
+      final url = Uri.parse(
+        'http://10.0.2.2:8081/api/employees/${_detailedEmployee!.id}',
+      );
+      final response = await http.put(
+        url,
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({
+          "fullName": _detailedEmployee!.fullName,
+          "phone": _detailedEmployee!.phone,
+          "dateOfBirth": _detailedEmployee!.dateOfBirth,
+          "avatarUrl": avatarUrl,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        print("--> Update HR Profile success!");
+        ScaffoldMessenger.of(context).showSnackBar(
+          // [TIẾNG ANH]
+          const SnackBar(
+            content: Text("Profile picture updated successfully!"),
+            backgroundColor: Colors.green,
+          ),
+        );
+        _fetchEmployeeDetail();
+      } else {
+        if (response.body.contains("No changes detected")) {
+          print("No changes detected.");
+        } else {
+          throw Exception("Update HR failed: ${response.body}");
+        }
+      }
+    } catch (e) {
+      print("Error saving profile: $e");
+    }
+  }
+
+  // --- UI & DIALOGS ---
+  Future<void> _handleLogout() async {
+    try {
+      await _storage.deleteAll();
+      if (mounted) {
+        Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+      }
+    } catch (e) {
+      print("Logout error: $e");
+    }
+  }
+
   void _showImagePickerOptions(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -47,80 +245,71 @@ class _UserProfilePageState extends State<UserProfilePage> {
             color: Colors.white,
             borderRadius: BorderRadius.vertical(top: Radius.circular(27)),
           ),
-          child: Material(
-            color: Colors.transparent,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ListTile(
-                  leading: Icon(
-                    PhosphorIcons.camera(PhosphorIconsStyle.regular),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: Icon(
+                  PhosphorIcons.camera(PhosphorIconsStyle.regular),
+                  color: AppColors.primary,
+                  size: 24,
+                ),
+                // [TIẾNG ANH]
+                title: const Text(
+                  'Take a photo',
+                  style: TextStyle(
                     color: AppColors.primary,
-                    size: 24,
+                    fontSize: 18,
+                    fontFamily: 'Inter',
+                    fontWeight: FontWeight.w600,
                   ),
-                  title: const Text(
-                    'Take photo',
-                    style: TextStyle(
-                      color: AppColors.primary,
-                      fontSize: 20,
-                      fontFamily: 'Inter',
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  onTap: () {
-                    Navigator.pop(context);
-                    print("Profile: Chụp ảnh");
-                  },
                 ),
-                ListTile(
-                  leading: Icon(
-                    PhosphorIcons.image(PhosphorIconsStyle.regular),
+                onTap: () => _pickImage(ImageSource.camera),
+              ),
+              ListTile(
+                leading: Icon(
+                  PhosphorIcons.image(PhosphorIconsStyle.regular),
+                  color: AppColors.primary,
+                  size: 24,
+                ),
+                // [TIẾNG ANH]
+                title: const Text(
+                  'Choose from gallery',
+                  style: TextStyle(
                     color: AppColors.primary,
-                    size: 24,
+                    fontSize: 18,
+                    fontFamily: 'Inter',
+                    fontWeight: FontWeight.w600,
                   ),
-                  title: const Text(
-                    'Choose from Library',
-                    style: TextStyle(
-                      color: AppColors.primary,
-                      fontSize: 20,
-                      fontFamily: 'Inter',
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  onTap: () {
-                    Navigator.pop(context);
-                    print("Profile: Chọn thư viện");
-                  },
                 ),
-                const SizedBox(height: 10),
-                ListTile(
-                  leading: Icon(
-                    PhosphorIcons.x(PhosphorIconsStyle.regular),
-                    color: const Color(0xFFFF0000),
-                    size: 24,
-                  ),
-                  title: const Text(
-                    'Cancel',
-                    style: TextStyle(
-                      color: Color(0xFFFF0000),
-                      fontSize: 20,
-                      fontFamily: 'Inter',
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  onTap: () {
-                    Navigator.pop(context);
-                  },
+                onTap: () => _pickImage(ImageSource.gallery),
+              ),
+              const SizedBox(height: 10),
+              ListTile(
+                leading: Icon(
+                  PhosphorIcons.x(PhosphorIconsStyle.regular),
+                  color: const Color(0xFFFF0000),
+                  size: 24,
                 ),
-              ],
-            ),
+                // [TIẾNG ANH]
+                title: const Text(
+                  'Cancel',
+                  style: TextStyle(
+                    color: Color(0xFFFF0000),
+                    fontSize: 18,
+                    fontFamily: 'Inter',
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                onTap: () => Navigator.pop(context),
+              ),
+            ],
           ),
         );
       },
     );
   }
 
-  // Hàm hiện Bottom Sheet xác nhận đăng xuất
   void _showLogoutConfirmation(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -158,7 +347,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
               const SizedBox(height: 32),
               Row(
                 children: [
-                  // Nút Cancel
                   Expanded(
                     child: SizedBox(
                       height: 50,
@@ -184,16 +372,12 @@ class _UserProfilePageState extends State<UserProfilePage> {
                     ),
                   ),
                   const SizedBox(width: 20),
-
-                  // --- 3. GỌI HÀM LOGOUT TẠI ĐÂY ---
                   Expanded(
                     child: SizedBox(
                       height: 50,
                       child: ElevatedButton(
                         onPressed: () {
-                          // Đóng bottom sheet trước
                           Navigator.pop(context);
-                          // Gọi hàm xử lý logout
                           _handleLogout();
                         },
                         style: ElevatedButton.styleFrom(
@@ -217,7 +401,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
                   ),
                 ],
               ),
-              const SizedBox(height: 10),
             ],
           ),
         );
@@ -227,6 +410,12 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
   @override
   Widget build(BuildContext context) {
+    final fullName =
+        _detailedEmployee?.fullName ?? widget.userInfo['fullName'] ?? 'User';
+    final role =
+        _detailedEmployee?.role ?? widget.userInfo['role'] ?? 'Employee';
+    final avatarUrl = _detailedEmployee?.avatarUrl;
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -240,9 +429,11 @@ class _UserProfilePageState extends State<UserProfilePage> {
             color: AppColors.primary,
             size: 24,
           ),
-          onPressed: () {
-            Navigator.of(context).pop();
-          },
+          onPressed: () => Navigator.pushNamedAndRemoveUntil(
+            context,
+            '/dashboard',
+            (route) => false,
+          ),
         ),
         title: const Text(
           'PERSONAL INFORMATION',
@@ -268,12 +459,25 @@ class _UserProfilePageState extends State<UserProfilePage> {
                 child: Column(
                   children: [
                     _HeaderSection(
+                      fullName: fullName,
+                      role: role,
+                      avatarUrl: avatarUrl,
+                      isUploading: _isUploading,
                       onCameraTap: () => _showImagePickerOptions(context),
                     ),
                     const SizedBox(height: 24),
-                    const _InfoSection(),
+                    _isLoadingProfile
+                        ? const Padding(
+                            padding: EdgeInsets.all(20.0),
+                            child: CircularProgressIndicator(),
+                          )
+                        : _InfoSection(
+                            userInfo: widget.userInfo,
+                            detailedEmployee: _detailedEmployee,
+                            dateFormatter: _formatDate,
+                            onRefresh: _fetchEmployeeDetail,
+                          ),
                     const SizedBox(height: 24),
-                    // Truyền callback để mở popup xác nhận logout
                     _ActionSection(
                       onLogoutTap: () => _showLogoutConfirmation(context),
                     ),
@@ -289,17 +493,23 @@ class _UserProfilePageState extends State<UserProfilePage> {
   }
 }
 
-// ... Các class widget con (_HeaderSection, _InfoSection, _ActionSection, _InfoRow)
-// giữ nguyên như cũ, không cần thay đổi gì.
-// Chỉ cần đảm bảo class _ActionSection vẫn nhận tham số onLogoutTap như code trước.
-
 class _HeaderSection extends StatelessWidget {
   final VoidCallback? onCameraTap;
-  const _HeaderSection({this.onCameraTap});
-  // ... (Code giữ nguyên)
+  final String fullName;
+  final String role;
+  final String? avatarUrl;
+  final bool isUploading;
+
+  const _HeaderSection({
+    this.onCameraTap,
+    required this.fullName,
+    required this.role,
+    this.avatarUrl,
+    this.isUploading = false,
+  });
+
   @override
   Widget build(BuildContext context) {
-    // ... (Code giữ nguyên)
     return Column(
       children: [
         Stack(
@@ -312,15 +522,31 @@ class _HeaderSection extends StatelessWidget {
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.1),
-                    blurRadius: 0,
+                    blurRadius: 10,
                     offset: const Offset(0, 4),
                   ),
                 ],
-                border: Border.all(color: const Color(0xFFF5F5F5), width: 3),
-                image: const DecorationImage(
-                  image: NetworkImage("https://placehold.co/190x178"),
-                  fit: BoxFit.cover,
-                ),
+                color: const Color(0xFFE2E8F0),
+              ),
+              child: ClipOval(
+                child: isUploading
+                    ? const Padding(
+                        padding: EdgeInsets.all(35),
+                        child: CircularProgressIndicator(strokeWidth: 3),
+                      )
+                    : (avatarUrl != null && avatarUrl!.isNotEmpty)
+                    ? Image.network(
+                        avatarUrl!,
+                        fit: BoxFit.cover,
+                        width: 110,
+                        height: 110,
+                        errorBuilder: (ctx, err, stack) => const Icon(
+                          Icons.person,
+                          size: 60,
+                          color: Colors.grey,
+                        ),
+                      )
+                    : const Icon(Icons.person, size: 60, color: Colors.grey),
               ),
             ),
             Positioned(
@@ -348,9 +574,10 @@ class _HeaderSection extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 12),
-        const Text(
-          'Nguyen Van A',
-          style: TextStyle(
+        Text(
+          fullName,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
             color: Colors.black,
             fontSize: 22,
             fontFamily: 'Inter',
@@ -358,9 +585,9 @@ class _HeaderSection extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 4),
-        const Text(
-          'Employee',
-          style: TextStyle(
+        Text(
+          role,
+          style: const TextStyle(
             color: Color(0xFF6A6A6A),
             fontSize: 15,
             fontFamily: 'Inter',
@@ -373,10 +600,27 @@ class _HeaderSection extends StatelessWidget {
 }
 
 class _InfoSection extends StatelessWidget {
-  const _InfoSection();
+  final Map<String, dynamic> userInfo;
+  final EmployeeModel? detailedEmployee;
+  final String Function(String?) dateFormatter;
+  final VoidCallback onRefresh;
+
+  const _InfoSection({
+    required this.userInfo,
+    this.detailedEmployee,
+    required this.dateFormatter,
+    required this.onRefresh,
+  });
+
   @override
   Widget build(BuildContext context) {
-    // ... (Code giữ nguyên như file gốc bạn gửi)
+    final email = detailedEmployee?.email ?? userInfo['email'] ?? 'N/A';
+    final phone = detailedEmployee?.phone ?? userInfo['mobileNumber'] ?? 'N/A';
+    final rawDob = detailedEmployee?.dateOfBirth ?? userInfo['dateOfBirth'];
+    final formattedDob = dateFormatter(rawDob);
+    final empCodeDisplay = detailedEmployee?.employeeCode ?? 'N/A';
+    final deptDisplay = detailedEmployee?.departmentName ?? 'Not Assigned';
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -399,31 +643,31 @@ class _InfoSection extends StatelessWidget {
                 _InfoRow(
                   icon: PhosphorIcons.envelopeSimple(),
                   label: 'Email',
-                  value: 'nguyenvana@gmail.com',
+                  value: email,
                 ),
                 const SizedBox(height: 24),
                 _InfoRow(
                   icon: PhosphorIcons.phone(),
                   label: 'Phone',
-                  value: '0909123456',
+                  value: phone,
                 ),
                 const SizedBox(height: 24),
                 _InfoRow(
                   icon: PhosphorIcons.buildings(),
                   label: 'Department',
-                  value: 'Business',
+                  value: deptDisplay,
                 ),
                 const SizedBox(height: 24),
                 _InfoRow(
                   icon: PhosphorIcons.identificationCard(),
-                  label: 'Employee ID',
-                  value: '001',
+                  label: 'Employee Code',
+                  value: empCodeDisplay,
                 ),
                 const SizedBox(height: 24),
                 _InfoRow(
                   icon: PhosphorIcons.calendarBlank(),
                   label: 'Date of Birth',
-                  value: '01/10/1997',
+                  value: formattedDob,
                 ),
               ],
             ),
@@ -435,13 +679,24 @@ class _InfoSection extends StatelessWidget {
               color: Colors.transparent,
               child: InkWell(
                 borderRadius: BorderRadius.circular(8),
-                onTap: () {
-                  Navigator.push(
+                onTap: () async {
+                  final currentUser =
+                      detailedEmployee ??
+                      EmployeeModel(
+                        id: userInfo['id'].toString(),
+                        fullName: userInfo['fullName'] ?? '',
+                        email: userInfo['email'] ?? '',
+                        phone: userInfo['phone'] ?? '',
+                        dateOfBirth: userInfo['dateOfBirth'] ?? '',
+                        role: userInfo['role'] ?? '',
+                      );
+                  final result = await Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => const EditProfilePage(),
+                      builder: (context) => EditProfilePage(user: currentUser),
                     ),
                   );
+                  if (result == true) onRefresh();
                 },
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
@@ -453,7 +708,6 @@ class _InfoSection extends StatelessWidget {
                     style: TextStyle(
                       color: AppColors.primary,
                       fontSize: 15,
-                      fontFamily: 'Inter',
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -470,7 +724,7 @@ class _InfoSection extends StatelessWidget {
 class _ActionSection extends StatelessWidget {
   final VoidCallback? onLogoutTap;
   const _ActionSection({this.onLogoutTap});
-  // ... (Code giữ nguyên như file gốc bạn gửi)
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -491,14 +745,12 @@ class _ActionSection extends StatelessWidget {
           Material(
             color: Colors.transparent,
             child: InkWell(
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const ChangePasswordPage(),
-                  ),
-                );
-              },
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ChangePasswordPage(),
+                ),
+              ),
               borderRadius: const BorderRadius.vertical(
                 top: Radius.circular(32),
               ),
@@ -588,7 +840,6 @@ class _InfoRow extends StatelessWidget {
     required this.label,
     required this.value,
   });
-  // ... (Code giữ nguyên như file gốc bạn gửi)
   @override
   Widget build(BuildContext context) {
     return Row(
