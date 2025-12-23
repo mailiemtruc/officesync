@@ -13,4 +13,6 @@ public interface DepartmentRepository extends JpaRepository<Department, Long> {
 
     // SỬA: Đổi findByCode -> findByDepartmentCode
     Optional<Department> findByDepartmentCode(String departmentCode);
+    // [MỚI] Tìm phòng ban mà nhân viên này đang làm quản lý
+    Optional<Department> findByManagerId(Long managerId);
 }

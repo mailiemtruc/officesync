@@ -33,4 +33,42 @@ class DepartmentRemoteDataSource {
       rethrow;
     }
   }
+
+  // [MỚI] Cập nhật phòng ban
+  Future<bool> updateDepartment(
+    int id,
+    String name,
+    String description,
+    String? managerId,
+  ) async {
+    try {
+      final url = Uri.parse('$baseUrl/$id');
+      final body = {
+        "name": name,
+        "description": description,
+        "managerId": managerId != null ? int.tryParse(managerId) : null,
+      };
+
+      final response = await http.put(
+        url,
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode(body),
+      );
+
+      return response.statusCode == 200;
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  // [MỚI] Xóa phòng ban
+  Future<bool> deleteDepartment(int id) async {
+    try {
+      final url = Uri.parse('$baseUrl/$id');
+      final response = await http.delete(url);
+      return response.statusCode == 200;
+    } catch (e) {
+      rethrow;
+    }
+  }
 }

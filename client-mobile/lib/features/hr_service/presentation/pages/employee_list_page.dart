@@ -13,8 +13,13 @@ import '../../data/datasources/employee_remote_data_source.dart';
 
 import '../../widgets/employee_card.widget.dart';
 import '../../widgets/department_card.widget.dart';
+// [MỚI] Import BottomSheet của Department
+import '../../widgets/department_bottom_sheet.dart';
+
 import 'add_employee_page.dart';
 import 'create_department_page.dart';
+// [MỚI] Import trang chi tiết phòng ban nếu cần điều hướng
+import 'department_details_page.dart';
 
 class EmployeeListPage extends StatefulWidget {
   const EmployeeListPage({super.key});
@@ -30,6 +35,12 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
   List<EmployeeModel> _employees = [];
   List<DepartmentModel> _departments = [];
 
+  // [MỚI] Biến lưu ID user hiện tại để ẩn khỏi danh sách
+  String? _currentUserId;
+
+  // [MỚI] Controller cho tìm kiếm
+  final TextEditingController _searchController = TextEditingController();
+
   late final EmployeeRepository _employeeRepository;
   final _storage = const FlutterSecureStorage();
 
@@ -40,18 +51,30 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
       remoteDataSource: EmployeeRemoteDataSource(),
     );
     _fetchData();
+
+    // [MỚI] Lắng nghe sự kiện nhập liệu để reload danh sách hiển thị
+    _searchController.addListener(() {
+      setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   // --- LOGIC GỌI API ---
   Future<void> _fetchData() async {
-    // Chỉ set loading nếu widget vẫn đang hiển thị
     if (mounted) setState(() => _isLoading = true);
 
     try {
+      // Luôn lấy ID hiện tại trước để dùng cho việc filter
+      _currentUserId = await _getCurrentUserId();
+
       if (_isEmployeesTab) {
-        String? currentUserId = await _getCurrentUserId();
-        if (currentUserId != null) {
-          final data = await _employeeRepository.getEmployees(currentUserId);
+        if (_currentUserId != null) {
+          final data = await _employeeRepository.getEmployees(_currentUserId!);
           if (mounted) setState(() => _employees = data);
         }
       } else {
@@ -60,7 +83,6 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
       }
     } catch (e) {
       print("Error fetching data: $e");
-      // Có thể hiện thông báo lỗi nếu cần
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -87,7 +109,6 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
     return null;
   }
 
-  // --- [SỬA] LOGIC ĐIỀU HƯỚNG ---
   Future<void> _navigateToAddPage() async {
     Route<bool> route;
 
@@ -101,13 +122,10 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
       );
     }
 
-    // Chờ kết quả trả về từ trang tạo
     final bool? result = await Navigator.push(context, route);
 
-    // [QUAN TRỌNG] Kiểm tra mounted trước khi gọi hàm refresh
     if (!mounted) return;
 
-    // Nếu tạo thành công (result == true), load lại dữ liệu
     if (result == true) {
       _fetchData();
     }
@@ -123,6 +141,22 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
     } else if (index == 2) {
       Navigator.pushNamed(context, '/user_profile');
     }
+  }
+
+  // [MỚI] Hàm hiển thị BottomSheet cho Department
+  void _showDepartmentOptions(DepartmentModel dept) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => DepartmentBottomSheet(
+        department: dept,
+        onDeleteSuccess: () {
+          // Callback: Reload dữ liệu sau khi xóa/sửa thành công
+          _fetchData();
+        },
+      ),
+    );
   }
 
   @override
@@ -153,7 +187,6 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
                 _buildSearchAndFilter(),
                 const SizedBox(height: 20),
 
-                // NỘI DUNG DANH SÁCH
                 Expanded(
                   child: _isLoading
                       ? const Center(child: CircularProgressIndicator())
@@ -173,17 +206,33 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
   }
 
   Widget _buildEmployeeList() {
-    if (_employees.isEmpty) {
+    // [LOGIC MỚI] Filter danh sách theo Search Text và ẩn User hiện tại
+    final String query = _searchController.text.toLowerCase();
+
+    final filteredList = _employees.where((emp) {
+      // 1. Ẩn user đang đăng nhập
+      if (emp.id == _currentUserId) return false;
+
+      // 2. Tìm kiếm theo Tên hoặc Mã nhân viên
+      final nameMatches = emp.fullName.toLowerCase().contains(query);
+      final codeMatches = (emp.employeeCode ?? '').toLowerCase().contains(
+        query,
+      );
+
+      return nameMatches || codeMatches;
+    }).toList();
+
+    if (filteredList.isEmpty) {
       return _buildEmptyState("No employees found.");
     }
 
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-      itemCount: _employees.length,
+      itemCount: filteredList.length,
       itemBuilder: (context, index) {
-        final emp = _employees[index];
+        final emp = filteredList[index];
         return Padding(
-          padding: index == _employees.length - 1
+          padding: index == filteredList.length - 1
               ? const EdgeInsets.only(bottom: 80)
               : EdgeInsets.zero,
           child: EmployeeCard(
@@ -197,30 +246,48 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
   }
 
   Widget _buildDepartmentList() {
-    if (_departments.isEmpty) {
+    // [LOGIC MỚI] Filter danh sách phòng ban theo Search Text
+    final String query = _searchController.text.toLowerCase();
+
+    final filteredList = _departments.where((dept) {
+      // Tìm kiếm theo Tên hoặc Mã phòng ban (property code)
+      final nameMatches = dept.name.toLowerCase().contains(query);
+      final codeMatches = (dept.code ?? '').toLowerCase().contains(query);
+      return nameMatches || codeMatches;
+    }).toList();
+
+    if (filteredList.isEmpty) {
       return _buildEmptyState("No departments found.");
     }
 
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-      itemCount: _departments.length,
+      itemCount: filteredList.length,
       itemBuilder: (context, index) {
-        final dept = _departments[index];
+        final dept = filteredList[index];
         return Padding(
-          padding: index == _departments.length - 1
+          padding: index == filteredList.length - 1
               ? const EdgeInsets.only(bottom: 80)
               : EdgeInsets.zero,
           child: DepartmentCard(
             department: dept,
-            onMenuTap: () => _showOptions(context, "Department: ${dept.name}"),
-            onTap: () {},
+            // [SỬA] Gọi hàm hiển thị BottomSheet thay vì hàm hiển thị text
+            onMenuTap: () => _showDepartmentOptions(dept),
+            // [MỚI] Thêm điều hướng sang trang chi tiết khi nhấn vào card
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => DepartmentDetailsPage(department: dept),
+                ),
+              ).then((_) => _fetchData()); // Refresh khi quay về
+            },
           ),
         );
       },
     );
   }
 
-  // Helper hiển thị trạng thái rỗng đẹp hơn để biết không phải lỗi render
   Widget _buildEmptyState(String message) {
     return Center(
       child: Column(
@@ -237,7 +304,7 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
     );
   }
 
-  // --- CÁC WIDGET CON KHÁC (GIỮ NGUYÊN) ---
+  // Hàm cũ dùng cho Employee (giữ nguyên hoặc nâng cấp sau)
   void _showOptions(BuildContext context, String title) {
     showModalBottomSheet(
       context: context,
@@ -348,7 +415,9 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
           if (_isEmployeesTab != isEmployeeTab) {
             setState(() {
               _isEmployeesTab = isEmployeeTab;
-              _employees = []; // Reset list để hiện loading
+              // [MỚI] Xóa nội dung tìm kiếm khi chuyển tab
+              _searchController.clear();
+              _employees = [];
               _departments = [];
             });
             _fetchData();
@@ -426,6 +495,7 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
         border: Border.all(color: const Color(0xFFE0E0E0), width: 1),
       ),
       child: TextField(
+        controller: _searchController, // [MỚI] Gắn controller vào
         decoration: InputDecoration(
           hintText: hint,
           hintStyle: const TextStyle(

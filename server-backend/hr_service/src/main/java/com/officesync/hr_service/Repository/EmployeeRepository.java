@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import com.officesync.hr_service.Model.Employee;
@@ -22,4 +23,11 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
  
    // [MỚI] Thêm hàm này để lấy danh sách nhân viên theo công ty
     List<Employee> findByCompanyId(Long companyId);
+
+    // Tìm theo Tên hoặc Mã nhân viên (không phân biệt hoa thường)
+ List<Employee> findByFullNameContainingIgnoreCaseOrEmployeeCodeContainingIgnoreCase(String name, String code);
+
+// Tìm theo Công ty (có search)
+@Query("SELECT e FROM Employee e WHERE e.companyId = :companyId AND (LOWER(e.fullName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR LOWER(e.employeeCode) LIKE LOWER(CONCAT('%', :keyword, '%')))")
+List<Employee> searchEmployees(Long companyId, String keyword);
 }

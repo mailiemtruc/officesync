@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -75,5 +76,34 @@ public class DepartmentController {
         Long employeeId = payload.get("employeeId");
         Department updated = departmentService.assignManager(deptId, employeeId);
         return ResponseEntity.ok(updated);
+    }
+
+    @Data
+    public static class UpdateDepartmentRequest {
+        private String name;
+        private String description;
+        private Long managerId;
+    }
+
+    // [MỚI] API Cập nhật
+    @PutMapping("/{id}")
+    public ResponseEntity<Department> updateDepartment(
+            @PathVariable Long id,
+            @RequestBody UpdateDepartmentRequest request
+    ) {
+        Department updated = departmentService.updateDepartment(
+            id, 
+            request.getName(), 
+            request.getDescription(), 
+            request.getManagerId()
+        );
+        return ResponseEntity.ok(updated);
+    }
+
+    // [MỚI] API Xóa
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> deleteDepartment(@PathVariable Long id) {
+        departmentService.deleteDepartment(id);
+        return ResponseEntity.ok(Map.of("message", "Department deleted successfully"));
     }
 }

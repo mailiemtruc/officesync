@@ -35,8 +35,8 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
   List<EmployeeModel> _selectedMembers = [];
   bool _isLoading = false;
 
-  // Dữ liệu danh sách nhân viên để lọc
-  List<EmployeeModel> _allEmployees = [];
+  // [ĐÃ SỬA] Đổi tên biến này thành _availableEmployees để khớp với logic bên dưới
+  List<EmployeeModel> _availableEmployees = [];
 
   late final DepartmentRepository _departmentRepository;
   late final EmployeeRepository _employeeRepository;
@@ -63,7 +63,8 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
         final emps = await _employeeRepository.getEmployees(currentUserId);
         if (mounted) {
           setState(() {
-            _allEmployees = emps;
+            // [ĐÃ SỬA] Cập nhật vào biến đúng
+            _availableEmployees = emps;
           });
         }
       }
@@ -100,8 +101,9 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
 
     try {
       String? currentUserId = await _getCurrentUserId();
-      if (currentUserId == null)
+      if (currentUserId == null) {
         throw Exception("Session expired. Please login again.");
+      }
 
       List<String> memberIds = _selectedMembers.map((e) => e.id!).toList();
 
@@ -140,11 +142,17 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
     }
   }
 
+  // --- LOGIC CHỌN QUẢN LÝ ---
   Future<void> _pickManager() async {
-    final staffOnly = _allEmployees.where((e) {
-      bool isStaff = e.role == 'STAFF';
-      bool notInMembers = !_selectedMembers.any((m) => m.id == e.id);
-      return isStaff && notInMembers;
+    // 1. Lọc danh sách ứng viên làm Manager
+    // [ĐÃ KHỚP] Biến _availableEmployees giờ đã được khai báo đúng
+    final candidates = _availableEmployees.where((e) {
+      // RULE 1: Không phải Admin
+      bool isNotAdmin = e.role != 'COMPANY_ADMIN';
+      // RULE 2: Phải đang hoạt động
+      bool isActive = e.status == 'ACTIVE';
+
+      return isNotAdmin && isActive;
     }).toList();
 
     final result = await Navigator.push(
@@ -152,21 +160,44 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
       MaterialPageRoute(
         builder: (context) => SelectManagerPage(
           selectedId: _selectedManager?.id,
-          availableEmployees: staffOnly,
+          availableEmployees: candidates,
         ),
       ),
     );
 
     if (result != null && result is EmployeeModel) {
-      setState(() => _selectedManager = result);
+      setState(() {
+        _selectedManager = result;
+
+        // [QUAN TRỌNG] Logic loại trừ lẫn nhau (Mutual Exclusion)
+        if (_selectedMembers.any((m) => m.id == result.id)) {
+          _selectedMembers.removeWhere((m) => m.id == result.id);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                '${result.fullName} has been removed from members list to be Manager.',
+              ),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      });
     }
   }
 
+  // --- LOGIC CHỌN THÀNH VIÊN ---
   Future<void> _pickMembers() async {
-    final staffOnly = _allEmployees.where((e) {
-      bool isStaff = e.role == 'STAFF';
-      bool isNotManager = (e.id != _selectedManager?.id);
-      return isStaff && isNotManager;
+    final candidates = _availableEmployees.where((e) {
+      bool isNotAdmin = e.role != 'COMPANY_ADMIN';
+      bool isActive = e.status == 'ACTIVE';
+
+      // [QUAN TRỌNG] Không được hiện người đang được chọn làm Manager
+      bool isNotSelectedManager = true;
+      if (_selectedManager != null) {
+        isNotSelectedManager = e.id != _selectedManager!.id;
+      }
+
+      return isNotAdmin && isActive && isNotSelectedManager;
     }).toList();
 
     final result = await Navigator.push(
@@ -174,13 +205,15 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
       MaterialPageRoute(
         builder: (context) => AddMembersPage(
           alreadySelectedMembers: _selectedMembers,
-          availableEmployees: staffOnly,
+          availableEmployees: candidates,
         ),
       ),
     );
 
     if (result != null && result is List<EmployeeModel>) {
-      setState(() => _selectedMembers = result);
+      setState(() {
+        _selectedMembers = result;
+      });
     }
   }
 
@@ -228,8 +261,7 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
                       ),
                       const SizedBox(height: 32),
 
-                      // --- [CẬP NHẬT] TOP ICON (AVATAR) ---
-                      // Đồng bộ style với AddEmployeePage (Xám/Viền) nhưng giữ Icon Buildings
+                      // Avatar Department
                       Center(
                         child: Container(
                           width: 110,
@@ -237,10 +269,10 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             border: Border.all(
-                              color: const Color(0xFFD8DEEC), // Viền xám nhạt
+                              color: const Color(0xFFD8DEEC),
                               width: 2,
                             ),
-                            color: const Color(0xFFE2E8F0), // Nền xám
+                            color: const Color(0xFFE2E8F0),
                             boxShadow: [
                               BoxShadow(
                                 color: Colors.black.withOpacity(0.1),
@@ -250,11 +282,9 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
                             ],
                           ),
                           child: Icon(
-                            PhosphorIcons.buildings(
-                              PhosphorIconsStyle.fill,
-                            ), // Vẫn giữ icon Buildings
-                            size: 60, // Kích thước đồng bộ với bên Employee
-                            color: const Color(0xFF94A3B8), // Màu icon xám
+                            PhosphorIcons.buildings(PhosphorIconsStyle.fill),
+                            size: 60,
+                            color: const Color(0xFF94A3B8),
                           ),
                         ),
                       ),
@@ -354,7 +384,6 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
                                           fontSize: 16,
                                         ),
                                       ),
-                                      // [CẬP NHẬT] HIỂN THỊ EMPLOYEE CODE THAY VÌ ID
                                       Text(
                                         'Code: ${_selectedManager!.employeeCode ?? "N/A"}',
                                         style: const TextStyle(

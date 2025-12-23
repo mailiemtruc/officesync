@@ -12,4 +12,22 @@ class DepartmentRepository {
   ) async {
     return await remoteDataSource.createDepartment(department, creatorId);
   }
+
+  Future<bool> updateDepartment(
+    int id,
+    String name,
+    String description,
+    String? managerId,
+  ) async {
+    return await remoteDataSource.updateDepartment(
+      id,
+      name,
+      description,
+      managerId,
+    );
+  }
+
+  Future<bool> deleteDepartment(int id) async {
+    return await remoteDataSource.deleteDepartment(id);
+  }
 }
