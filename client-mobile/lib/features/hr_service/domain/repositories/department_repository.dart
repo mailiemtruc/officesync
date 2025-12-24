@@ -30,4 +30,12 @@ class DepartmentRepository {
   Future<bool> deleteDepartment(int id) async {
     return await remoteDataSource.deleteDepartment(id);
   }
+
+  // Thêm hàm này vào class DepartmentRepository
+  Future<List<DepartmentModel>> searchDepartments(
+    String userId,
+    String keyword,
+  ) async {
+    return await remoteDataSource.searchDepartments(userId, keyword);
+  }
 }

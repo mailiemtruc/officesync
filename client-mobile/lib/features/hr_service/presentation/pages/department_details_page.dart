@@ -37,29 +37,24 @@ class _DepartmentDetailsPageState extends State<DepartmentDetailsPage> {
   }
 
   Future<void> _fetchMembers() async {
-    try {
-      // 1. Lấy ID user hiện tại
-      String currentUserId = "0";
-      String? userInfoStr = await _storage.read(key: 'user_info');
-      if (userInfoStr != null) {
-        final userMap = jsonDecode(userInfoStr);
-        currentUserId = userMap['id'].toString();
-      }
+    // Nếu department chưa có ID (vừa tạo xong chưa sync), không load được
+    if (widget.department.id == null) {
+      setState(() => _isLoading = false);
+      return;
+    }
 
-      // 2. Gọi API lấy danh sách
-      final allEmployees = await _employeeRepo.getEmployees(currentUserId);
+    try {
+      // [CHUẨN DOANH NGHIỆP] Gọi API lấy đúng thành viên của phòng này thôi
+      final deptMembers = await _employeeRepo.getEmployeesByDepartment(
+        widget.department.id!,
+      );
 
       if (mounted) {
         setState(() {
-          // 3. Lọc danh sách thành viên
-          _members = allEmployees.where((e) {
-            final empDeptName = (e.departmentName ?? "").trim().toLowerCase();
-            final currentDeptName = widget.department.name.trim().toLowerCase();
-
-            return empDeptName == currentDeptName &&
-                e.id != widget.department.manager?.id;
-          }).toList();
-
+          // Chỉ cần lọc bỏ người Manager ra khỏi list hiển thị (nếu API trả về cả Manager)
+          _members = deptMembers
+              .where((e) => e.id != widget.department.manager?.id)
+              .toList();
           _isLoading = false;
         });
       }

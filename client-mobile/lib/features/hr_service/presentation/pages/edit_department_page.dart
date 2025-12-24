@@ -28,7 +28,7 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
   EmployeeModel? _selectedManager;
   bool _isLoading = false;
 
-  // List này chứa TẤT CẢ nhân viên trong công ty
+  // List này chứa TẤT CẢ nhân viên trong công ty (Vẫn giữ để hiển thị face pile ở dưới)
   List<EmployeeModel> _availableEmployees = [];
   // List này chỉ chứa thành viên thuộc phòng ban này
   List<EmployeeModel> _departmentMembers = [];
@@ -149,19 +149,15 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
     }
   }
 
+  // [ĐÃ SỬA] Hàm này được cập nhật để gọi SelectManagerPage mới (Server-side)
   Future<void> _pickManager() async {
-    final candidates = _availableEmployees.where((e) {
-      bool isNotAdmin = e.role != 'COMPANY_ADMIN';
-      bool isActive = e.status == 'ACTIVE';
-      return isNotAdmin && isActive;
-    }).toList();
-
+    // Không cần lọc candidates cục bộ nữa, SelectManagerPage tự gọi API
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => SelectManagerPage(
           selectedId: _selectedManager?.id,
-          availableEmployees: candidates,
+          // availableEmployees: candidates, // <-- XÓA DÒNG NÀY (Nguyên nhân lỗi)
         ),
       ),
     );
@@ -375,7 +371,7 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
                               ),
                             ),
 
-                            // [ĐÃ SỬA] Nhấn vào Members -> Chuyển sang Details
+                            // Nhấn vào Members -> Chuyển sang Details
                             InkWell(
                               onTap: () {
                                 // Điều hướng sang DepartmentDetailsPage
@@ -607,7 +603,6 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
     );
   }
 
-  // [ĐÃ SỬA] Chỉnh lại màu avatar cho phù hợp
   Widget _buildDirectManagerCard() {
     final String managerName =
         _selectedManager?.fullName ?? "No Manager Assigned";
@@ -645,7 +640,6 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
                   : Container(
                       width: 46,
                       height: 46,
-                      // [ĐÃ SỬA] Dùng màu Primary nhạt thay vì trắng/xám
                       color: AppColors.primary.withOpacity(0.1),
                       child: const Icon(Icons.person, color: AppColors.primary),
                     ),

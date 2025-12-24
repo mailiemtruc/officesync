@@ -71,4 +71,35 @@ class DepartmentRemoteDataSource {
       rethrow;
     }
   }
+
+  // [MỚI] Tìm kiếm phòng ban
+  Future<List<DepartmentModel>> searchDepartments(
+    String currentUserId,
+    String keyword,
+  ) async {
+    try {
+      final url = Uri.parse(
+        '$baseUrl/search?keyword=$keyword',
+      ); // Lưu ý endpoint là /search
+      print("--> Searching Departments: $url");
+
+      final response = await http.get(
+        url,
+        headers: {
+          "Content-Type": "application/json",
+          "X-User-Id": currentUserId,
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        return data.map((json) => DepartmentModel.fromJson(json)).toList();
+      } else {
+        throw Exception('Failed to search departments: ${response.body}');
+      }
+    } catch (e) {
+      print("Error searching departments: $e");
+      return [];
+    }
+  }
 }

@@ -5,6 +5,7 @@ import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import com.officesync.hr_service.Model.Employee;
@@ -27,7 +28,27 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
     // Tìm theo Tên hoặc Mã nhân viên (không phân biệt hoa thường)
  List<Employee> findByFullNameContainingIgnoreCaseOrEmployeeCodeContainingIgnoreCase(String name, String code);
 
-// Tìm theo Công ty (có search)
-@Query("SELECT e FROM Employee e WHERE e.companyId = :companyId AND (LOWER(e.fullName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR LOWER(e.employeeCode) LIKE LOWER(CONCAT('%', :keyword, '%')))")
-List<Employee> searchEmployees(Long companyId, String keyword);
+// Tìm kiếm: Bắt buộc phải có companyId để đảm bảo tính riêng tư
+    @Query("SELECT e FROM Employee e WHERE e.companyId = :companyId " +
+           "AND (LOWER(e.fullName) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
+           "OR LOWER(e.employeeCode) LIKE LOWER(CONCAT('%', :keyword, '%')))")
+    List<Employee> searchEmployees(@Param("companyId") Long companyId, @Param("keyword") String keyword);
+
+    // [MỚI - CHUẨN DOANH NGHIỆP] Tìm kiếm để Chọn (Manager/Member)
+    // 1. Cùng Company
+    // 2. Trạng thái ACTIVE (nghỉ việc không hiện)
+    // 3. Không phải COMPANY_ADMIN (Sếp tổng không làm trưởng phòng con)
+    // 4. Khác requesterId (Không hiện chính mình)
+    @Query("SELECT e FROM Employee e WHERE " +
+           "e.companyId = :companyId " +
+           "AND e.id <> :requesterId " + 
+           "AND e.status = 'ACTIVE' " + 
+           "AND e.role <> 'COMPANY_ADMIN' " + 
+           "AND (LOWER(e.fullName) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
+           "OR LOWER(e.employeeCode) LIKE LOWER(CONCAT('%', :keyword, '%')))")
+    List<Employee> searchStaffForSelection(
+        @Param("companyId") Long companyId, 
+        @Param("requesterId") Long requesterId, 
+        @Param("keyword") String keyword
+    );
 }

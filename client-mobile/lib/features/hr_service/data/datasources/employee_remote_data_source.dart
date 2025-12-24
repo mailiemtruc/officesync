@@ -123,4 +123,88 @@ class EmployeeRemoteDataSource {
       rethrow;
     }
   }
+
+  // [MỚI] Tìm kiếm nhân viên
+  Future<List<EmployeeModel>> searchEmployees(
+    String currentUserId,
+    String keyword,
+  ) async {
+    try {
+      // Gọi vào endpoint /search
+      final url = Uri.parse('$baseUrl/employees/search?keyword=$keyword');
+      print("--> Searching Employees: $url");
+
+      final response = await http.get(
+        url,
+        headers: {
+          "Content-Type": "application/json",
+          "X-User-Id": currentUserId, // Backend dùng cái này để lọc công ty
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        return data.map((json) => EmployeeModel.fromJson(json)).toList();
+      } else {
+        throw Exception('Failed to search employees: ${response.body}');
+      }
+    } catch (e) {
+      print("Error searching employees: $e");
+      return [];
+    }
+  }
+
+  /// [MỚI - QUAN TRỌNG] Hàm Suggestion dùng cho Select Manager / Add Members
+  Future<List<EmployeeModel>> getEmployeeSuggestions(
+    String currentUserId,
+    String keyword,
+  ) async {
+    try {
+      // SỬA LẠI DÒNG NÀY: Thêm /employees
+      final url = Uri.parse('$baseUrl/employees/suggestion?keyword=$keyword');
+
+      print("--> Fetching Suggestions: $url"); // In ra log để kiểm tra
+
+      final response = await http.get(
+        url,
+        headers: {
+          "Content-Type": "application/json",
+          "X-User-Id": currentUserId,
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        return data.map((json) => EmployeeModel.fromJson(json)).toList();
+      } else {
+        print("Backend Error: ${response.statusCode} - ${response.body}");
+        throw Exception('Failed to load suggestions: ${response.body}');
+      }
+    } catch (e) {
+      print("Error fetching suggestions: $e");
+      return [];
+    }
+  }
+
+  // [MỚI] Lấy nhân viên theo ID phòng ban (Server-side filter)
+  Future<List<EmployeeModel>> getEmployeesByDepartment(int departmentId) async {
+    try {
+      final url = Uri.parse('$baseUrl/employees/department/$departmentId');
+      print("--> Fetching Members for Dept ID: $departmentId");
+
+      final response = await http.get(
+        url,
+      ); // API này public trong nội bộ cty, hoặc thêm header nếu cần
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        return data.map((json) => EmployeeModel.fromJson(json)).toList();
+      } else {
+        throw Exception('Failed to load department members: ${response.body}');
+      }
+    } catch (e) {
+      print("Error fetching department members: $e");
+      return [];
+    }
+  }
 }

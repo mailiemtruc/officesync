@@ -27,4 +27,18 @@ abstract class EmployeeRepository {
     String dob, {
     String? avatarUrl,
   });
+
+  // [SỬA LẠI ĐÚNG] Chỉ khai báo hàm, KHÔNG viết code xử lý (không có curly braces {})
+  Future<List<EmployeeModel>> searchEmployees(
+    String currentUserId,
+    String keyword,
+  );
+
+  // [MỚI] Hàm lấy gợi ý nhân viên (Active, Valid Role)
+  Future<List<EmployeeModel>> getEmployeeSuggestions(
+    String currentUserId,
+    String keyword,
+  );
+
+  Future<List<EmployeeModel>> getEmployeesByDepartment(int departmentId);
 }

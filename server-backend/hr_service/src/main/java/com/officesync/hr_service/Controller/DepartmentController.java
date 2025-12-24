@@ -12,12 +12,14 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader; // Import header
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.officesync.hr_service.Model.Department;
 import com.officesync.hr_service.Model.Employee;
-import com.officesync.hr_service.Repository.EmployeeRepository; // Import repo
-import com.officesync.hr_service.Service.DepartmentService;
+import com.officesync.hr_service.Repository.DepartmentRepository; // Import repo
+import com.officesync.hr_service.Repository.EmployeeRepository;
+import com.officesync.hr_service.Service.DepartmentService; // Import repo
 
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
@@ -29,7 +31,7 @@ public class DepartmentController {
 
     private final DepartmentService departmentService;
     private final EmployeeRepository employeeRepository; // Inject EmployeeRepo
-
+     private final DepartmentRepository departmentRepository;
   // [MỚI] Class DTO để hứng dữ liệu tạo phòng ban phức tạp
     @Data
     public static class CreateDepartmentRequest {
@@ -106,4 +108,18 @@ public class DepartmentController {
         departmentService.deleteDepartment(id);
         return ResponseEntity.ok(Map.of("message", "Department deleted successfully"));
     }
+
+    // API TÌM KIẾM PHÒNG BAN (Đã sửa chuẩn)
+    @GetMapping("/search")
+    public ResponseEntity<List<Department>> searchDepartments(
+            @RequestHeader("X-User-Id") Long requesterId,
+            @RequestParam String keyword
+    ) {
+        // Controller chỉ làm nhiệm vụ điều phối: Gọi Service -> Trả kết quả
+        List<Department> results = departmentService.searchDepartments(requesterId, keyword);
+        
+        return ResponseEntity.ok(results);
+    }
+
+   
 }

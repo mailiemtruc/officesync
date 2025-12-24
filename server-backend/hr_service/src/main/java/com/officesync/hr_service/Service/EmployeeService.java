@@ -1,4 +1,5 @@
 package com.officesync.hr_service.Service;
+import java.util.List;
 import java.util.Optional; // [QUAN TRỌNG] Class sinh ID
 
 import org.springframework.dao.DataIntegrityViolationException;
@@ -290,7 +291,7 @@ public class EmployeeService {
         return updatedEmployee;
     }
 
-  private void deleteOldAvatarFromStorage(String fileUrl) {
+    private void deleteOldAvatarFromStorage(String fileUrl) {
         if (fileUrl == null || fileUrl.isEmpty()) return;
 
         try {
@@ -303,5 +304,27 @@ public class EmployeeService {
         } catch (Exception e) {
             log.error("Lỗi khi gửi sự kiện xóa file: {}", e.getMessage());
         }
+    }
+
+    public List<Employee> searchStaff(Long requesterId, String keyword) {
+        // 1. Lấy thông tin người tìm
+        Employee requester = employeeRepository.findById(requesterId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        
+        // 2. Gọi Repository với logic "Chọn lọc" (Active, not me, not admin)
+        return employeeRepository.searchStaffForSelection(
+                requester.getCompanyId(),
+                requesterId, // Truyền vào để loại trừ chính mình
+                keyword == null ? "" : keyword // Handle null safety
+        );
+    }
+
+    public List<Employee> searchEmployees(Long requesterId, String keyword) {
+        // 1. Logic nghiệp vụ: Xác thực người dùng
+        Employee requester = employeeRepository.findById(requesterId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        // 2. Logic nghiệp vụ: Chỉ search trong công ty của người đó
+        return employeeRepository.searchEmployees(requester.getCompanyId(), keyword);
     }
 }

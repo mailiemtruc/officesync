@@ -118,4 +118,36 @@ public class EmployeeController {
         
         return ResponseEntity.ok(created);
     }
+
+    // API TÌM KIẾM NHÂN VIÊN (Đã chuẩn hóa)
+    @GetMapping("/search")
+    public ResponseEntity<List<Employee>> searchEmployees(
+            @RequestHeader("X-User-Id") Long requesterId,
+            @RequestParam String keyword
+    ) {
+        // Controller chỉ điều phối, không xử lý logic
+        List<Employee> results = employeeService.searchEmployees(requesterId, keyword);
+        
+        return ResponseEntity.ok(results);
+    }
+
+    // [MỚI] API 2: TÌM KIẾM ĐỂ CHỌN (Select Manager / Add Member)
+    // Logic: Active only, Exclude Me, Exclude Admin
+    @GetMapping("/suggestion")
+    public ResponseEntity<List<Employee>> searchEmployeeSuggestion(
+            @RequestHeader("X-User-Id") Long requesterId,
+            @RequestParam(defaultValue = "") String keyword
+    ) {
+        // Gọi hàm service dùng query searchStaffForSelection
+        List<Employee> results = employeeService.searchStaff(requesterId, keyword);
+        return ResponseEntity.ok(results);
+    }
+
+     // [MỚI - CHUẨN DOANH NGHIỆP] Lấy danh sách nhân viên theo Department ID
+    @GetMapping("/department/{deptId}")
+    public ResponseEntity<List<Employee>> getEmployeesByDepartment(@PathVariable Long deptId) {
+        // Gọi Repository đã có sẵn hàm findByDepartmentId
+        List<Employee> employees = employeeRepository.findByDepartmentId(deptId);
+        return ResponseEntity.ok(employees);
+    }
 }

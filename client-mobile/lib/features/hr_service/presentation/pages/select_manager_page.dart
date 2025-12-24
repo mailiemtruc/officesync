@@ -1,67 +1,100 @@
+import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
 import '../../../../core/config/app_colors.dart';
 import '../../data/models/employee_model.dart';
 import '../../widgets/employee_card.widget.dart';
-import '../../widgets/employee_bottom_sheet.dart';
+
+// [QUAN TRỌNG] Import Repository
+import '../../domain/repositories/employee_repository_impl.dart';
+import '../../data/datasources/employee_remote_data_source.dart';
 
 class SelectManagerPage extends StatefulWidget {
   final String? selectedId;
-  final List<EmployeeModel> availableEmployees; // Nhận danh sách từ bên ngoài
+  // [ĐÃ SỬA] Xóa tham số availableEmployees vì giờ tự gọi API
 
-  const SelectManagerPage({
-    super.key,
-    this.selectedId,
-    required this.availableEmployees,
-  });
+  const SelectManagerPage({super.key, this.selectedId});
 
   @override
   State<SelectManagerPage> createState() => _SelectManagerPageState();
 }
 
 class _SelectManagerPageState extends State<SelectManagerPage> {
-  // Biến để search
-  late List<EmployeeModel> _displayList;
+  // Logic API
+  late final EmployeeRepositoryImpl _repository;
+  final _storage = const FlutterSecureStorage();
+
+  List<EmployeeModel> _displayList = [];
+  bool _isLoading = false;
+  Timer? _debounce; // Timer để chờ người dùng gõ xong mới gọi API
+  String? _currentUserId;
+
   final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _displayList = widget.availableEmployees;
-    _searchController.addListener(_onSearchChanged);
+    // Khởi tạo Repository
+    _repository = EmployeeRepositoryImpl(
+      remoteDataSource: EmployeeRemoteDataSource(),
+    );
+
+    _initUserAndFetchDefault();
   }
 
-  void _onSearchChanged() {
-    final query = _searchController.text.toLowerCase();
-    setState(() {
-      _displayList = widget.availableEmployees.where((emp) {
-        final name = emp.fullName.toLowerCase();
-        final id = (emp.id ?? "").toLowerCase();
-        return name.contains(query) || id.contains(query);
-      }).toList();
+  Future<void> _initUserAndFetchDefault() async {
+    // Lấy ID người dùng hiện tại từ Storage để gửi kèm Header
+    String? userInfoStr = await _storage.read(key: 'user_info');
+    if (userInfoStr != null) {
+      final userMap = jsonDecode(userInfoStr);
+      _currentUserId = userMap['id'].toString();
+
+      // Load dữ liệu gợi ý mặc định (keyword rỗng)
+      _performSearch("");
+    }
+  }
+
+  // Hàm gọi API Search (Server-side)
+  Future<void> _performSearch(String keyword) async {
+    if (_currentUserId == null) return;
+
+    setState(() => _isLoading = true);
+    try {
+      // [LOGIC MỚI] Gọi API suggestion thay vì lọc list cục bộ
+      final result = await _repository.getEmployeeSuggestions(
+        _currentUserId!,
+        keyword,
+      );
+
+      if (mounted) {
+        setState(() {
+          _displayList = result;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      print("Error searching: $e");
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  // Xử lý khi gõ phím (Debounce 500ms)
+  void _onSearchChanged(String query) {
+    if (_debounce?.isActive ?? false) _debounce!.cancel();
+    _debounce = Timer(const Duration(milliseconds: 500), () {
+      _performSearch(query);
     });
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _debounce?.cancel();
     super.dispose();
   }
-
-  // void _showEmployeeOptions(EmployeeModel emp) {
-  //   // Logic hiển thị bottom sheet (giữ nguyên UI, chỉ đổi Model)
-  //   showModalBottomSheet(
-  //     context: context,
-  //     isScrollControlled: true,
-  //     backgroundColor: Colors.transparent,
-  //     builder: (context) => EmployeeBottomSheet(
-  //       employee: emp,
-  //       onToggleLock:
-  //           () {}, // Tạm thời disable logic lock ở đây nếu không cần thiết
-  //       onDelete: () {},
-  //     ),
-  //   );
-  // }
 
   @override
   Widget build(BuildContext context) {
@@ -74,7 +107,7 @@ class _SelectManagerPageState extends State<SelectManagerPage> {
             child: Column(
               children: [
                 const SizedBox(height: 20),
-                // Header
+                // Header (Giữ nguyên UI)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: Row(
@@ -105,7 +138,7 @@ class _SelectManagerPageState extends State<SelectManagerPage> {
                 ),
                 const SizedBox(height: 24),
 
-                // Search & Filter
+                // Search Bar (Đã gắn hàm _onSearchChanged)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: Row(
@@ -118,12 +151,14 @@ class _SelectManagerPageState extends State<SelectManagerPage> {
                 ),
 
                 const SizedBox(height: 12),
+
+                // Tiêu đề list
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
-                      'AVAILABLE STAFF', // Đổi title cho hợp ngữ cảnh
+                      'SUGGESTED STAFF',
                       style: TextStyle(
                         color: Color(0xFF6B7280),
                         fontSize: 14,
@@ -133,50 +168,34 @@ class _SelectManagerPageState extends State<SelectManagerPage> {
                   ),
                 ),
 
-                // List
+                // List Result
                 Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    itemCount: _displayList.length,
-                    itemBuilder: (context, index) {
-                      final emp = _displayList[index];
-                      final isSelected = emp.id == widget.selectedId;
-                      final isLocked = emp.status == "LOCKED";
+                  child: _isLoading
+                      ? const Center(child: CircularProgressIndicator())
+                      : _displayList.isEmpty
+                      ? const Center(child: Text("No staff found"))
+                      : ListView.builder(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          itemCount: _displayList.length,
+                          itemBuilder: (context, index) {
+                            final emp = _displayList[index];
+                            final isSelected =
+                                emp.id.toString() == widget.selectedId;
+                            final isLocked = emp.status == "LOCKED";
 
-                      return EmployeeCard(
-                        employee:
-                            emp, // Sử dụng widget EmployeeCard mới đã update
-                        isSelected: isSelected,
-                        onTap: isLocked
-                            ? null
-                            : () => Navigator.pop(context, emp),
-                        // onMenuTap: () => _showEmployeeOptions(emp),
-                        selectionWidget: Container(
-                          width: 24,
-                          height: 24,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: isSelected
-                                ? AppColors.primary
-                                : Colors.white,
-                            border: Border.all(
-                              color: isSelected
-                                  ? AppColors.primary
-                                  : const Color(0xFF9CA3AF),
-                              width: 1.5,
-                            ),
-                          ),
-                          child: isSelected && !isLocked
-                              ? const Icon(
-                                  Icons.check,
-                                  size: 16,
-                                  color: Colors.white,
-                                )
-                              : null,
+                            return EmployeeCard(
+                              employee: emp,
+                              isSelected: isSelected,
+                              onTap: isLocked
+                                  ? null
+                                  : () => Navigator.pop(context, emp),
+                              selectionWidget: _buildSelectionIcon(
+                                isSelected,
+                                isLocked,
+                              ),
+                            );
+                          },
                         ),
-                      );
-                    },
-                  ),
                 ),
               ],
             ),
@@ -196,13 +215,10 @@ class _SelectManagerPageState extends State<SelectManagerPage> {
       ),
       child: TextField(
         controller: _searchController,
+        onChanged: _onSearchChanged, // [QUAN TRỌNG] Gắn hàm search vào đây
         decoration: InputDecoration(
           hintText: 'Search name, employee ID...',
-          hintStyle: const TextStyle(
-            color: Color(0xFF9E9E9E),
-            fontSize: 14,
-            fontWeight: FontWeight.w300,
-          ),
+          hintStyle: const TextStyle(color: Color(0xFF9E9E9E), fontSize: 14),
           prefixIcon: Icon(
             PhosphorIcons.magnifyingGlass(),
             color: const Color(0xFF757575),
@@ -212,6 +228,24 @@ class _SelectManagerPageState extends State<SelectManagerPage> {
           contentPadding: const EdgeInsets.symmetric(vertical: 10),
         ),
       ),
+    );
+  }
+
+  Widget _buildSelectionIcon(bool isSelected, bool isLocked) {
+    return Container(
+      width: 24,
+      height: 24,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: isSelected ? AppColors.primary : Colors.white,
+        border: Border.all(
+          color: isSelected ? AppColors.primary : const Color(0xFF9CA3AF),
+          width: 1.5,
+        ),
+      ),
+      child: isSelected && !isLocked
+          ? const Icon(Icons.check, size: 16, color: Colors.white)
+          : null,
     );
   }
 

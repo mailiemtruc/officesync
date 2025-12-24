@@ -65,4 +65,30 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
       avatarUrl: avatarUrl, // Truyền tiếp
     );
   }
+
+  // [MỚI] Thêm hàm này vào đây để sửa lỗi thiếu implementation
+  @override
+  Future<List<EmployeeModel>> searchEmployees(
+    String currentUserId,
+    String keyword,
+  ) async {
+    return await remoteDataSource.searchEmployees(currentUserId, keyword);
+  }
+
+  // [MỚI] Triển khai hàm suggestions
+  @override
+  Future<List<EmployeeModel>> getEmployeeSuggestions(
+    String currentUserId,
+    String keyword,
+  ) async {
+    return await remoteDataSource.getEmployeeSuggestions(
+      currentUserId,
+      keyword,
+    );
+  }
+
+  @override
+  Future<List<EmployeeModel>> getEmployeesByDepartment(int departmentId) async {
+    return await remoteDataSource.getEmployeesByDepartment(departmentId);
+  }
 }

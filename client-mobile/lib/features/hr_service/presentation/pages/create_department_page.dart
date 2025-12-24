@@ -3,19 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-// --- IMPORTS ---
 import '../../../../core/config/app_colors.dart';
 import '../../data/models/employee_model.dart';
 import '../../data/models/department_model.dart';
 import '../../data/datasources/department_remote_data_source.dart';
 import '../../domain/repositories/department_repository.dart';
 
-// Import Employee Repository
-import '../../domain/repositories/employee_repository.dart';
-import '../../domain/repositories/employee_repository_impl.dart';
-import '../../data/datasources/employee_remote_data_source.dart';
-
-// Import các trang chọn
+// [QUAN TRỌNG] Các trang chọn
 import 'select_manager_page.dart';
 import 'add_members_page.dart';
 
@@ -35,11 +29,7 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
   List<EmployeeModel> _selectedMembers = [];
   bool _isLoading = false;
 
-  // [ĐÃ SỬA] Đổi tên biến này thành _availableEmployees để khớp với logic bên dưới
-  List<EmployeeModel> _availableEmployees = [];
-
   late final DepartmentRepository _departmentRepository;
-  late final EmployeeRepository _employeeRepository;
   final _storage = const FlutterSecureStorage();
 
   @override
@@ -48,29 +38,7 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
     _departmentRepository = DepartmentRepository(
       remoteDataSource: DepartmentRemoteDataSource(),
     );
-
-    _employeeRepository = EmployeeRepositoryImpl(
-      remoteDataSource: EmployeeRemoteDataSource(),
-    );
-
-    _fetchAllEmployees();
-  }
-
-  Future<void> _fetchAllEmployees() async {
-    try {
-      String? currentUserId = await _getCurrentUserId();
-      if (currentUserId != null) {
-        final emps = await _employeeRepository.getEmployees(currentUserId);
-        if (mounted) {
-          setState(() {
-            // [ĐÃ SỬA] Cập nhật vào biến đúng
-            _availableEmployees = emps;
-          });
-        }
-      }
-    } catch (e) {
-      print("Error fetching employees: $e");
-    }
+    // [ĐÃ XÓA] Không gọi _fetchAllEmployees() nữa vì dùng Server-side search
   }
 
   Future<String?> _getCurrentUserId() async {
@@ -144,24 +112,12 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
 
   // --- LOGIC CHỌN QUẢN LÝ ---
   Future<void> _pickManager() async {
-    // 1. Lọc danh sách ứng viên làm Manager
-    // [ĐÃ KHỚP] Biến _availableEmployees giờ đã được khai báo đúng
-    final candidates = _availableEmployees.where((e) {
-      // RULE 1: Không phải Admin
-      bool isNotAdmin = e.role != 'COMPANY_ADMIN';
-      // RULE 2: Phải đang hoạt động
-      bool isActive = e.status == 'ACTIVE';
-
-      return isNotAdmin && isActive;
-    }).toList();
-
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => SelectManagerPage(
-          selectedId: _selectedManager?.id,
-          availableEmployees: candidates,
-        ),
+        // [SỬA] Không truyền list nhân viên vào nữa
+        builder: (context) =>
+            SelectManagerPage(selectedId: _selectedManager?.id),
       ),
     );
 
@@ -169,7 +125,7 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
       setState(() {
         _selectedManager = result;
 
-        // [QUAN TRỌNG] Logic loại trừ lẫn nhau (Mutual Exclusion)
+        // Logic loại trừ: Nếu Manager vừa chọn đang nằm trong list Member -> Xóa khỏi Member
         if (_selectedMembers.any((m) => m.id == result.id)) {
           _selectedMembers.removeWhere((m) => m.id == result.id);
           ScaffoldMessenger.of(context).showSnackBar(
@@ -187,25 +143,13 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
 
   // --- LOGIC CHỌN THÀNH VIÊN ---
   Future<void> _pickMembers() async {
-    final candidates = _availableEmployees.where((e) {
-      bool isNotAdmin = e.role != 'COMPANY_ADMIN';
-      bool isActive = e.status == 'ACTIVE';
-
-      // [QUAN TRỌNG] Không được hiện người đang được chọn làm Manager
-      bool isNotSelectedManager = true;
-      if (_selectedManager != null) {
-        isNotSelectedManager = e.id != _selectedManager!.id;
-      }
-
-      return isNotAdmin && isActive && isNotSelectedManager;
-    }).toList();
-
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => AddMembersPage(
           alreadySelectedMembers: _selectedMembers,
-          availableEmployees: candidates,
+          // [MỚI] Truyền ID Manager vào để trang AddMembers lọc ra (không hiện Manager để chọn nữa)
+          excludeManagerId: _selectedManager?.id,
         ),
       ),
     );
@@ -219,6 +163,7 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
 
   @override
   Widget build(BuildContext context) {
+    // UI giữ nguyên 100%
     return Scaffold(
       backgroundColor: const Color(0xFFF9F9F9),
       body: Stack(
@@ -324,6 +269,7 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
                           decoration: _buildBlockDecoration(),
                           child: Row(
                             children: [
+                              // --- TRƯỜNG HỢP 1: CHƯA CHỌN MANAGER ---
                               if (_selectedManager == null) ...[
                                 Container(
                                   width: 46,
@@ -338,13 +284,19 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
                                   ),
                                 ),
                                 const SizedBox(width: 16),
-                                const Text(
-                                  'Select Manager',
-                                  style: TextStyle(
-                                    color: Color(0xFF9B9292),
-                                    fontSize: 16,
+
+                                // [SỬA] Thêm Expanded để đẩy mũi tên sang phải
+                                const Expanded(
+                                  child: Text(
+                                    'Select Manager',
+                                    style: TextStyle(
+                                      color: Color(0xFF9B9292),
+                                      fontSize: 16,
+                                    ),
                                   ),
                                 ),
+
+                                // --- TRƯỜNG HỢP 2: ĐÃ CHỌN MANAGER ---
                               ] else ...[
                                 ClipOval(
                                   child: Container(
@@ -372,6 +324,8 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
                                   ),
                                 ),
                                 const SizedBox(width: 16),
+
+                                // [SỬA] Expanded này giờ sẽ chiếm toàn bộ khoảng trống còn lại
                                 Expanded(
                                   child: Column(
                                     crossAxisAlignment:
@@ -383,19 +337,30 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
                                           fontWeight: FontWeight.bold,
                                           fontSize: 16,
                                         ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
                                       ),
+                                      const SizedBox(height: 4),
                                       Text(
-                                        'Code: ${_selectedManager!.employeeCode ?? "N/A"}',
+                                        // Hiển thị code đầy đủ
+                                        'Employee Code: ${_selectedManager!.employeeCode ?? "N/A"}',
                                         style: const TextStyle(
-                                          color: Colors.grey,
+                                          color: Color(0xFF6B7280),
                                           fontSize: 13,
+                                          fontWeight:
+                                              FontWeight.w500, // Đậm hơn xíu
                                         ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
                                       ),
                                     ],
                                   ),
                                 ),
                               ],
-                              const Spacer(),
+
+                              const SizedBox(
+                                width: 8,
+                              ), // Khoảng cách nhỏ trước mũi tên
                               const Icon(
                                 Icons.arrow_forward_ios,
                                 size: 16,

@@ -1,18 +1,24 @@
+import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
 import '../../../../core/config/app_colors.dart';
 import '../../data/models/employee_model.dart';
 import '../../widgets/employee_card.widget.dart';
-import '../../widgets/employee_bottom_sheet.dart';
+
+import '../../domain/repositories/employee_repository_impl.dart';
+import '../../data/datasources/employee_remote_data_source.dart';
 
 class AddMembersPage extends StatefulWidget {
   final List<EmployeeModel> alreadySelectedMembers;
-  final List<EmployeeModel> availableEmployees; // Nhận danh sách đã lọc
+  final String? excludeManagerId; // [MỚI] Nhận ID Manager để loại trừ khỏi list
 
   const AddMembersPage({
     super.key,
     required this.alreadySelectedMembers,
-    required this.availableEmployees,
+    this.excludeManagerId,
   });
 
   @override
@@ -20,71 +26,117 @@ class AddMembersPage extends StatefulWidget {
 }
 
 class _AddMembersPageState extends State<AddMembersPage> {
-  late Set<String> _selectedIds;
-  late List<EmployeeModel> _displayList;
-  String _currentFilter = 'All';
+  late final EmployeeRepositoryImpl _repository;
+  final _storage = const FlutterSecureStorage();
+
+  List<EmployeeModel> _displayList = []; // Danh sách đang hiển thị từ Search
+  Set<String> _selectedIds = {}; // Set chứa ID các member đã chọn
+
+  // [QUAN TRỌNG] Lưu trữ object Member đã chọn để trả về.
+  // Vì search list thay đổi liên tục, cần biến này để giữ data những người đã tick.
+  Map<String, EmployeeModel> _selectedObjects = {};
+
+  bool _isLoading = false;
+  Timer? _debounce;
+  String? _currentUserId;
+  String _currentFilter = 'All'; // Giữ UI Filter, nhưng logic search là chính
+
   final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _selectedIds = widget.alreadySelectedMembers.map((e) => e.id!).toSet();
-    _displayList = widget.availableEmployees;
-    _searchController.addListener(_onSearchChanged);
-  }
+    _repository = EmployeeRepositoryImpl(
+      remoteDataSource: EmployeeRemoteDataSource(),
+    );
 
-  void _onSearchChanged() {
-    setState(() {}); // Rebuild để filter lại trong getter _filteredEmployees
-  }
-
-  // Logic lọc hiển thị
-  List<EmployeeModel> get _filteredEmployees {
-    List<EmployeeModel> list = widget.availableEmployees;
-
-    // 1. Filter theo Tab
-    if (_currentFilter == 'Unassigned') {
-      list = list
-          .where((e) => e.role == "Unassigned" || e.departmentName == null)
-          .toList();
+    // Khôi phục trạng thái đã chọn từ trang trước
+    for (var emp in widget.alreadySelectedMembers) {
+      if (emp.id != null) {
+        _selectedIds.add(emp.id!);
+        _selectedObjects[emp.id!] = emp;
+      }
     }
 
-    // 2. Filter theo Search
-    final query = _searchController.text.toLowerCase();
-    if (query.isNotEmpty) {
-      list = list.where((e) {
-        final name = e.fullName.toLowerCase();
-        return name.contains(query);
-      }).toList();
-    }
-
-    return list;
+    _initUserAndFetchDefault();
   }
 
+  Future<void> _initUserAndFetchDefault() async {
+    String? userInfoStr = await _storage.read(key: 'user_info');
+    if (userInfoStr != null) {
+      final userMap = jsonDecode(userInfoStr);
+      _currentUserId = userMap['id'].toString();
+      _performSearch("");
+    }
+  }
+
+  Future<void> _performSearch(String keyword) async {
+    if (_currentUserId == null) return;
+    setState(() => _isLoading = true);
+    try {
+      final result = await _repository.getEmployeeSuggestions(
+        _currentUserId!,
+        keyword,
+      );
+      if (mounted) {
+        setState(() {
+          // [LOGIC] Lọc bỏ người đang là Manager (Server có thể chưa lọc ID cụ thể này)
+          _displayList = result
+              .where((e) => e.id != widget.excludeManagerId)
+              .toList();
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _onSearchChanged(String query) {
+    if (_debounce?.isActive ?? false) _debounce!.cancel();
+    _debounce = Timer(const Duration(milliseconds: 500), () {
+      _performSearch(query);
+    });
+  }
+
+  // Logic Select All áp dụng cho danh sách đang hiển thị
   void _toggleSelectAll() {
     setState(() {
-      final availableIds = _filteredEmployees
+      final availableIds = _displayList
           .where((e) => e.status != "LOCKED")
           .map((e) => e.id!)
           .toList();
 
-      if (_selectedIds.containsAll(availableIds)) {
+      // Kiểm tra xem tất cả người trong list hiện tại đã được chọn chưa
+      bool allVisibleSelected = availableIds.every(
+        (id) => _selectedIds.contains(id),
+      );
+
+      if (allVisibleSelected) {
+        // Bỏ chọn tất cả người đang hiển thị
         _selectedIds.removeAll(availableIds);
+        // (Không remove khỏi _selectedObjects để đơn giản, lọc sau khi done)
       } else {
+        // Chọn tất cả người đang hiển thị
         _selectedIds.addAll(availableIds);
+        for (var emp in _displayList) {
+          if (emp.status != "LOCKED") {
+            _selectedObjects[emp.id!] = emp;
+          }
+        }
       }
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final currentList = _filteredEmployees;
-    final validMembers = currentList
+    // Kiểm tra trạng thái Select All cho UI
+    final validMembersInView = _displayList
         .where((e) => e.status != "LOCKED")
         .toList();
-
     final isAllSelected =
-        validMembers.isNotEmpty &&
-        _selectedIds.containsAll(validMembers.map((e) => e.id));
+        validMembersInView.isNotEmpty &&
+        validMembersInView.every((e) => _selectedIds.contains(e.id));
 
     return Scaffold(
       backgroundColor: const Color(0xFFF9F9F9),
@@ -95,7 +147,7 @@ class _AddMembersPageState extends State<AddMembersPage> {
             child: Column(
               children: [
                 const SizedBox(height: 20),
-                // Header
+                // Header (Giữ nguyên)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: Row(
@@ -181,53 +233,60 @@ class _AddMembersPageState extends State<AddMembersPage> {
 
                 // List Items
                 Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    itemCount: currentList.length,
-                    itemBuilder: (context, index) {
-                      final emp = currentList[index];
-                      final isSelected = _selectedIds.contains(emp.id);
-                      final isLocked = emp.status == "LOCKED";
+                  child: _isLoading
+                      ? const Center(child: CircularProgressIndicator())
+                      : _displayList.isEmpty
+                      ? const Center(child: Text("No staff found"))
+                      : ListView.builder(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          itemCount: _displayList.length,
+                          itemBuilder: (context, index) {
+                            final emp = _displayList[index];
+                            final isSelected = _selectedIds.contains(emp.id);
+                            final isLocked = emp.status == "LOCKED";
 
-                      return EmployeeCard(
-                        employee: emp,
-                        isSelected: isSelected,
-                        onTap: isLocked
-                            ? null
-                            : () {
-                                setState(() {
-                                  if (isSelected)
-                                    _selectedIds.remove(emp.id);
-                                  else
-                                    _selectedIds.add(emp.id!);
-                                });
-                              },
-                        selectionWidget: Container(
-                          width: 24,
-                          height: 24,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: isSelected
-                                ? AppColors.primary
-                                : Colors.white,
-                            border: Border.all(
-                              color: isSelected
-                                  ? AppColors.primary
-                                  : const Color(0xFF9CA3AF),
-                              width: 1.5,
-                            ),
-                          ),
-                          child: isSelected && !isLocked
-                              ? const Icon(
-                                  Icons.check,
-                                  size: 16,
-                                  color: Colors.white,
-                                )
-                              : null,
+                            return EmployeeCard(
+                              employee: emp,
+                              isSelected: isSelected,
+                              onTap: isLocked
+                                  ? null
+                                  : () {
+                                      setState(() {
+                                        if (isSelected) {
+                                          _selectedIds.remove(emp.id);
+                                          _selectedObjects.remove(emp.id);
+                                        } else {
+                                          _selectedIds.add(emp.id!);
+                                          _selectedObjects[emp.id!] = emp;
+                                        }
+                                      });
+                                    },
+                              selectionWidget: Container(
+                                width: 24,
+                                height: 24,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: isSelected
+                                      ? AppColors.primary
+                                      : Colors.white,
+                                  border: Border.all(
+                                    color: isSelected
+                                        ? AppColors.primary
+                                        : const Color(0xFF9CA3AF),
+                                    width: 1.5,
+                                  ),
+                                ),
+                                child: isSelected && !isLocked
+                                    ? const Icon(
+                                        Icons.check,
+                                        size: 16,
+                                        color: Colors.white,
+                                      )
+                                    : null,
+                              ),
+                            );
+                          },
                         ),
-                      );
-                    },
-                  ),
                 ),
 
                 // Bottom Button
@@ -238,10 +297,8 @@ class _AddMembersPageState extends State<AddMembersPage> {
                     height: 50,
                     child: ElevatedButton(
                       onPressed: () {
-                        // Trả về danh sách full object
-                        final result = widget.availableEmployees
-                            .where((e) => _selectedIds.contains(e.id))
-                            .toList();
+                        // [LOGIC] Lấy danh sách object từ Map dựa trên ID đã chọn
+                        final result = _selectedObjects.values.toList();
                         Navigator.pop(context, result);
                       },
                       style: ElevatedButton.styleFrom(
@@ -301,6 +358,7 @@ class _AddMembersPageState extends State<AddMembersPage> {
     ),
     child: TextField(
       controller: _searchController,
+      onChanged: _onSearchChanged, // Gắn Debounce
       decoration: InputDecoration(
         hintText: 'Search name, employee ID...',
         hintStyle: const TextStyle(
@@ -320,7 +378,6 @@ class _AddMembersPageState extends State<AddMembersPage> {
   );
 
   Widget _buildFilterButton() {
-    // Giữ nguyên UI cũ
     return Container(
       width: 45,
       height: 45,
