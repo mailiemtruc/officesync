@@ -13,18 +13,12 @@ public class CoreConsumer {
     @Autowired
     private AuthService authService;
 
-    // Lắng nghe queue mà HR bắn vào
-    @RabbitListener(queues = RabbitMQConfig.QUEUE_EMPLOYEE_CREATE)
+    // [SỬA ĐỔI] Chỉ lắng nghe 1 hàng đợi duy nhất
+    @RabbitListener(queues = RabbitMQConfig.QUEUE_EMPLOYEE_SYNC)
     public void receiveEmployeeSyncEvent(EmployeeSyncEvent event) {
-        System.out.println("--> [RabbitMQ] Core nhận yêu cầu tạo User: " + event.getEmail());
+        System.out.println("--> [RabbitMQ] Core nhận sự kiện Employee Sync: " + event.getEmail());
         
-        // Gọi Service xử lý
-        authService.createEmployeeAccount(event);
-    }
-
-    @RabbitListener(queues = RabbitMQConfig.QUEUE_EMPLOYEE_UPDATE)
-    public void receiveEmployeeUpdateEvent(EmployeeSyncEvent event) {
-        System.out.println("--> [RabbitMQ] Core nhận yêu cầu CẬP NHẬT User: " + event.getEmail());
-        authService.updateEmployeeAccount(event);
+        // Gọi hàm xử lý chung (Upsert)
+        authService.syncEmployeeAccount(event);
     }
 }

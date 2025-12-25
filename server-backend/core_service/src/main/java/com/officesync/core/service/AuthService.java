@@ -8,7 +8,7 @@ import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Autowired; // Import thêm Optional
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -136,18 +136,18 @@ public class AuthService {
         savePasswordHistory(user);
         registrationOtpCache.remove(req.getEmail());
 
-        // 🔴 GỬI SỰ KIỆN SANG RABBITMQ (ĐỂ PROFILE SERVICE XỬ LÝ)
+        // 🔴 GỬI SỰ KIỆN SANG RABBITMQ (ĐỂ WALLET/PROFILE SERVICE XỬ LÝ)
         try {
             UserCreatedEvent event = new UserCreatedEvent();
             
-            event.setId(savedUser.getId());              // ID 5
-            event.setCompanyId(savedUser.getCompanyId()); // Company ID
-            event.setEmail(savedUser.getEmail());         // mailiemtruc04@gmail.com
-            event.setFullName(savedUser.getFullName());   // Mai Van L
-            event.setMobileNumber(savedUser.getMobileNumber()); // 0934828105
-            event.setDateOfBirth(savedUser.getDateOfBirth());   // 2000-01-01
-            event.setRole(savedUser.getRole());           // COMPANY_ADMIN
-            event.setStatus(savedUser.getStatus());       // ACTIVE
+            event.setId(savedUser.getId());              
+            event.setCompanyId(savedUser.getCompanyId()); 
+            event.setEmail(savedUser.getEmail());        
+            event.setFullName(savedUser.getFullName());   
+            event.setMobileNumber(savedUser.getMobileNumber()); 
+            event.setDateOfBirth(savedUser.getDateOfBirth());   
+            event.setRole(savedUser.getRole());           
+            event.setStatus(savedUser.getStatus());       
 
             // Gửi đi
             rabbitMQProducer.sendUserCreatedEvent(event);
@@ -199,94 +199,84 @@ public class AuthService {
     }
 
     // =========================================================
-    // XỬ LÝ ĐỒNG BỘ TỪ HR -> CORE
+    // [MỚI] HÀM SYNC DUY NHẤT (UPSERT: Create or Update)
     // =========================================================
     @Transactional
-    public void createEmployeeAccount(EmployeeSyncEvent event) {
-        // 1. Kiểm tra User tồn tại chưa
-        if (userRepository.findByEmail(event.getEmail()).isPresent()) {
-            System.out.println("User đã tồn tại: " + event.getEmail());
-            return;
+    public void syncEmployeeAccount(EmployeeSyncEvent event) {
+        User user = null;
+
+        // BƯỚC 1: Tìm User để update
+        // Ưu tiên 1: Nếu có previousEmail (tức là HR báo có đổi email), tìm theo email CŨ
+        if (event.getPreviousEmail() != null && !event.getPreviousEmail().isEmpty()) {
+            System.out.println("--> [Sync] Phát hiện đổi Email từ: " + event.getPreviousEmail() + " sang " + event.getEmail());
+            user = userRepository.findByEmail(event.getPreviousEmail()).orElse(null);
         }
 
-        // 2. Map dữ liệu từ Event sang User Entity
-        User newUser = new User();
-        newUser.setCompanyId(event.getCompanyId());
-        newUser.setEmail(event.getEmail());
-        newUser.setFullName(event.getFullName());
-        newUser.setMobileNumber(event.getPhone());
-        newUser.setDateOfBirth(event.getDateOfBirth());
-        
-        // 3. Xử lý Mật khẩu (Hash)
-        // Mật khẩu từ HR gửi sang là bản rõ (raw), cần mã hóa ngay
-        newUser.setPassword(passwordEncoder.encode(event.getPassword()));
+        // Ưu tiên 2: Nếu không tìm thấy theo email cũ (hoặc không đổi email), tìm theo email HIỆN TẠI
+        if (user == null) {
+            user = userRepository.findByEmail(event.getEmail()).orElse(null);
+        }
 
-        // 4. Map Role & Status
-        // Lưu ý: Cần đảm bảo string Role khớp với Enum hoặc Logic của bạn
-        newUser.setRole(event.getRole()); 
-        newUser.setStatus(event.getStatus()); 
+        // BƯỚC 2: Xử lý Upsert
+        if (user != null) {
+            // --- UPDATE ---
+            System.out.println("--> [Sync] Tìm thấy User, đang cập nhật ID: " + user.getId());
 
-        // 5. Lưu vào DB Core
-        User savedUser = userRepository.save(newUser);
-        
-        // Lưu lịch sử mật khẩu
-        savePasswordHistory(savedUser);
-
-        System.out.println("--> Đã tạo User từ HR: " + savedUser.getEmail() + " (ID: " + savedUser.getId() + ")");
-
-        // 6. BẮN EVENT NGƯỢC LẠI (Broadcast cho các service khác biết)
-        // Profile Service hoặc Notification Service có thể cần thông tin này
-        try {
-            UserCreatedEvent responseEvent = new UserCreatedEvent();
+            // Cập nhật Email mới (quan trọng)
+            user.setEmail(event.getEmail()); 
             
-            responseEvent.setId(savedUser.getId());              // ID mới sinh
-            responseEvent.setCompanyId(savedUser.getCompanyId());
-            responseEvent.setEmail(savedUser.getEmail());
-            responseEvent.setFullName(savedUser.getFullName());
-            responseEvent.setMobileNumber(savedUser.getMobileNumber());
-            responseEvent.setDateOfBirth(savedUser.getDateOfBirth());
-            responseEvent.setRole(savedUser.getRole());
-            responseEvent.setStatus(savedUser.getStatus());
+            // Cập nhật các thông tin khác
+            user.setFullName(event.getFullName());
+            user.setMobileNumber(event.getPhone());
+            user.setDateOfBirth(event.getDateOfBirth());
             
-            // Hàm này bạn đã có ở bài trước
-            rabbitMQProducer.sendUserCreatedEvent(responseEvent);
+            if (event.getRole() != null) user.setRole(event.getRole());
+            if (event.getStatus() != null) user.setStatus(event.getStatus());
             
-        } catch (Exception e) {
-            System.err.println("Lỗi bắn event UserCreated: " + e.getMessage());
+            if (event.getPassword() != null && !event.getPassword().isEmpty()) {
+                user.setPassword(passwordEncoder.encode(event.getPassword()));
+            }
+
+            userRepository.save(user);
+
+        } else {
+            // --- CREATE (Như cũ) ---
+            System.out.println("--> [Sync] Không tìm thấy User cũ/mới, tạo mới: " + event.getEmail());
+            
+            User newUser = new User();
+            newUser.setCompanyId(event.getCompanyId());
+            newUser.setEmail(event.getEmail()); // Luôn set email mới nhất
+            newUser.setFullName(event.getFullName());
+            newUser.setMobileNumber(event.getPhone());
+            newUser.setDateOfBirth(event.getDateOfBirth());
+            
+            String rawPass = (event.getPassword() != null) ? event.getPassword() : "123456";
+            newUser.setPassword(passwordEncoder.encode(rawPass));
+            
+            newUser.setRole(event.getRole());
+            newUser.setStatus(event.getStatus());
+
+            User savedUser = userRepository.save(newUser);
+            savePasswordHistory(savedUser);
+
+            // 🔴 BẮN EVENT CHO CÁC SERVICE KHÁC (Wallet, etc.)
+            try {
+                UserCreatedEvent responseEvent = new UserCreatedEvent();
+                responseEvent.setId(savedUser.getId());
+                responseEvent.setCompanyId(savedUser.getCompanyId());
+                responseEvent.setEmail(savedUser.getEmail());
+                responseEvent.setFullName(savedUser.getFullName());
+                responseEvent.setMobileNumber(savedUser.getMobileNumber());
+                responseEvent.setDateOfBirth(savedUser.getDateOfBirth());
+                responseEvent.setRole(savedUser.getRole());
+                responseEvent.setStatus(savedUser.getStatus());
+                
+                rabbitMQProducer.sendUserCreatedEvent(responseEvent);
+                System.out.println("    -> Đã bắn UserCreatedEvent cho Wallet Service");
+            } catch (Exception e) {
+                System.err.println("Lỗi bắn event UserCreated: " + e.getMessage());
+            }
         }
-    }
-
-    public void updateEmployeeAccount(EmployeeSyncEvent event) {
-        // 1. Tìm user
-        User user = userRepository.findByEmail(event.getEmail())
-                .orElseThrow(() -> new RuntimeException("User not found: " + event.getEmail()));
-
-        // 2. Cập nhật thông tin cơ bản
-        user.setFullName(event.getFullName());
-        user.setMobileNumber(event.getPhone());
-        user.setDateOfBirth(event.getDateOfBirth());
-
-        // 3. LOGIC CẬP NHẬT QUYỀN (ROLE) [MỚI]
-        // Kiểm tra: Nếu Role gửi sang KHÁC NULL và KHÁC với Role hiện tại thì mới cập nhật
-        if (event.getRole() != null && !event.getRole().equals(user.getRole())) {
-            System.out.println("--> [Core] Phát hiện thay đổi quyền: " + user.getRole() + " -> " + event.getRole());
-            user.setRole(event.getRole());
-        }
-
-        // 4. LOGIC CẬP NHẬT TRẠNG THÁI (STATUS) (Tương tự Role)
-        if (event.getStatus() != null && !event.getStatus().equals(user.getStatus())) {
-            System.out.println("--> [Core] Phát hiện thay đổi trạng thái: " + user.getStatus() + " -> " + event.getStatus());
-            user.setStatus(event.getStatus());
-        }
-
-        // 5. Cập nhật mật khẩu (chỉ khi có password mới)
-        if (event.getPassword() != null && !event.getPassword().isEmpty()) {
-            user.setPassword(passwordEncoder.encode(event.getPassword()));
-        }
-
-        // 6. Lưu thay đổi
-        userRepository.save(user);
-        System.out.println("--> [Core] Đã đồng bộ xong User: " + user.getEmail());
     }
 
     // --- HELPER FUNCTIONS ---

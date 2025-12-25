@@ -11,6 +11,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class EmployeeSyncEvent {
     private String email;
+    private String previousEmail;
     private String fullName;
     private String phone;
     private LocalDate dateOfBirth;
