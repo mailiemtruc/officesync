@@ -333,42 +333,54 @@ class _EditProfilePageState extends State<EditProfilePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        centerTitle: true,
-        leading: IconButton(
-          icon: Icon(
-            PhosphorIcons.caretLeft(PhosphorIconsStyle.bold),
-            color: AppColors.primary,
-            size: 24,
-          ),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        title: const Text(
-          'EDIT PROFILE',
-          style: TextStyle(
-            color: AppColors.primary,
-            fontSize: 20,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ),
+      // [XÓA] Bỏ AppBar
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 600),
             child: SingleChildScrollView(
-              padding: const EdgeInsets.only(left: 24, right: 24, bottom: 30),
+              // [SỬA 1] Padding top = 0
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 30),
               child: Column(
                 children: [
+                  // [SỬA 2] Khoảng cách chuẩn
+                  const SizedBox(height: 20),
+
+                  // [SỬA 3] Custom Header
+                  Row(
+                    children: [
+                      IconButton(
+                        icon: Icon(
+                          PhosphorIcons.caretLeft(PhosphorIconsStyle.bold),
+                          color: AppColors.primary,
+                          size: 24,
+                        ),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                      const Expanded(
+                        child: Center(
+                          child: Text(
+                            'EDIT PROFILE',
+                            style: TextStyle(
+                              color: AppColors.primary,
+                              fontSize: 24,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 40),
+                    ],
+                  ),
+                  const SizedBox(height: 32),
+
+                  // Avatar Section (Giữ nguyên)
                   _AvatarEditSection(
                     avatarUrl: _currentAvatarUrl,
                     isUploading: _isUploadingAvatar,
                     onCameraTap: () => _showImagePickerOptions(context),
                   ),
                   const SizedBox(height: 40),
-
                   _buildLabel('Full name'),
                   CustomTextField(
                     controller: _fullNameController,

@@ -8,13 +8,11 @@ import '../../../../core/config/app_colors.dart';
 import '../../data/models/employee_model.dart';
 import '../../widgets/employee_card.widget.dart';
 
-// [QUAN TRỌNG] Import Repository
 import '../../domain/repositories/employee_repository_impl.dart';
 import '../../data/datasources/employee_remote_data_source.dart';
 
 class SelectManagerPage extends StatefulWidget {
   final String? selectedId;
-  // [ĐÃ SỬA] Xóa tham số availableEmployees vì giờ tự gọi API
 
   const SelectManagerPage({super.key, this.selectedId});
 
@@ -23,13 +21,12 @@ class SelectManagerPage extends StatefulWidget {
 }
 
 class _SelectManagerPageState extends State<SelectManagerPage> {
-  // Logic API
   late final EmployeeRepositoryImpl _repository;
   final _storage = const FlutterSecureStorage();
 
   List<EmployeeModel> _displayList = [];
   bool _isLoading = false;
-  Timer? _debounce; // Timer để chờ người dùng gõ xong mới gọi API
+  Timer? _debounce;
   String? _currentUserId;
 
   final TextEditingController _searchController = TextEditingController();
@@ -37,33 +34,26 @@ class _SelectManagerPageState extends State<SelectManagerPage> {
   @override
   void initState() {
     super.initState();
-    // Khởi tạo Repository
     _repository = EmployeeRepositoryImpl(
       remoteDataSource: EmployeeRemoteDataSource(),
     );
-
     _initUserAndFetchDefault();
   }
 
   Future<void> _initUserAndFetchDefault() async {
-    // Lấy ID người dùng hiện tại từ Storage để gửi kèm Header
     String? userInfoStr = await _storage.read(key: 'user_info');
     if (userInfoStr != null) {
       final userMap = jsonDecode(userInfoStr);
       _currentUserId = userMap['id'].toString();
-
-      // Load dữ liệu gợi ý mặc định (keyword rỗng)
       _performSearch("");
     }
   }
 
-  // Hàm gọi API Search (Server-side)
   Future<void> _performSearch(String keyword) async {
     if (_currentUserId == null) return;
 
     setState(() => _isLoading = true);
     try {
-      // [LOGIC MỚI] Gọi API suggestion thay vì lọc list cục bộ
       final result = await _repository.getEmployeeSuggestions(
         _currentUserId!,
         keyword,
@@ -81,7 +71,6 @@ class _SelectManagerPageState extends State<SelectManagerPage> {
     }
   }
 
-  // Xử lý khi gõ phím (Debounce 500ms)
   void _onSearchChanged(String query) {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
     _debounce = Timer(const Duration(milliseconds: 500), () {
@@ -107,7 +96,7 @@ class _SelectManagerPageState extends State<SelectManagerPage> {
             child: Column(
               children: [
                 const SizedBox(height: 20),
-                // Header (Giữ nguyên UI)
+                // Header
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: Row(
@@ -115,8 +104,8 @@ class _SelectManagerPageState extends State<SelectManagerPage> {
                       IconButton(
                         icon: const Icon(
                           Icons.arrow_back_ios,
-                          size: 20,
-                          color: Colors.blue,
+                          size: 24,
+                          color: AppColors.primary,
                         ),
                         onPressed: () => Navigator.pop(context),
                       ),
@@ -126,7 +115,7 @@ class _SelectManagerPageState extends State<SelectManagerPage> {
                             'SELECT MANAGER',
                             style: TextStyle(
                               color: AppColors.primary,
-                              fontSize: 20,
+                              fontSize: 24,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
@@ -138,7 +127,7 @@ class _SelectManagerPageState extends State<SelectManagerPage> {
                 ),
                 const SizedBox(height: 24),
 
-                // Search Bar (Đã gắn hàm _onSearchChanged)
+                // Search Bar
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: Row(
@@ -152,7 +141,7 @@ class _SelectManagerPageState extends State<SelectManagerPage> {
 
                 const SizedBox(height: 12),
 
-                // Tiêu đề list
+                // Title
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                   child: Align(
@@ -168,17 +157,24 @@ class _SelectManagerPageState extends State<SelectManagerPage> {
                   ),
                 ),
 
-                // List Result
+                // List Items
                 Expanded(
                   child: _isLoading
                       ? const Center(child: CircularProgressIndicator())
                       : _displayList.isEmpty
-                      ? const Center(child: Text("No staff found"))
+                      // [HIỂN THỊ TRẠNG THÁI RỖNG ĐẸP]
+                      ? _buildEmptyState(
+                          _searchController.text.isNotEmpty
+                              ? "No employees found matching '${_searchController.text}'"
+                              : "No employees found",
+                        )
                       : ListView.builder(
                           padding: const EdgeInsets.symmetric(horizontal: 24),
                           itemCount: _displayList.length,
                           itemBuilder: (context, index) {
                             final emp = _displayList[index];
+                            // [SỬA LỖI LOGIC]
+                            // So sánh ID với ID đã chọn ban đầu (Single Select)
                             final isSelected =
                                 emp.id.toString() == widget.selectedId;
                             final isLocked = emp.status == "LOCKED";
@@ -186,6 +182,8 @@ class _SelectManagerPageState extends State<SelectManagerPage> {
                             return EmployeeCard(
                               employee: emp,
                               isSelected: isSelected,
+                              // [SỬA LỖI ONTAP]
+                              // Chọn xong thì trả về luôn (Navigator.pop)
                               onTap: isLocked
                                   ? null
                                   : () => Navigator.pop(context, emp),
@@ -215,7 +213,7 @@ class _SelectManagerPageState extends State<SelectManagerPage> {
       ),
       child: TextField(
         controller: _searchController,
-        onChanged: _onSearchChanged, // [QUAN TRỌNG] Gắn hàm search vào đây
+        onChanged: _onSearchChanged,
         decoration: InputDecoration(
           hintText: 'Search name, employee ID...',
           hintStyle: const TextStyle(color: Color(0xFF9E9E9E), fontSize: 14),
@@ -269,6 +267,22 @@ class _SelectManagerPageState extends State<SelectManagerPage> {
             size: 20,
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(String message) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(PhosphorIcons.ghost(), size: 48, color: Colors.grey[300]),
+          const SizedBox(height: 12),
+          Text(
+            message,
+            style: TextStyle(color: Colors.grey[500], fontSize: 16),
+          ),
+        ],
       ),
     );
   }

@@ -5,7 +5,6 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../../../core/config/app_colors.dart';
 import '../../../../core/widgets/custom_button.dart';
 import '../../../../core/widgets/custom_text_field.dart';
-// 1. IMPORT API CLIENT VÀ CUSTOM SNACKBAR
 import '../../../../core/api/api_client.dart';
 import '../../../../core/utils/custom_snackbar.dart';
 
@@ -25,7 +24,6 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
   bool _obscureNew = true;
   bool _obscureConfirm = true;
 
-  // 2. THÊM BIẾN TRẠNG THÁI LOADING
   bool _isLoading = false;
 
   @override
@@ -49,16 +47,13 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
         hasSpecialChar;
   }
 
-  // 3. CẬP NHẬT HÀM XỬ LÝ GỌI API
   Future<void> _handleChangePassword() async {
-    // Ẩn bàn phím để giao diện thoáng
     FocusScope.of(context).unfocus();
 
     String current = _currentPassController.text.trim();
     String newPass = _newPassController.text.trim();
     String confirm = _confirmPassController.text.trim();
 
-    // --- Validation Client-side ---
     if (current.isEmpty || newPass.isEmpty || confirm.isEmpty) {
       CustomSnackBar.show(
         context,
@@ -89,7 +84,6 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
       return;
     }
 
-    // Kiểm tra sơ bộ ở client (Backend cũng sẽ check lại)
     if (current == newPass) {
       CustomSnackBar.show(
         context,
@@ -100,14 +94,10 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
       return;
     }
 
-    // --- Gọi API ---
-    setState(() => _isLoading = true); // Bắt đầu loading
+    setState(() => _isLoading = true);
 
     try {
       final apiClient = ApiClient();
-
-      // Endpoint này đã được định nghĩa trong Backend AuthController
-      // Dữ liệu gửi đi khớp với ChangePasswordRequest DTO
       await apiClient.post(
         '/auth/change-password',
         data: {"currentPassword": current, "newPassword": newPass},
@@ -115,22 +105,17 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
 
       if (!mounted) return;
 
-      // Thành công
       CustomSnackBar.show(
         context,
         title: 'Success',
         message: "Password changed successfully! Please login again if needed.",
       );
 
-      // Đợi một chút rồi đóng màn hình
       Future.delayed(const Duration(milliseconds: 1500), () {
         if (mounted) Navigator.pop(context);
       });
     } catch (e) {
-      // Lỗi từ Server (VD: Sai mật khẩu cũ, Trùng lịch sử 3 lần gần nhất...)
-      // ApiClient đã xử lý message, ta chỉ việc hiện lên
       if (!mounted) return;
-      // Loại bỏ chữ "Exception: " nếu có để thông báo đẹp hơn
       String errorMsg = e.toString().replaceAll("Exception: ", "");
       CustomSnackBar.show(
         context,
@@ -140,7 +125,7 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
       );
     } finally {
       if (mounted) {
-        setState(() => _isLoading = false); // Kết thúc loading
+        setState(() => _isLoading = false);
       }
     }
   }
@@ -149,49 +134,61 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      // ... (Phần AppBar giữ nguyên) ...
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        centerTitle: true,
-        leading: IconButton(
-          icon: Icon(
-            PhosphorIcons.caretLeft(PhosphorIconsStyle.bold),
-            color: AppColors.primary,
-            size: 24,
-          ),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        title: const Text(
-          'PASSWORD MANAGEMENT',
-          style: TextStyle(
-            color: AppColors.primary,
-            fontSize: 20,
-            fontFamily: 'Inter',
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ),
       body: SafeArea(
-        child: Center(
+        // [SỬA LỖI QUAN TRỌNG] Đổi Center -> Align(topCenter)
+        // Center sẽ căn giữa dọc làm nội dung bị trôi xuống giữa màn hình
+        // Align topCenter sẽ đẩy nội dung lên sát trên cùng -> Header sẽ đồng bộ
+        child: Align(
+          alignment: Alignment.topCenter,
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 600),
-            // Thêm AbsorbPointer để chặn thao tác khi đang loading
             child: AbsorbPointer(
               absorbing: _isLoading,
               child: Stack(
                 children: [
                   SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 20,
-                    ),
+                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const SizedBox(height: 10),
+                        // Khoảng cách chuẩn 20px từ đỉnh an toàn
+                        const SizedBox(height: 20),
 
-                        // 1. Current Password
+                        // Header đồng bộ
+                        Row(
+                          children: [
+                            IconButton(
+                              icon: Icon(
+                                PhosphorIcons.caretLeft(
+                                  PhosphorIconsStyle.bold,
+                                ),
+                                color: AppColors.primary,
+                                size: 24,
+                              ),
+                              onPressed: () => Navigator.of(context).pop(),
+                            ),
+                            const Expanded(
+                              child: Center(
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    'PASSWORD MANAGEMENT',
+                                    style: TextStyle(
+                                      color: AppColors.primary,
+                                      fontSize: 24,
+                                      fontFamily: 'Inter',
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                    maxLines: 1,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 40),
+                          ],
+                        ),
+                        const SizedBox(height: 30),
+
                         _buildLabel('Current password'),
                         CustomTextField(
                           controller: _currentPassController,
@@ -210,13 +207,10 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
                           ),
                         ),
 
-                        // Forgot Password Link (Giữ nguyên)
                         Align(
                           alignment: Alignment.centerRight,
                           child: TextButton(
-                            onPressed: () {
-                              /* Navigate logic */
-                            },
+                            onPressed: () {},
                             child: const Text(
                               'Forgot password?',
                               style: TextStyle(
@@ -232,7 +226,6 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
 
                         const SizedBox(height: 10),
 
-                        // 2. New Password
                         _buildLabel('New password'),
                         CustomTextField(
                           controller: _newPassController,
@@ -249,12 +242,8 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
                                 setState(() => _obscureNew = !_obscureNew),
                           ),
                           onTap: () => setState(() {}),
-                          // Thêm onChanged để cập nhật realtime bảng rules
-                          // (Lưu ý: CustomTextField của bạn cần hỗ trợ onChanged,
-                          // nếu chưa có thì dùng ValueListenableBuilder như cũ là ổn)
                         ),
 
-                        // Bảng Rule (Giữ nguyên logic cũ)
                         ValueListenableBuilder(
                           valueListenable: _newPassController,
                           builder: (context, TextEditingValue value, __) {
@@ -269,7 +258,6 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
 
                         const SizedBox(height: 24),
 
-                        // 3. Confirm Password
                         _buildLabel('Confirm new password'),
                         CustomTextField(
                           controller: _confirmPassController,
@@ -290,8 +278,6 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
 
                         const SizedBox(height: 60),
 
-                        // 4. Button Change Password
-                        // Hiển thị Loading hoặc Nút bấm
                         _isLoading
                             ? const Center(
                                 child: CircularProgressIndicator(
@@ -316,7 +302,6 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
     );
   }
 
-  // ... (Giữ nguyên các hàm _buildLabel, _buildPasswordRules, _buildRuleItem) ...
   Widget _buildLabel(String label) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8, left: 4),
@@ -333,7 +318,6 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
   }
 
   Widget _buildPasswordRules(String password) {
-    // ... Logic cũ giữ nguyên ...
     bool hasMinLength = password.length >= 8;
     bool hasUppercase = password.contains(RegExp(r'[A-Z]'));
     bool hasLowercase = password.contains(RegExp(r'[a-z]'));

@@ -332,10 +332,13 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 600),
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(24),
+                  // [SỬA 1] Chỉnh padding top về 0 (các cạnh khác giữ nguyên 24)
+                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // [SỬA 2] Thêm khoảng cách chuẩn 20px ở đầu
+                      const SizedBox(height: 20),
                       Row(
                         children: [
                           IconButton(

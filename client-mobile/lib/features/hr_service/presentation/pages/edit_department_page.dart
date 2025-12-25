@@ -12,7 +12,6 @@ import '../../domain/repositories/employee_repository_impl.dart';
 import '../../data/datasources/employee_remote_data_source.dart';
 import '../../widgets/confirm_bottom_sheet.dart';
 import 'select_manager_page.dart';
-// [QUAN TRỌNG] Import trang Details để điều hướng
 import 'department_details_page.dart';
 
 class EditDepartmentPage extends StatefulWidget {
@@ -231,10 +230,13 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 600),
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(24),
+                  // [SỬA 1] Padding top = 0
+                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
+                      // [SỬA 2] Thêm SizedBox chuẩn 20px
+                      const SizedBox(height: 20),
                       // Header
                       Row(
                         children: [
@@ -264,24 +266,32 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
                       ),
                       const SizedBox(height: 32),
 
-                      // Icon Department (Dùng deptColor)
+                      // Icon Department (Đã chỉnh sửa giao diện)
                       Container(
                         width: 120,
                         height: 120,
                         decoration: BoxDecoration(
-                          color: deptColor.withOpacity(0.1),
+                          color: Color.alphaBlend(
+                            deptColor.withOpacity(0.15),
+                            Colors.white,
+                          ),
                           shape: BoxShape.circle,
+                          // [FIX 2] Thêm viền mỏng cùng tông màu để avatar sắc nét hơn
+                          border: Border.all(
+                            color: deptColor.withOpacity(0.2),
+                            width: 1.5,
+                          ),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
+                              color: deptColor.withOpacity(0.25),
+                              blurRadius: 20,
+                              offset: const Offset(0, 10),
                             ),
                           ],
                         ),
                         child: Icon(
-                          PhosphorIcons.buildings(PhosphorIconsStyle.regular),
-                          size: 56,
+                          PhosphorIcons.buildings(PhosphorIconsStyle.duotone),
+                          size: 60,
                           color: deptColor,
                         ),
                       ),

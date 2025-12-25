@@ -163,20 +163,25 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
 
   @override
   Widget build(BuildContext context) {
-    // UI giữ nguyên 100%
     return Scaffold(
       backgroundColor: const Color(0xFFF9F9F9),
       body: Stack(
         children: [
           SafeArea(
-            child: Center(
+            // [SỬA 1] Đổi Center -> Align(topCenter) để đẩy nội dung lên trên cùng
+            child: Align(
+              alignment: Alignment.topCenter,
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 600),
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(24),
+                  // [SỬA 2] Bỏ padding top (24 -> 0) để kiểm soát bằng SizedBox
+                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // [SỬA 3] Thêm khoảng cách chuẩn 20px từ đỉnh an toàn
+                      const SizedBox(height: 20),
+
                       // --- HEADER ---
                       Row(
                         children: [
@@ -235,6 +240,7 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
                       ),
                       const SizedBox(height: 32),
 
+                      // ... (Phần dưới giữ nguyên không đổi) ...
                       _buildSectionTitle('BASIC INFORMATION'),
                       const SizedBox(height: 12),
                       Container(
@@ -258,7 +264,6 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
                         ),
                       ),
                       const SizedBox(height: 24),
-
                       _buildSectionTitle('LEADERSHIP'),
                       const SizedBox(height: 12),
                       InkWell(

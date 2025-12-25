@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../../../core/config/app_colors.dart';
+import '../../data/models/employee_model.dart';
 import '../../widgets/confirm_bottom_sheet.dart';
 
+// [MỚI] Import để gọi API
+import '../../domain/repositories/employee_repository_impl.dart';
+import '../../data/datasources/employee_remote_data_source.dart';
+
 class EditProfileEmployeePage extends StatefulWidget {
-  const EditProfileEmployeePage({super.key});
+  final EmployeeModel employee; // [MỚI] Nhận dữ liệu nhân viên cần sửa
+  const EditProfileEmployeePage({super.key, required this.employee});
 
   @override
   State<EditProfileEmployeePage> createState() =>
@@ -14,17 +20,50 @@ class EditProfileEmployeePage extends StatefulWidget {
 class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
   // Biến trạng thái
   bool _isActive = true;
-  String _selectedDepartment = 'Business';
-  String _selectedRole = 'Manager';
+  String _selectedRole = 'Staff';
+  // Department ở đây là String để UI Dropdown hiển thị,
+  // Thực tế backend cần DepartmentId, nhưng demo UI dùng String trước.
+  String _selectedDepartmentName = 'Business';
 
-  // Controller cho Email để có thể chỉnh sửa
   late TextEditingController _emailController;
+  late final EmployeeRepositoryImpl _repository;
+  bool _isLoading = false;
+
+  // List cứng cho Dropdown (Demo UI)
+  final List<String> _roles = ['Manager', 'Staff', 'Intern'];
+  final List<String> _deptNames = ['Business', 'HR', 'Technical', 'Sales'];
 
   @override
   void initState() {
     super.initState();
-    // Khởi tạo giá trị ban đầu cho email
-    _emailController = TextEditingController(text: 'nguyenvana@gmail.com');
+    _repository = EmployeeRepositoryImpl(
+      remoteDataSource: EmployeeRemoteDataSource(),
+    );
+
+    // 1. Fill dữ liệu từ widget.employee vào state
+    _emailController = TextEditingController(text: widget.employee.email);
+
+    // Check Active/Locked
+    _isActive = (widget.employee.status != "LOCKED");
+
+    // Mapping Role (Nếu API trả về role khác list cứng thì default về Staff)
+    String roleApi = widget.employee.role ?? "Staff";
+    // Chuyển về title case hoặc mapping đúng với List _roles
+    // Giả sử API trả về "MANAGER" -> UI cần "Manager"
+    // Ở đây ta tìm kiếm không phân biệt hoa thường
+    var foundRole = _roles.firstWhere(
+      (r) => r.toUpperCase() == roleApi.toUpperCase(),
+      orElse: () => "Staff",
+    );
+    _selectedRole = foundRole;
+
+    // Mapping Department Name
+    String deptApi = widget.employee.departmentName ?? "Business";
+    var foundDept = _deptNames.firstWhere(
+      (d) => d.toUpperCase() == deptApi.toUpperCase(),
+      orElse: () => "Business",
+    );
+    _selectedDepartmentName = foundDept;
   }
 
   @override
@@ -33,7 +72,29 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
     super.dispose();
   }
 
-  // Hàm hiển thị BottomSheet xác nhận XÓA
+  // --- LOGIC XỬ LÝ ---
+  Future<void> _handleSave() async {
+    setState(() => _isLoading = true);
+    // TODO: Gọi API Update Employee ở đây.
+    // Hiện tại Backend EmployeeController chỉ có update thông tin cá nhân (Name, Phone, Dob).
+    // Chưa có API update Role/Department/Status cho Manager.
+    // Code dưới đây giả lập gọi API thành công để UI phản hồi.
+
+    await Future.delayed(const Duration(seconds: 1)); // Fake delay
+
+    if (mounted) {
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Changes saved locally (Backend pending)"),
+        ),
+      );
+      Navigator.pop(context);
+    }
+  }
+
+  // ... (Giữ nguyên các hàm _showDeleteConfirmation, _showSuspendConfirmation)
+
   void _showDeleteConfirmation(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -41,19 +102,18 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
       isScrollControlled: true,
       builder: (context) => ConfirmBottomSheet(
         title: 'Delete this account?',
-        message:
-            'This action cannot be undone. All data associated with employee Nguyen Van A will be permanently deleted.',
+        message: 'This action cannot be undone.',
         confirmText: 'Delete',
         confirmColor: const Color(0xFFDC2626),
         onConfirm: () {
+          // Gọi API Delete tại đây nếu muốn xóa từ trang Edit
           Navigator.pop(context);
-          Navigator.pop(context);
+          Navigator.pop(context); // Đóng trang Edit
         },
       ),
     );
   }
 
-  // Hàm hiển thị BottomSheet xác nhận CHẶN (SUSPEND)
   void _showSuspendConfirmation(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -61,8 +121,7 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
       isScrollControlled: true,
       builder: (context) => ConfirmBottomSheet(
         title: 'Suspend Access?',
-        message:
-            'Employee Nguyen Van A will not be able to log in to the system until you reactivate their account.',
+        message: 'Employee will not be able to log in.',
         confirmText: 'Suspend',
         confirmColor: const Color(0xFFF97316),
         onConfirm: () {
@@ -76,7 +135,6 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
     );
   }
 
-  // --- STYLE CHUNG CHO CÁC KHỐI (Có đổ bóng 0.1) ---
   BoxDecoration _buildBlockDecoration() {
     return BoxDecoration(
       color: Colors.white,
@@ -84,7 +142,7 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
       border: Border.all(color: const Color(0xFFECF1FF)),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withOpacity(0.05), // Đổ bóng 0.1 theo yêu cầu
+          color: Colors.black.withOpacity(0.05),
           blurRadius: 10,
           offset: const Offset(0, 4),
         ),
@@ -131,10 +189,9 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
                       const SizedBox(width: 40),
                     ],
                   ),
-
                   const SizedBox(height: 24),
 
-                  // 2. Avatar Circle (Đã bỏ biểu tượng Camera)
+                  // 2. Avatar Circle
                   Container(
                     width: 130,
                     height: 130,
@@ -148,32 +205,44 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
                           offset: const Offset(0, 5),
                         ),
                       ],
+                      color: Colors.grey[200],
                     ),
                     child: ClipOval(
-                      child: Image.network(
-                        "https://i.pravatar.cc/300?img=11",
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) =>
-                            Container(color: Colors.grey[300]),
-                      ),
+                      child:
+                          (widget.employee.avatarUrl != null &&
+                              widget.employee.avatarUrl!.isNotEmpty)
+                          ? Image.network(
+                              widget.employee.avatarUrl!,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => const Icon(
+                                Icons.person,
+                                size: 60,
+                                color: Colors.grey,
+                              ),
+                            )
+                          : const Icon(
+                              Icons.person,
+                              size: 60,
+                              color: Colors.grey,
+                            ),
                     ),
                   ),
 
                   const SizedBox(height: 16),
 
                   // 3. Name & ID
-                  const Text(
-                    'Nguyen Van A',
-                    style: TextStyle(
+                  Text(
+                    widget.employee.fullName,
+                    style: const TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.w700,
                       fontFamily: 'Inter',
                     ),
                   ),
                   const SizedBox(height: 4),
-                  const Text(
-                    'EMPLOYEE ID: 001',
-                    style: TextStyle(
+                  Text(
+                    'EMPLOYEE ID: ${widget.employee.employeeCode ?? "N/A"}',
+                    style: const TextStyle(
                       color: Color(0xFF6A6A6A),
                       fontSize: 14,
                       fontFamily: 'Inter',
@@ -183,15 +252,14 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
 
                   const SizedBox(height: 32),
 
-                  // 4. Form Fields - Section 1
+                  // 4. Form Fields
                   _buildSectionTitle('ACCOUNT SETTINGS'),
                   const SizedBox(height: 12),
 
-                  // Email Field (Đã chỉnh sửa để Edit được)
+                  // Email Field
                   Container(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                    decoration:
-                        _buildBlockDecoration(), // Sử dụng hàm style có bóng
+                    decoration: _buildBlockDecoration(),
                     child: Column(
                       children: [
                         Row(
@@ -202,7 +270,6 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
                               size: 22,
                             ),
                             const SizedBox(width: 12),
-                            // TextFormField thay cho Text tĩnh
                             Expanded(
                               child: TextFormField(
                                 controller: _emailController,
@@ -218,8 +285,7 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
                                     fontWeight: FontWeight.w600,
                                     fontSize: 15,
                                   ),
-                                  border: InputBorder
-                                      .none, // Bỏ viền mặc định của input
+                                  border: InputBorder.none,
                                   contentPadding: EdgeInsets.symmetric(
                                     vertical: 8,
                                   ),
@@ -262,28 +328,27 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
                   _buildSectionTitle('ROLES & PERMISSIONS'),
                   const SizedBox(height: 12),
 
-                  // Roles & Dept Container
+                  // Roles & Dept
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 16,
                       vertical: 8,
                     ),
-                    decoration:
-                        _buildBlockDecoration(), // Sử dụng hàm style có bóng
+                    decoration: _buildBlockDecoration(),
                     child: Column(
                       children: [
                         _buildDropdownRow(
                           label: 'Department',
-                          value: _selectedDepartment,
-                          items: ['Business', 'HR', 'Technical', 'Sales'],
+                          value: _selectedDepartmentName,
+                          items: _deptNames,
                           onChanged: (val) =>
-                              setState(() => _selectedDepartment = val!),
+                              setState(() => _selectedDepartmentName = val!),
                         ),
                         const Divider(height: 1, color: Color(0xFFF1F5F9)),
                         _buildDropdownRow(
                           label: 'Role',
                           value: _selectedRole,
-                          items: ['Manager', 'Staff', 'Intern'],
+                          items: _roles,
                           onChanged: (val) =>
                               setState(() => _selectedRole = val!),
                           isBlueValue: true,
@@ -299,8 +364,7 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
                   // Status Container
                   Container(
                     padding: const EdgeInsets.all(16),
-                    decoration:
-                        _buildBlockDecoration(), // Sử dụng hàm style có bóng
+                    decoration: _buildBlockDecoration(),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -328,8 +392,6 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
                   ),
 
                   const SizedBox(height: 32),
-
-                  // Delete Button
                   TextButton(
                     onPressed: () => _showDeleteConfirmation(context),
                     child: const Text(
@@ -343,17 +405,11 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
                   ),
 
                   const SizedBox(height: 20),
-
-                  // Save Button
                   SizedBox(
                     width: double.infinity,
                     height: 50,
                     child: ElevatedButton(
-                      onPressed: () {
-                        // In ra email để kiểm tra
-                        print("New Email: ${_emailController.text}");
-                        Navigator.pop(context);
-                      },
+                      onPressed: _isLoading ? null : _handleSave,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primary,
                         shape: RoundedRectangleBorder(
@@ -361,14 +417,16 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
                         ),
                         elevation: 4,
                       ),
-                      child: const Text(
-                        'Save changes',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
+                      child: _isLoading
+                          ? const CircularProgressIndicator(color: Colors.white)
+                          : const Text(
+                              'Save changes',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
                     ),
                   ),
                   const SizedBox(height: 40),
@@ -381,6 +439,7 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
     );
   }
 
+  // ... (Giữ nguyên các helper widget _buildSectionTitle, _buildDropdownRow)
   Widget _buildSectionTitle(String title) {
     return Align(
       alignment: Alignment.centerLeft,

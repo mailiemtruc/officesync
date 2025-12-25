@@ -418,33 +418,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        centerTitle: true,
-        leading: IconButton(
-          icon: Icon(
-            PhosphorIcons.caretLeft(PhosphorIconsStyle.bold),
-            color: AppColors.primary,
-            size: 24,
-          ),
-          onPressed: () => Navigator.pushNamedAndRemoveUntil(
-            context,
-            '/dashboard',
-            (route) => false,
-          ),
-        ),
-        title: const Text(
-          'PERSONAL INFORMATION',
-          style: TextStyle(
-            color: AppColors.primary,
-            fontSize: 20,
-            fontFamily: 'Inter',
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ),
+      // [XÓA] Bỏ AppBar
       body: ScrollConfiguration(
         behavior: const ScrollBehavior().copyWith(overscroll: false),
         child: SafeArea(
@@ -452,12 +426,48 @@ class _UserProfilePageState extends State<UserProfilePage> {
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 600),
               child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 10,
-                ),
+                // [SỬA 1] Padding top = 0
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 30),
                 child: Column(
                   children: [
+                    // [SỬA 2] Khoảng cách chuẩn
+                    const SizedBox(height: 20),
+
+                    // [SỬA 3] Custom Header
+                    Row(
+                      children: [
+                        IconButton(
+                          icon: Icon(
+                            PhosphorIcons.caretLeft(PhosphorIconsStyle.bold),
+                            color: AppColors.primary,
+                            size: 24,
+                          ),
+                          // Logic back về Dashboard giữ nguyên
+                          onPressed: () => Navigator.pushNamedAndRemoveUntil(
+                            context,
+                            '/dashboard',
+                            (route) => false,
+                          ),
+                        ),
+                        const Expanded(
+                          child: Center(
+                            child: Text(
+                              'PERSONAL INFORMATION',
+                              style: TextStyle(
+                                color: AppColors.primary,
+                                fontSize: 22, // Giảm size xíu nếu chữ dài
+                                fontFamily: 'Inter',
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 40),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Header Section (Avatar + Tên) giữ nguyên
                     _HeaderSection(
                       fullName: fullName,
                       role: role,

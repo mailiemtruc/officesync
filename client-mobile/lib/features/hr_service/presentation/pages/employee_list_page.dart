@@ -18,7 +18,7 @@ import '../../data/datasources/department_remote_data_source.dart'; // [MỚI]
 import '../../widgets/employee_card.widget.dart';
 import '../../widgets/department_card.widget.dart';
 import '../../widgets/department_bottom_sheet.dart';
-
+import '../../widgets/employee_bottom_sheet.dart';
 import 'add_employee_page.dart';
 import 'create_department_page.dart';
 import 'department_details_page.dart';
@@ -272,7 +272,8 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
               : EdgeInsets.zero,
           child: EmployeeCard(
             employee: emp,
-            onMenuTap: () => _showOptions(context, "Employee: ${emp.fullName}"),
+            onMenuTap: () =>
+                _showOptions(context, emp), // [ĐÃ SỬA] Truyền object emp
             onTap: () {},
           ),
         );
@@ -331,15 +332,51 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
     );
   }
 
-  void _showOptions(BuildContext context, String title) {
+  void _showOptions(BuildContext context, EmployeeModel employee) {
     showModalBottomSheet(
       context: context,
-      builder: (context) => Container(
-        height: 150,
-        color: Colors.white,
-        child: Center(child: Text(title)),
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => EmployeeBottomSheet(
+        employee: employee,
+        onToggleLock: () {
+          // Xử lý Lock/Unlock
+          _handleToggleLock(employee);
+        },
+        onDelete: () {
+          // Xử lý Delete
+          _handleDeleteEmployee(employee.id!);
+        },
       ),
+    ).then((_) {
+      // Refresh list khi đóng sheet (đề phòng có thay đổi)
+      _fetchData(keyword: _searchController.text);
+    });
+  }
+
+  // Hàm xử lý Xóa (Call API)
+  Future<void> _handleDeleteEmployee(String id) async {
+    // TODO: Gọi API deleteEmployee(id)
+    // await _employeeRepository.deleteEmployee(id);
+    print("Deleting employee $id");
+
+    // Giả lập thành công & Reload
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Employee deleted successfully")),
     );
+    _fetchData();
+  }
+
+  // Hàm xử lý Lock (Call API)
+  Future<void> _handleToggleLock(EmployeeModel emp) async {
+    // TODO: Gọi API toggleLock(id)
+    print("Toggling lock for ${emp.fullName}");
+
+    // Giả lập thành công & Reload
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text("Account status updated")));
+    _fetchData();
   }
 
   Widget _buildBottomNavBar() {
@@ -487,8 +524,8 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
           Expanded(
             child: _buildSearchBar(
               hint: _isEmployeesTab
-                  ? 'Search employee...'
-                  : 'Search department...',
+                  ? 'Search name, employee ID...'
+                  : 'Search name, department ID...',
             ),
           ),
           const SizedBox(width: 12),

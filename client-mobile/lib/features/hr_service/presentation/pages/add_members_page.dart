@@ -236,7 +236,11 @@ class _AddMembersPageState extends State<AddMembersPage> {
                   child: _isLoading
                       ? const Center(child: CircularProgressIndicator())
                       : _displayList.isEmpty
-                      ? const Center(child: Text("No staff found"))
+                      ? _buildEmptyState(
+                          _searchController.text.isNotEmpty
+                              ? "No employees found matching '${_searchController.text}'"
+                              : "No employees found",
+                        )
                       : ListView.builder(
                           padding: const EdgeInsets.symmetric(horizontal: 24),
                           itemCount: _displayList.length,
@@ -288,7 +292,6 @@ class _AddMembersPageState extends State<AddMembersPage> {
                           },
                         ),
                 ),
-
                 // Bottom Button
                 Padding(
                   padding: const EdgeInsets.all(24),
@@ -408,6 +411,23 @@ class _AddMembersPageState extends State<AddMembersPage> {
             fontSize: 14,
           ),
         ),
+      ),
+    );
+  }
+
+  // [MỚI] Widget hiển thị khi danh sách rỗng (Giống EmployeeListPage)
+  Widget _buildEmptyState(String message) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(PhosphorIcons.ghost(), size: 48, color: Colors.grey[300]),
+          const SizedBox(height: 12),
+          Text(
+            message,
+            style: TextStyle(color: Colors.grey[500], fontSize: 16),
+          ),
+        ],
       ),
     );
   }
