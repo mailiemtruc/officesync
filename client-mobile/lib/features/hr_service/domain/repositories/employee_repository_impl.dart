@@ -47,23 +47,35 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
     return await remoteDataSource.getDepartments();
   }
 
-  // [SỬA] Cập nhật hàm này
   @override
   Future<bool> updateEmployee(
     String id,
     String fullName,
     String phone,
     String dob, {
-    String? avatarUrl, // [MỚI] Nhận tham số từ UI
+    String? email, // [MỚI]
+    String? avatarUrl,
+    String? status,
+    String? role,
+    int? departmentId,
   }) async {
-    // Gọi xuống Data Source với tham số mới
     return await remoteDataSource.updateEmployee(
       id,
       fullName,
       phone,
       dob,
-      avatarUrl: avatarUrl, // Truyền tiếp
+      email: email, // [MỚI] Truyền xuống data source
+      avatarUrl: avatarUrl,
+      status: status,
+      role: role,
+      departmentId: departmentId,
     );
+  }
+
+  // [MỚI] Implement hàm xóa
+  @override
+  Future<bool> deleteEmployee(String id) async {
+    return await remoteDataSource.deleteEmployee(id);
   }
 
   // [MỚI] Thêm hàm này vào đây để sửa lỗi thiếu implementation

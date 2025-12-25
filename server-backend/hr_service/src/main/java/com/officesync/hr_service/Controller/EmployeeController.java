@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -29,12 +30,21 @@ public class EmployeeController {
     private final EmployeeService employeeService;
     private final EmployeeRepository employeeRepository;
 
+   // DTO cho yêu cầu cập nhật
     @Data
     public static class UpdateEmployeeRequest {
         private String fullName;
         private String phone;
         private String dateOfBirth;
-        private String avatarUrl; // [QUAN TRỌNG] Thêm trường này
+        private String avatarUrl;
+        
+      
+        private String email; 
+        
+        // Các trường quản trị
+        private String status;       // "ACTIVE", "LOCKED"
+        private String role;         // "STAFF", "MANAGER"
+        private Long departmentId;   // Chuyển phòng ban
     }
      
     @Data
@@ -47,7 +57,8 @@ public class EmployeeController {
         private String password;    // [QUAN TRỌNG] Hứng mật khẩu
     }
 
-   @PutMapping("/{id}")
+ // API Cập nhật thông tin nhân viên (All-in-One)
+    @PutMapping("/{id}")
     public ResponseEntity<?> updateEmployee(
             @PathVariable Long id,
             @RequestBody UpdateEmployeeRequest request
@@ -58,12 +69,23 @@ public class EmployeeController {
                 request.getFullName(),
                 request.getPhone(),
                 request.getDateOfBirth(),
-                request.getAvatarUrl() // Truyền avatarUrl xuống Service
+                request.getAvatarUrl(),
+                request.getStatus(),
+                request.getRole(),
+                request.getDepartmentId(),
+                request.getEmail() // [MỚI] Truyền email xuống Service
             );
             return ResponseEntity.ok(updated);
         } catch (RuntimeException e) {
+            // Trả về lỗi 400 kèm message (ví dụ: "Email đã tồn tại")
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }
+    }
+    // [MỚI] API Xóa (Vẫn cần thêm cái này vì Update không thay thế được Delete)
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> deleteEmployee(@PathVariable Long id) {
+        employeeService.deleteEmployee(id);
+        return ResponseEntity.ok(Map.of("message", "Employee deleted successfully"));
     }
    
 

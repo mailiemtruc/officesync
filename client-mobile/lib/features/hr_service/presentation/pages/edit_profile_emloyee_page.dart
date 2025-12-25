@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../../../core/config/app_colors.dart';
 import '../../data/models/employee_model.dart';
+import '../../data/models/department_model.dart'; // [MỚI] Import model
 import '../../widgets/confirm_bottom_sheet.dart';
 
 // [MỚI] Import để gọi API
@@ -9,7 +10,7 @@ import '../../domain/repositories/employee_repository_impl.dart';
 import '../../data/datasources/employee_remote_data_source.dart';
 
 class EditProfileEmployeePage extends StatefulWidget {
-  final EmployeeModel employee; // [MỚI] Nhận dữ liệu nhân viên cần sửa
+  final EmployeeModel employee;
   const EditProfileEmployeePage({super.key, required this.employee});
 
   @override
@@ -21,17 +22,18 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
   // Biến trạng thái
   bool _isActive = true;
   String _selectedRole = 'Staff';
-  // Department ở đây là String để UI Dropdown hiển thị,
-  // Thực tế backend cần DepartmentId, nhưng demo UI dùng String trước.
-  String _selectedDepartmentName = 'Business';
+  String _selectedDepartmentName = 'Loading...';
 
   late TextEditingController _emailController;
   late final EmployeeRepositoryImpl _repository;
   bool _isLoading = false;
 
-  // List cứng cho Dropdown (Demo UI)
-  final List<String> _roles = ['Manager', 'Staff', 'Intern'];
-  final List<String> _deptNames = ['Business', 'HR', 'Technical', 'Sales'];
+  // List vai trò hiển thị UI
+  final List<String> _roles = ['Manager', 'Staff', 'Company_Admin'];
+
+  // [DATA THẬT] List phòng ban từ API
+  List<DepartmentModel> _realDepartments = [];
+  List<String> _deptNames = []; // Dùng để hiển thị lên Dropdown
 
   @override
   void initState() {
@@ -42,28 +44,51 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
 
     // 1. Fill dữ liệu từ widget.employee vào state
     _emailController = TextEditingController(text: widget.employee.email);
+    _isActive = (widget.employee.status == "ACTIVE");
 
-    // Check Active/Locked
-    _isActive = (widget.employee.status != "LOCKED");
+    // Mapping Role (Từ API uppercase sang Title case UI)
+    String roleApi = widget.employee.role;
+    try {
+      // Tìm role tương ứng trong list UI (không phân biệt hoa thường)
+      var foundRole = _roles.firstWhere(
+        (r) => r.toUpperCase() == roleApi.toUpperCase(),
+        orElse: () => "Staff",
+      );
+      _selectedRole = foundRole;
+    } catch (e) {
+      _selectedRole = "Staff";
+    }
 
-    // Mapping Role (Nếu API trả về role khác list cứng thì default về Staff)
-    String roleApi = widget.employee.role ?? "Staff";
-    // Chuyển về title case hoặc mapping đúng với List _roles
-    // Giả sử API trả về "MANAGER" -> UI cần "Manager"
-    // Ở đây ta tìm kiếm không phân biệt hoa thường
-    var foundRole = _roles.firstWhere(
-      (r) => r.toUpperCase() == roleApi.toUpperCase(),
-      orElse: () => "Staff",
-    );
-    _selectedRole = foundRole;
+    // Mapping Department Name ban đầu
+    _selectedDepartmentName = widget.employee.departmentName ?? "Unassigned";
+    _deptNames = [_selectedDepartmentName]; // Init tạm để không lỗi UI
 
-    // Mapping Department Name
-    String deptApi = widget.employee.departmentName ?? "Business";
-    var foundDept = _deptNames.firstWhere(
-      (d) => d.toUpperCase() == deptApi.toUpperCase(),
-      orElse: () => "Business",
-    );
-    _selectedDepartmentName = foundDept;
+    // 2. Tải danh sách phòng ban thật để lấy ID
+    _fetchDepartments();
+  }
+
+  Future<void> _fetchDepartments() async {
+    try {
+      final depts = await _repository.getDepartments();
+      if (mounted) {
+        setState(() {
+          _realDepartments = depts;
+          _deptNames = depts.map((d) => d.name).toList();
+
+          // Logic chọn lại giá trị dropdown sau khi load xong list
+          if (!_deptNames.contains(_selectedDepartmentName)) {
+            if (_deptNames.isNotEmpty) {
+              _selectedDepartmentName = _deptNames.first;
+            } else {
+              _deptNames.add("Unassigned");
+              _selectedDepartmentName = "Unassigned";
+            }
+          }
+        });
+      }
+    } catch (e) {
+      print("Error fetching departments: $e");
+    }
   }
 
   @override
@@ -72,29 +97,63 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
     super.dispose();
   }
 
-  // --- LOGIC XỬ LÝ ---
+  // --- LOGIC XỬ LÝ LƯU (THẬT) ---
   Future<void> _handleSave() async {
     setState(() => _isLoading = true);
-    // TODO: Gọi API Update Employee ở đây.
-    // Hiện tại Backend EmployeeController chỉ có update thông tin cá nhân (Name, Phone, Dob).
-    // Chưa có API update Role/Department/Status cho Manager.
-    // Code dưới đây giả lập gọi API thành công để UI phản hồi.
+    try {
+      // 1. Map tên phòng ban sang ID
+      int? deptIdToSend;
+      try {
+        if (_realDepartments.isNotEmpty) {
+          final selectedDept = _realDepartments.firstWhere(
+            (d) => d.name == _selectedDepartmentName,
+          );
+          deptIdToSend = selectedDept.id;
+        }
+      } catch (e) {
+        print("Cannot find ID for dept: $_selectedDepartmentName");
+      }
 
-    await Future.delayed(const Duration(seconds: 1)); // Fake delay
+      // 2. Chuẩn bị dữ liệu gửi (Status & Role UpperCase)
+      String statusToSend = _isActive ? "ACTIVE" : "LOCKED";
+      String roleToSend = _selectedRole.toUpperCase();
 
-    if (mounted) {
-      setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Changes saved locally (Backend pending)"),
-        ),
+      // 3. Gọi API Update
+      final success = await _repository.updateEmployee(
+        widget.employee.id!,
+        widget.employee.fullName,
+        widget.employee.phone,
+        widget.employee.dateOfBirth,
+        email: _emailController.text, // [MỚI] Gửi email từ controller
+        avatarUrl: widget.employee.avatarUrl,
+        status: statusToSend,
+        role: roleToSend,
+        departmentId: deptIdToSend,
       );
-      Navigator.pop(context);
+
+      if (mounted) {
+        setState(() => _isLoading = false);
+        if (success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Profile updated successfully!")),
+          );
+          Navigator.pop(context, true);
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        // Hiển thị lỗi từ Backend (ví dụ: Email already exists)
+        // Cắt chuỗi "Exception: " đi cho đẹp nếu muốn
+        String errorMsg = e.toString().replaceAll("Exception: ", "");
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(errorMsg), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
-  // ... (Giữ nguyên các hàm _showDeleteConfirmation, _showSuspendConfirmation)
-
+  // --- LOGIC XÓA (THẬT) ---
   void _showDeleteConfirmation(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -105,10 +164,26 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
         message: 'This action cannot be undone.',
         confirmText: 'Delete',
         confirmColor: const Color(0xFFDC2626),
-        onConfirm: () {
-          // Gọi API Delete tại đây nếu muốn xóa từ trang Edit
-          Navigator.pop(context);
-          Navigator.pop(context); // Đóng trang Edit
+        onConfirm: () async {
+          Navigator.pop(context); // Đóng dialog
+
+          setState(() => _isLoading = true);
+          // Gọi API Xóa
+          bool success = await _repository.deleteEmployee(widget.employee.id!);
+
+          if (mounted) {
+            setState(() => _isLoading = false);
+            if (success) {
+              Navigator.pop(context, true); // Đóng trang edit về list
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Employee deleted successfully")),
+              );
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Failed to delete employee")),
+              );
+            }
+          }
         },
       ),
     );
@@ -273,6 +348,7 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
                             Expanded(
                               child: TextFormField(
                                 controller: _emailController,
+
                                 style: const TextStyle(
                                   color: AppColors.primary,
                                   fontWeight: FontWeight.w600,
@@ -310,7 +386,7 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
                               const SizedBox(width: 8),
                               const Expanded(
                                 child: Text(
-                                  "Changing email will update login credentials.",
+                                  "Contact Admin to change email credentials.",
                                   style: TextStyle(
                                     color: Color(0xFFA16207),
                                     fontSize: 12,
@@ -439,7 +515,7 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
     );
   }
 
-  // ... (Giữ nguyên các helper widget _buildSectionTitle, _buildDropdownRow)
+  // Helper Widgets
   Widget _buildSectionTitle(String title) {
     return Align(
       alignment: Alignment.centerLeft,

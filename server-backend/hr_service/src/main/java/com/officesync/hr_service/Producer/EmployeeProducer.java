@@ -46,4 +46,15 @@ public class EmployeeProducer {
             fileName // Chỉ cần gửi chuỗi tên file
         );
     }
+
+   
+    public void sendEmployeeDeletedEvent(Long userId) {
+        log.info("--> [RabbitMQ] Delete User ID: {}", userId);
+        
+        rabbitTemplate.convertAndSend(
+            RabbitMQConfig.EMPLOYEE_EXCHANGE,
+            RabbitMQConfig.EMPLOYEE_DELETE_ROUTING_KEY,
+            userId // Gửi ID sang
+        );
+    }
 }

@@ -225,72 +225,126 @@ public class EmployeeService {
     }
 
 
-   // 4. CẬP NHẬT THÔNG TIN (CÓ XÓA ẢNH CŨ)
-    public Employee updateEmployee(Long id, String fullName, String phone, String dob, String avatarUrl) {
-        // 1. Tìm nhân viên
+   // =================================================================
+    // [ĐÃ SỬA] NÂNG CẤP Hàm Update xử lý "All-in-One"
+    // =================================================================
+    @Transactional
+    public Employee updateEmployee(
+            Long id, 
+            String fullName, 
+            String phone, 
+            String dob, 
+            String avatarUrl, 
+            String statusStr, 
+            String roleStr, 
+            Long departmentId,
+            String email // [MỚI] Thêm tham số email
+    ) {
         Employee employee = employeeRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Employee not found"));
 
-        // Lưu lại URL cũ
-        String oldAvatarUrl = employee.getAvatarUrl();
+        // 1. FullName
+        if (fullName != null && !fullName.isEmpty()) employee.setFullName(fullName);
 
-        // Chuẩn bị dữ liệu ngày sinh
-        java.time.LocalDate newDob = null;
-        if (dob != null && !dob.isEmpty()) {
-            try { newDob = java.time.LocalDate.parse(dob); } catch (Exception e) {}
+        // 2. [MỚI] Check Email Duplicate & Update
+        if (email != null && !email.isEmpty()) {
+            // Kiểm tra: Nếu email thay đổi VÀ email mới đã tồn tại
+            if (!email.equals(employee.getEmail()) && employeeRepository.existsByEmail(email)) {
+                throw new RuntimeException("Email already exists"); // [TIẾNG ANH]
+            }
+            employee.setEmail(email);
         }
 
-        // Kiểm tra thay đổi
-        boolean isNameChanged = (fullName != null && !fullName.isEmpty() && !fullName.equals(employee.getFullName()));
-        boolean isPhoneChanged = (phone != null && !phone.isEmpty() && !phone.equals(employee.getPhone()));
-        boolean isDobChanged = false;
-        if (newDob != null) {
-            if (employee.getDateOfBirth() == null || !newDob.equals(employee.getDateOfBirth())) isDobChanged = true;
-        }
-        
-        // Logic check Avatar thay đổi
-        boolean isAvatarChanged = false;
-        if (avatarUrl != null && !avatarUrl.isEmpty() && !avatarUrl.equals(oldAvatarUrl)) {
-            isAvatarChanged = true;
-        }
-
-        // Chặn spam
-        if (!isNameChanged && !isPhoneChanged && !isDobChanged && !isAvatarChanged) {
-            throw new RuntimeException("No changes detected.");
-        }
-
-        // Update
-        if (isPhoneChanged) {
-            if (employeeRepository.existsByPhone(phone)) throw new RuntimeException("Phone number " + phone + " already exists!");
+        // 3. Check Phone Duplicate & Update
+        if (phone != null && !phone.isEmpty()) {
+            if (!phone.equals(employee.getPhone()) && employeeRepository.existsByPhone(phone)) {
+                throw new RuntimeException("Phone already exists"); // [TIẾNG ANH] - Như code gốc
+            }
             employee.setPhone(phone);
         }
-        if (isNameChanged) employee.setFullName(fullName);
-        if (isDobChanged) employee.setDateOfBirth(newDob);
 
-        // Update Avatar & Xóa ảnh cũ
-        if (isAvatarChanged) {
+       // 4. [ĐÃ FIX] Date of Birth (Không nuốt lỗi)
+        if (dob != null && !dob.isEmpty()) {
+            try { 
+                employee.setDateOfBirth(java.time.LocalDate.parse(dob)); 
+            } catch (Exception e) {
+                // Log warning và giữ nguyên ngày cũ, hoặc ném lỗi tùy bạn. 
+                // Ở đây tôi chọn ném lỗi để FE biết đường sửa.
+                throw new RuntimeException("Invalid Date format (yyyy-MM-dd required)."); 
+            }
+        }
+        // 5. Avatar
+        if (avatarUrl != null && !avatarUrl.equals(employee.getAvatarUrl())) {
+            deleteOldAvatarFromStorage(employee.getAvatarUrl());
             employee.setAvatarUrl(avatarUrl);
-            // [QUAN TRỌNG] Gọi hàm xóa ảnh cũ
-            deleteOldAvatarFromStorage(oldAvatarUrl);
         }
 
-        Employee updatedEmployee = employeeRepository.save(employee);
+        // 6. Status
+        if (statusStr != null && !statusStr.isEmpty()) {
+            try {
+                employee.setStatus(EmployeeStatus.valueOf(statusStr.toUpperCase()));
+            } catch (Exception e) { /* Ignore invalid status */ }
+        }
 
-        // Gửi RabbitMQ (Giữ nguyên code cũ của bạn)
+        // 7. Role
+        if (roleStr != null && !roleStr.isEmpty()) {
+            try {
+                employee.setRole(EmployeeRole.valueOf(roleStr.toUpperCase()));
+            } catch (Exception e) { /* Ignore */ }
+        }
+
+        // 8. Department
+        if (departmentId != null) {
+            Department dept = departmentRepository.findById(departmentId)
+                    .orElse(null); 
+            if (dept != null) {
+                employee.setDepartment(dept);
+            }
+        }
+
+        // 9. Save
+        Employee savedEmployee = employeeRepository.save(employee);
+
+        // 10. Gửi RabbitMQ đồng bộ (Email đã được cập nhật vào savedEmployee)
         try {
             EmployeeSyncEvent event = new EmployeeSyncEvent(
-                updatedEmployee.getEmail(), updatedEmployee.getFullName(), updatedEmployee.getPhone(),
-                updatedEmployee.getDateOfBirth(), updatedEmployee.getCompanyId(),
-                updatedEmployee.getRole().name(), updatedEmployee.getStatus().name(), null
+                savedEmployee.getEmail(),
+                savedEmployee.getFullName(),
+                savedEmployee.getPhone(),
+                savedEmployee.getDateOfBirth(),
+                savedEmployee.getCompanyId(),
+                savedEmployee.getRole().name(), 
+                savedEmployee.getStatus().name(),
+                null
             );
             employeeProducer.sendEmployeeUpdatedEvent(event);
+            log.info("--> [UPDATE] Đã đồng bộ User {} (Status: {}) sang Core", savedEmployee.getEmail(), savedEmployee.getStatus());
         } catch (Exception e) {
-            log.error("Lỗi khi gửi sự kiện update sang Core: {}", e.getMessage());
+            log.error("Lỗi gửi RabbitMQ: {}", e.getMessage());
         }
 
-        return updatedEmployee;
+        return savedEmployee;
     }
 
+    // [ĐÃ SỬA] Hàm Xóa: Gọi đúng sự kiện DELETE thay vì UPDATE
+    @Transactional
+    public void deleteEmployee(Long id) {
+        Employee employee = employeeRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Employee not found"));
+
+        // 1. Gửi sự kiện yêu cầu XÓA user sang Core (User sẽ bị xóa khỏi bảng users)
+        try {
+            // Sử dụng hàm sendEmployeeDeletedEvent đã có trong Producer
+            employeeProducer.sendEmployeeDeletedEvent(employee.getId()); 
+            log.info("--> Đã gửi lệnh xóa User ID {} sang Core", employee.getId());
+        } catch (Exception e) {
+            log.error("Lỗi gửi event xóa: {}", e.getMessage());
+        }
+
+        // 2. Xóa khỏi DB của HR
+        employeeRepository.delete(employee);
+    }
+    
     private void deleteOldAvatarFromStorage(String fileUrl) {
         if (fileUrl == null || fileUrl.isEmpty()) return;
 

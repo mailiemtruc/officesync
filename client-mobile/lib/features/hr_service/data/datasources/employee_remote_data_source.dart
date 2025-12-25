@@ -87,24 +87,30 @@ class EmployeeRemoteDataSource {
     }
   }
 
-  // 4. CẬP NHẬT NHÂN VIÊN
   Future<bool> updateEmployee(
     String id,
     String fullName,
     String phone,
     String dob, {
+    String? email, // [MỚI] Thêm tham số email
     String? avatarUrl,
+    String? status,
+    String? role,
+    int? departmentId,
   }) async {
     try {
       final url = Uri.parse('$baseUrl/employees/$id');
-      print("--> Updating Employee ID: $id");
 
-      // Đóng gói dữ liệu
       final Map<String, dynamic> body = {
         "fullName": fullName,
         "phone": phone,
         "dateOfBirth": dob,
-        "avatarUrl": avatarUrl, // [QUAN TRỌNG] Gửi avatarUrl lên backend
+        // [MỚI] Gửi email nếu có dữ liệu
+        if (email != null && email.isNotEmpty) "email": email,
+        "avatarUrl": avatarUrl,
+        if (status != null) "status": status,
+        if (role != null) "role": role,
+        if (departmentId != null) "departmentId": departmentId,
       };
 
       final response = await http.put(
@@ -113,13 +119,15 @@ class EmployeeRemoteDataSource {
         body: jsonEncode(body),
       );
 
+      // Nếu backend trả về lỗi (ví dụ 400 Bad Request do trùng email)
       if (response.statusCode == 200) {
         return true;
       } else {
-        throw Exception('Failed to update: ${response.body}');
+        // [QUAN TRỌNG] Ném lỗi để UI bắt được thông báo "Email đã tồn tại"
+        final errorBody = jsonDecode(response.body);
+        throw Exception(errorBody['message'] ?? 'Update failed');
       }
     } catch (e) {
-      print("Update Error: $e");
       rethrow;
     }
   }
@@ -205,6 +213,26 @@ class EmployeeRemoteDataSource {
     } catch (e) {
       print("Error fetching department members: $e");
       return [];
+    }
+  }
+
+  // [MỚI] XÓA NHÂN VIÊN
+  Future<bool> deleteEmployee(String id) async {
+    try {
+      final url = Uri.parse('$baseUrl/employees/$id');
+      print("--> Deleting Employee ID: $id");
+
+      final response = await http.delete(url);
+
+      if (response.statusCode == 200) {
+        return true;
+      } else {
+        print("Delete Failed: ${response.body}");
+        return false;
+      }
+    } catch (e) {
+      print("Delete Error: $e");
+      rethrow;
     }
   }
 }

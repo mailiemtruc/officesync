@@ -59,6 +59,8 @@ public class RabbitMQConfig {
     public static final String FILE_EXCHANGE = "file.exchange"; // Hoặc dùng chung employee.exchange cũng được
     public static final String FILE_DELETE_ROUTING_KEY = "file.delete";
     public static final String FILE_DELETE_QUEUE = "file.delete.queue";
+    // [MỚI] Routing key cho sự kiện xóa nhân viên
+    public static final String EMPLOYEE_DELETE_ROUTING_KEY = "employee.delete";
     @Bean
     public TopicExchange employeeExchange() {
         return new TopicExchange(EMPLOYEE_EXCHANGE);

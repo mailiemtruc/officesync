@@ -25,8 +25,15 @@ abstract class EmployeeRepository {
     String fullName,
     String phone,
     String dob, {
+    String? email, // [MỚI]
     String? avatarUrl,
+    String? status,
+    String? role,
+    int? departmentId,
   });
+
+  // [MỚI]
+  Future<bool> deleteEmployee(String id);
 
   // [SỬA LẠI ĐÚNG] Chỉ khai báo hàm, KHÔNG viết code xử lý (không có curly braces {})
   Future<List<EmployeeModel>> searchEmployees(
