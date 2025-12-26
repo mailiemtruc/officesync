@@ -10,8 +10,8 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @NoArgsConstructor
 public class EmployeeSyncEvent {
+    private Long id;
     private String email;
-    private String previousEmail;
     private String fullName;
     private String phone;
     private LocalDate dateOfBirth;

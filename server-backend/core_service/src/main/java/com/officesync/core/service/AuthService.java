@@ -5,10 +5,10 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
+import java.util.Random; // [QUAN TRỌNG] Đã thêm dòng này để sửa lỗi
 import java.util.concurrent.ConcurrentHashMap;
 
-import org.springframework.beans.factory.annotation.Autowired; // Import thêm Optional
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -205,26 +205,27 @@ public class AuthService {
     public void syncEmployeeAccount(EmployeeSyncEvent event) {
         User user = null;
 
-        // BƯỚC 1: Tìm User để update
-        // Ưu tiên 1: Nếu có previousEmail (tức là HR báo có đổi email), tìm theo email CŨ
-        if (event.getPreviousEmail() != null && !event.getPreviousEmail().isEmpty()) {
-            System.out.println("--> [Sync] Phát hiện đổi Email từ: " + event.getPreviousEmail() + " sang " + event.getEmail());
-            user = userRepository.findByEmail(event.getPreviousEmail()).orElse(null);
+        // ƯU TIÊN 1: Tìm theo ID (Chính xác 100% vì đã đồng bộ)
+        if (event.getId() != null) {
+            System.out.println("--> [Sync] Tìm User theo ID: " + event.getId());
+            user = userRepository.findById(event.getId()).orElse(null);
         }
 
-        // Ưu tiên 2: Nếu không tìm thấy theo email cũ (hoặc không đổi email), tìm theo email HIỆN TẠI
+        // ƯU TIÊN 2: Nếu không có ID hoặc tìm không thấy, mới tìm theo Email (Fallback)
         if (user == null) {
+            System.out.println("--> [Sync] Không có ID, tìm theo Email: " + event.getEmail());
             user = userRepository.findByEmail(event.getEmail()).orElse(null);
         }
 
-        // BƯỚC 2: Xử lý Upsert
+        // --- XỬ LÝ UPSERT ---
         if (user != null) {
-            // --- UPDATE ---
-            System.out.println("--> [Sync] Tìm thấy User, đang cập nhật ID: " + user.getId());
+            // === UPDATE ===
+            // Vì đã tìm được đúng người (qua ID), ta cứ thế set Email mới
+            if (!user.getEmail().equals(event.getEmail())) {
+                System.out.println("--> [Sync] Phát hiện đổi Email: " + user.getEmail() + " -> " + event.getEmail());
+                user.setEmail(event.getEmail());
+            }
 
-            // Cập nhật Email mới (quan trọng)
-            user.setEmail(event.getEmail()); 
-            
             // Cập nhật các thông tin khác
             user.setFullName(event.getFullName());
             user.setMobileNumber(event.getPhone());
