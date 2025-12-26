@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../../../core/config/app_colors.dart';
 import '../../data/models/employee_model.dart';
-import '../../data/models/department_model.dart'; // [MỚI] Import model
+import '../../data/models/department_model.dart';
 import '../../widgets/confirm_bottom_sheet.dart';
+import '../../widgets/selection_bottom_sheet.dart'; // [MỚI] Import để dùng BottomSheet chọn
 
-// [MỚI] Import để gọi API
 import '../../domain/repositories/employee_repository_impl.dart';
 import '../../data/datasources/employee_remote_data_source.dart';
 
@@ -24,16 +24,15 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
   String _selectedRole = 'Staff';
   String _selectedDepartmentName = 'Loading...';
 
+  // [MỚI] Lưu trữ object phòng ban để kiểm tra Manager
+  DepartmentModel? _selectedDepartmentObj;
+
   late TextEditingController _emailController;
   late final EmployeeRepositoryImpl _repository;
   bool _isLoading = false;
 
-  // List vai trò hiển thị UI
-  final List<String> _roles = ['Manager', 'Staff', 'Company_Admin'];
-
   // [DATA THẬT] List phòng ban từ API
   List<DepartmentModel> _realDepartments = [];
-  List<String> _deptNames = []; // Dùng để hiển thị lên Dropdown
 
   @override
   void initState() {
@@ -46,24 +45,23 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
     _emailController = TextEditingController(text: widget.employee.email);
     _isActive = (widget.employee.status == "ACTIVE");
 
-    // Mapping Role (Từ API uppercase sang Title case UI)
+    // Mapping Role
     String roleApi = widget.employee.role;
     try {
-      // Tìm role tương ứng trong list UI (không phân biệt hoa thường)
-      var foundRole = _roles.firstWhere(
-        (r) => r.toUpperCase() == roleApi.toUpperCase(),
-        orElse: () => "Staff",
-      );
-      _selectedRole = foundRole;
+      // Chỉ cho phép Staff hoặc Manager (Loại bỏ Company_Admin nếu có)
+      if (roleApi.toUpperCase() == 'MANAGER') {
+        _selectedRole = 'Manager';
+      } else {
+        _selectedRole = 'Staff';
+      }
     } catch (e) {
       _selectedRole = "Staff";
     }
 
     // Mapping Department Name ban đầu
     _selectedDepartmentName = widget.employee.departmentName ?? "Unassigned";
-    _deptNames = [_selectedDepartmentName]; // Init tạm để không lỗi UI
 
-    // 2. Tải danh sách phòng ban thật để lấy ID
+    // 2. Tải danh sách phòng ban thật
     _fetchDepartments();
   }
 
@@ -73,15 +71,17 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
       if (mounted) {
         setState(() {
           _realDepartments = depts;
-          _deptNames = depts.map((d) => d.name).toList();
 
-          // Logic chọn lại giá trị dropdown sau khi load xong list
-          if (!_deptNames.contains(_selectedDepartmentName)) {
-            if (_deptNames.isNotEmpty) {
-              _selectedDepartmentName = _deptNames.first;
-            } else {
-              _deptNames.add("Unassigned");
+          // Logic map lại object phòng ban hiện tại để có dữ liệu manager
+          if (_selectedDepartmentName != "Unassigned") {
+            try {
+              _selectedDepartmentObj = _realDepartments.firstWhere(
+                (d) => d.name == _selectedDepartmentName,
+              );
+            } catch (_) {
+              // Không tìm thấy (có thể bị xóa), reset về Unassigned
               _selectedDepartmentName = "Unassigned";
+              _selectedDepartmentObj = null;
             }
           }
         });
@@ -97,34 +97,115 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
     super.dispose();
   }
 
-  // --- LOGIC XỬ LÝ LƯU (THẬT) ---
+  // --- LOGIC UI BOTTOM SHEET SELECTOR ---
+
+  // 1. Chọn Phòng ban
+  void _showDepartmentSelector() {
+    if (_realDepartments.isEmpty) return;
+
+    final items = _realDepartments
+        .map(
+          (d) => {
+            'id': d.id.toString(), // Dùng ID làm key
+            'title': d.name,
+            'desc': d.code ?? '',
+          },
+        )
+        .toList();
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => SelectionBottomSheet(
+        title: 'Select Department',
+        items: items,
+        selectedId: _selectedDepartmentObj?.id.toString(),
+        onSelected: (idStr) {
+          final selected = _realDepartments.firstWhere(
+            (d) => d.id.toString() == idStr,
+          );
+          setState(() {
+            _selectedDepartmentObj = selected;
+            _selectedDepartmentName = selected.name;
+          });
+          Navigator.pop(context);
+        },
+      ),
+    );
+  }
+
+  // 2. Chọn Quyền (Chỉ hiện Staff & Manager)
+  void _showRoleSelector() {
+    final items = [
+      {'id': 'Staff', 'title': 'Staff', 'desc': 'Standard access'},
+      {'id': 'Manager', 'title': 'Manager', 'desc': 'Department lead'},
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => SelectionBottomSheet(
+        title: 'Assign Role',
+        items: items,
+        selectedId: _selectedRole, // 'Staff' hoặc 'Manager'
+        onSelected: (id) {
+          setState(() => _selectedRole = id);
+          Navigator.pop(context);
+        },
+      ),
+    );
+  }
+
+  // --- LOGIC XỬ LÝ LƯU ---
   Future<void> _handleSave() async {
+    final email = _emailController.text.trim();
+
+    // 1. Validate Email (Regex)
+    final emailRegex = RegExp(
+      r"^[a-zA-Z0-9.a-zA-Z0-9.!#$%&'*+-/=?^_`{|}~]+@[a-zA-Z0-9]+\.[a-zA-Z]+",
+    );
+    if (email.isEmpty || !emailRegex.hasMatch(email)) {
+      _showErrorSnackBar('Invalid email format. Example: user@company.com');
+      return;
+    }
+
+    // 2. Validate Manager Check
+    // Nếu chọn làm Manager của một phòng ban
+    if (_selectedRole == 'Manager' && _selectedDepartmentObj != null) {
+      // Và phòng ban đó đã có Manager
+      if (_selectedDepartmentObj!.manager != null) {
+        final currentManagerId = _selectedDepartmentObj!.manager!.id;
+        final myId = widget.employee.id;
+
+        // Nếu Manager hiện tại KHÔNG PHẢI là chính user này => Báo lỗi trùng
+        // (ID so sánh dạng String hoặc int tùy model, dùng toString() cho an toàn)
+        if (currentManagerId.toString() != myId.toString()) {
+          final currentManagerName =
+              _selectedDepartmentObj!.manager?.fullName ?? "Unknown";
+          _showErrorSnackBar(
+            'Department "${_selectedDepartmentName}" already has a Manager ($currentManagerName).',
+          );
+          return;
+        }
+      }
+    }
+
     setState(() => _isLoading = true);
     try {
-      // 1. Map tên phòng ban sang ID
-      int? deptIdToSend;
-      try {
-        if (_realDepartments.isNotEmpty) {
-          final selectedDept = _realDepartments.firstWhere(
-            (d) => d.name == _selectedDepartmentName,
-          );
-          deptIdToSend = selectedDept.id;
-        }
-      } catch (e) {
-        print("Cannot find ID for dept: $_selectedDepartmentName");
-      }
-
-      // 2. Chuẩn bị dữ liệu gửi (Status & Role UpperCase)
+      // Chuẩn bị dữ liệu gửi
       String statusToSend = _isActive ? "ACTIVE" : "LOCKED";
-      String roleToSend = _selectedRole.toUpperCase();
+      String roleToSend = _selectedRole.toUpperCase(); // STAFF / MANAGER
+      int? deptIdToSend = _selectedDepartmentObj?.id;
 
-      // 3. Gọi API Update
+      // Gọi API Update
       final success = await _repository.updateEmployee(
         widget.employee.id!,
         widget.employee.fullName,
         widget.employee.phone,
         widget.employee.dateOfBirth,
-        email: _emailController.text, // [MỚI] Gửi email từ controller
+        email: email,
         avatarUrl: widget.employee.avatarUrl,
         status: statusToSend,
         role: roleToSend,
@@ -135,7 +216,10 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
         setState(() => _isLoading = false);
         if (success) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Profile updated successfully!")),
+            const SnackBar(
+              content: Text("Profile updated successfully!"),
+              backgroundColor: Colors.green,
+            ),
           );
           Navigator.pop(context, true);
         }
@@ -143,17 +227,19 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        // Hiển thị lỗi từ Backend (ví dụ: Email already exists)
-        // Cắt chuỗi "Exception: " đi cho đẹp nếu muốn
         String errorMsg = e.toString().replaceAll("Exception: ", "");
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(errorMsg), backgroundColor: Colors.red),
-        );
+        _showErrorSnackBar(errorMsg);
       }
     }
   }
 
-  // --- LOGIC XÓA (THẬT) ---
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
+    );
+  }
+
+  // --- LOGIC XÓA ---
   void _showDeleteConfirmation(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -165,23 +251,19 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
         confirmText: 'Delete',
         confirmColor: const Color(0xFFDC2626),
         onConfirm: () async {
-          Navigator.pop(context); // Đóng dialog
-
+          Navigator.pop(context);
           setState(() => _isLoading = true);
-          // Gọi API Xóa
           bool success = await _repository.deleteEmployee(widget.employee.id!);
 
           if (mounted) {
             setState(() => _isLoading = false);
             if (success) {
-              Navigator.pop(context, true); // Đóng trang edit về list
+              Navigator.pop(context, true);
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text("Employee deleted successfully")),
               );
             } else {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text("Failed to delete employee")),
-              );
+              _showErrorSnackBar("Failed to delete employee");
             }
           }
         },
@@ -237,7 +319,7 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
               padding: const EdgeInsets.all(24),
               child: Column(
                 children: [
-                  // 1. Header
+                  // 1. Header (Giữ nguyên)
                   Row(
                     children: [
                       IconButton(
@@ -266,13 +348,13 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
                   ),
                   const SizedBox(height: 24),
 
-                  // 2. Avatar Circle
+                  // 2. Avatar Circle (Giữ nguyên)
                   Container(
                     width: 130,
                     height: 130,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 4),
+
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withOpacity(0.1),
@@ -305,7 +387,7 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
 
                   const SizedBox(height: 16),
 
-                  // 3. Name & ID
+                  // 3. Name & ID (Giữ nguyên)
                   Text(
                     widget.employee.fullName,
                     style: const TextStyle(
@@ -331,7 +413,7 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
                   _buildSectionTitle('ACCOUNT SETTINGS'),
                   const SizedBox(height: 12),
 
-                  // Email Field
+                  // Email Field (Giữ nguyên UI, Logic đã thêm validate)
                   Container(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                     decoration: _buildBlockDecoration(),
@@ -404,7 +486,7 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
                   _buildSectionTitle('ROLES & PERMISSIONS'),
                   const SizedBox(height: 12),
 
-                  // Roles & Dept
+                  // Roles & Dept (THAY ĐỔI UI SELECTOR TẠI ĐÂY)
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 16,
@@ -413,20 +495,17 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
                     decoration: _buildBlockDecoration(),
                     child: Column(
                       children: [
-                        _buildDropdownRow(
+                        // [SỬA UI] Thay _buildDropdownRow bằng _buildSelectorRow
+                        _buildSelectorRow(
                           label: 'Department',
                           value: _selectedDepartmentName,
-                          items: _deptNames,
-                          onChanged: (val) =>
-                              setState(() => _selectedDepartmentName = val!),
+                          onTap: _showDepartmentSelector,
                         ),
                         const Divider(height: 1, color: Color(0xFFF1F5F9)),
-                        _buildDropdownRow(
+                        _buildSelectorRow(
                           label: 'Role',
                           value: _selectedRole,
-                          items: _roles,
-                          onChanged: (val) =>
-                              setState(() => _selectedRole = val!),
+                          onTap: _showRoleSelector,
                           isBlueValue: true,
                         ),
                       ],
@@ -437,7 +516,7 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
                   _buildSectionTitle('STATUS'),
                   const SizedBox(height: 12),
 
-                  // Status Container
+                  // Status Container (Giữ nguyên)
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: _buildBlockDecoration(),
@@ -531,43 +610,48 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
     );
   }
 
-  Widget _buildDropdownRow({
+  // [MỚI] Widget Row dùng để chọn (thay thế Dropdown cũ)
+  // Giữ nguyên style text/màu sắc của DropdownRow cũ
+  Widget _buildSelectorRow({
     required String label,
     required String value,
-    required List<String> items,
-    required ValueChanged<String?> onChanged,
+    required VoidCallback onTap,
     bool isBlueValue = false,
   }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-              color: Color(0xE5706060),
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: value,
-              icon: const Icon(Icons.chevron_right, color: Colors.grey),
-              style: TextStyle(
-                color: isBlueValue ? AppColors.primary : Colors.black,
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          vertical: 12,
+        ), // Tăng padding chút để dễ bấm
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                color: Color(0xE5706060),
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
-                fontFamily: 'Inter',
               ),
-              items: items.map((String item) {
-                return DropdownMenuItem<String>(value: item, child: Text(item));
-              }).toList(),
-              onChanged: onChanged,
             ),
-          ),
-        ],
+            Row(
+              children: [
+                Text(
+                  value,
+                  style: TextStyle(
+                    color: isBlueValue ? AppColors.primary : Colors.black,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    fontFamily: 'Inter',
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Icon(Icons.chevron_right, color: Colors.grey),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

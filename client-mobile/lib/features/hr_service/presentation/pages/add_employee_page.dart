@@ -137,22 +137,97 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
   }
 
   // --- LOGIC CHÍNH ---
-  // --- LOGIC CHÍNH ---
   Future<void> _handleCreateEmployee() async {
-    // 1. Kiểm tra validation
-    if (_nameController.text.isEmpty ||
-        _emailController.text.isEmpty ||
-        _passwordController.text.isEmpty ||
+    // Lấy giá trị và loại bỏ khoảng trắng thừa
+    final fullName = _nameController.text.trim();
+    final email = _emailController.text.trim();
+    final phone = _phoneController.text.trim();
+    final password =
+        _passwordController.text; // Không trim password vì space cũng là ký tự
+    final dob = _dobController.text.trim();
+
+    // 1. Kiểm tra điền đủ thông tin (Check Empty)
+    if (fullName.isEmpty ||
+        email.isEmpty ||
+        phone.isEmpty ||
+        password.isEmpty ||
+        dob.isEmpty ||
         _selectedRole == null ||
         _selectedDepartment == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please fill in all required fields'),
-          backgroundColor: Colors.redAccent,
-        ),
+      _showErrorSnackBar('Please fill in all required fields.');
+      return;
+    }
+
+    // 2. Validate EMAIL (Phải đúng định dạng email)
+    // Regex: Ký tự + @ + Ký tự + . + Ký tự
+    final emailRegex = RegExp(
+      r"^[a-zA-Z0-9.a-zA-Z0-9.!#$%&'*+-/=?^_`{|}~]+@[a-zA-Z0-9]+\.[a-zA-Z]+",
+    );
+    if (!emailRegex.hasMatch(email)) {
+      _showErrorSnackBar('Invalid email format. Example: user@company.com');
+      return;
+    }
+
+    // 3. Validate PHONE (Chỉ được nhập số)
+    // Regex: ^[0-9]+$ nghĩa là từ đầu đến cuối chỉ được là số 0-9
+    final phoneRegex = RegExp(r'^[0-9]+$');
+    if (!phoneRegex.hasMatch(phone)) {
+      _showErrorSnackBar('Phone number must contain digits only (0-9).');
+      return;
+    }
+    if (phone.length < 9 || phone.length > 15) {
+      _showErrorSnackBar(
+        'Phone number length must be between 9 and 15 digits.',
       );
       return;
     }
+
+    // 4. Validate PASSWORD (Kiểm tra chặt chẽ 5 điều kiện)
+    if (password.length < 8) {
+      _showErrorSnackBar('Password must be at least 8 characters long.');
+      return;
+    }
+    if (!password.contains(RegExp(r'[A-Z]'))) {
+      _showErrorSnackBar(
+        'Password must contain at least one uppercase letter (A-Z).',
+      );
+      return;
+    }
+    if (!password.contains(RegExp(r'[a-z]'))) {
+      _showErrorSnackBar(
+        'Password must contain at least one lowercase letter (a-z).',
+      );
+      return;
+    }
+    if (!password.contains(RegExp(r'[0-9]'))) {
+      _showErrorSnackBar('Password must contain at least one number (0-9).');
+      return;
+    }
+    if (!password.contains(RegExp(r'[!@#\$%^&*(),.?":{}|<>]'))) {
+      _showErrorSnackBar(
+        'Password must contain at least one special character (!@#...).',
+      );
+      return;
+    }
+
+    // =========================================================================
+    // [FIXED] CHECK EXISTING MANAGER LOGIC
+    // =========================================================================
+    if (_selectedRole?.toUpperCase() == 'MANAGER' &&
+        _selectedDepartment != null) {
+      if (_selectedDepartment!.manager != null) {
+        final currentManagerName =
+            _selectedDepartment!.manager?.fullName ?? "Unknown";
+
+        _showErrorSnackBar(
+          'Department "${_selectedDepartment!.name}" already has a Manager ($currentManagerName). Cannot assign a new Manager!',
+        );
+        return;
+      }
+    }
+    // =========================================================================
+    // [END FIXED SECTION]
+    // =========================================================================
 
     setState(() => _isLoading = true);
 
@@ -163,26 +238,25 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
       }
 
       String formattedDob = "";
-      if (_dobController.text.isNotEmpty) {
+      if (dob.isNotEmpty) {
         try {
-          DateTime parsedDate = DateFormat(
-            "dd/MM/yyyy",
-          ).parse(_dobController.text);
+          DateTime parsedDate = DateFormat("dd/MM/yyyy").parse(dob);
           formattedDob = DateFormat("yyyy-MM-dd").format(parsedDate);
         } catch (e) {
           print("Date parse error: $e");
         }
       }
 
+      // Gọi API tạo nhân viên
       final success = await _employeeRepository.createEmployee(
-        fullName: _nameController.text.trim(),
-        email: _emailController.text.trim(),
-        phone: _phoneController.text.trim(),
+        fullName: fullName,
+        email: email,
+        phone: phone,
         dob: formattedDob,
         role: _selectedRole?.toUpperCase() ?? "STAFF",
         departmentId: _selectedDepartment!.id!,
         currentUserId: currentUserId,
-        password: _passwordController.text.trim(),
+        password: password,
       );
 
       if (success && mounted) {
@@ -196,25 +270,18 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
       }
     } catch (e) {
       if (mounted) {
-        // [LOGIC MỚI] Xử lý thông báo lỗi từ Backend cho dễ đọc
         String errorMessage = e.toString();
-
-        // Backend thường trả về: Exception: Server Error: {"timestamp":..., "message":"Email đã tồn tại", ...}
-        // Ta cần lấy cái "message" bên trong đó.
+        // Logic làm sạch thông báo lỗi
         if (errorMessage.contains("Server Error:")) {
           try {
-            // Lấy phần JSON sau chữ "Server Error:"
             final String jsonPart = errorMessage
                 .split("Server Error:")[1]
                 .trim();
             final Map<String, dynamic> errorMap = jsonDecode(jsonPart);
-
-            // Nếu có trường 'message', dùng nó làm thông báo
             if (errorMap.containsKey('message')) {
               errorMessage = errorMap['message'];
             }
           } catch (_) {
-            // Nếu không parse được JSON thì giữ nguyên, chỉ xóa chữ Exception
             errorMessage = errorMessage
                 .replaceAll("Exception: ", "")
                 .replaceAll("Server Error: ", "");
@@ -223,17 +290,23 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
           errorMessage = errorMessage.replaceAll("Exception: ", "");
         }
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(errorMessage), // Hiển thị thông báo sạch đẹp
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 4),
-          ),
-        );
+        _showErrorSnackBar(errorMessage);
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  // Helper function để hiển thị lỗi gọn gàng hơn
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+        behavior: SnackBarBehavior.floating, // Hiển thị kiểu nổi đẹp hơn
+        duration: const Duration(seconds: 4),
+      ),
+    );
   }
 
   // --- UI HELPER ---

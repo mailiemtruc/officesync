@@ -1,4 +1,5 @@
 package com.officesync.hr_service.Service;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional; // [QUAN TRỌNG] Class sinh ID
 
@@ -253,7 +254,7 @@ public class EmployeeService {
 
 
    // =================================================================
-    // [ĐÃ SỬA] NÂNG CẤP Hàm Update xử lý "All-in-One"
+    // [ĐÃ SỬA & TỐI ƯU] HÀM UPDATE ALL-IN-ONE
     // =================================================================
     @Transactional
     public Employee updateEmployee(
@@ -267,13 +268,17 @@ public class EmployeeService {
             Long departmentId,
             String email
     ) {
+        // 1. Tìm nhân viên
         Employee employee = employeeRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Employee not found"));
 
-        // 1. FullName
+        // [QUAN TRỌNG] Lưu lại trạng thái CŨ để so sánh sau này
+        EmployeeRole oldRole = employee.getRole();
+        Department oldDepartment = employee.getDepartment();
+
+        // 2. Cập nhật thông tin cơ bản (Giữ nguyên logic validate của bạn)
         if (fullName != null && !fullName.isEmpty()) employee.setFullName(fullName);
 
-        // 2. Check Email
         if (email != null && !email.isEmpty()) {
             if (!email.equals(employee.getEmail()) && employeeRepository.existsByEmail(email)) {
                 throw new RuntimeException("Email already exists");
@@ -281,7 +286,6 @@ public class EmployeeService {
             employee.setEmail(email);
         }
 
-        // 3. Check Phone
         if (phone != null && !phone.isEmpty()) {
             if (!phone.equals(employee.getPhone()) && employeeRepository.existsByPhone(phone)) {
                 throw new RuntimeException("Phone already exists");
@@ -289,50 +293,91 @@ public class EmployeeService {
             employee.setPhone(phone);
         }
 
-        // 4. Date of Birth
         if (dob != null && !dob.isEmpty()) {
             try { 
-                employee.setDateOfBirth(java.time.LocalDate.parse(dob)); 
+                employee.setDateOfBirth(LocalDate.parse(dob)); 
             } catch (Exception e) {
                 throw new RuntimeException("Invalid Date format (yyyy-MM-dd required)."); 
             }
         }
         
-        // 5. Avatar
         if (avatarUrl != null && !avatarUrl.equals(employee.getAvatarUrl())) {
             deleteOldAvatarFromStorage(employee.getAvatarUrl());
             employee.setAvatarUrl(avatarUrl);
         }
 
-        // 6. Status
         if (statusStr != null && !statusStr.isEmpty()) {
-            try {
-                employee.setStatus(EmployeeStatus.valueOf(statusStr.toUpperCase()));
-            } catch (Exception e) { }
+            try { employee.setStatus(EmployeeStatus.valueOf(statusStr.toUpperCase())); } catch (Exception e) { }
         }
 
-        // 7. Role
+        // 3. Cập nhật Role mới
         if (roleStr != null && !roleStr.isEmpty()) {
-            try {
-                employee.setRole(EmployeeRole.valueOf(roleStr.toUpperCase()));
-            } catch (Exception e) { }
+            try { employee.setRole(EmployeeRole.valueOf(roleStr.toUpperCase())); } catch (Exception e) { }
         }
 
-        // 8. Department
+        // 4. Cập nhật Phòng ban mới
         if (departmentId != null) {
             Department dept = departmentRepository.findById(departmentId).orElse(null); 
             if (dept != null) {
                 employee.setDepartment(dept);
             }
+        } else {
+            // Trường hợp set về null (nếu logic cho phép, ở đây giữ nguyên logic của bạn là check null rồi mới set)
+            // Nếu muốn cho phép gỡ phòng ban thì thêm logic else { employee.setDepartment(null); }
         }
 
-        // 9. Save
+        // =================================================================
+        // [LOGIC MỚI BẮT ĐẦU] ĐỒNG BỘ MANAGER ID VÀO BẢNG DEPARTMENT
+        // =================================================================
+        
+        EmployeeRole newRole = employee.getRole();
+        Department newDepartment = employee.getDepartment();
+
+        // A. Xử lý trường hợp bị HẠ CHỨC hoặc CHUYỂN PHÒNG (Gỡ quyền Manager cũ)
+        // Điều kiện: Trước đây là MANAGER
+        if (oldRole == EmployeeRole.MANAGER) {
+            // Bị hạ chức xuống STAFF ??
+            boolean isDemoted = !newRole.equals(EmployeeRole.MANAGER);
+            // Hoặc bị chuyển sang phòng khác (hoặc bị đuổi khỏi phòng) ??
+            boolean isTransferred = (oldDepartment != null && newDepartment != null && !oldDepartment.getId().equals(newDepartment.getId()));
+            boolean isLeftDept = (oldDepartment != null && newDepartment == null);
+
+            if (isDemoted || isTransferred || isLeftDept) {
+                // Kiểm tra: Nếu nhân viên này đang đứng tên Manager ở phòng cũ -> Gỡ ra
+                if (oldDepartment != null && oldDepartment.getManager() != null 
+                        && oldDepartment.getManager().getId().equals(employee.getId())) {
+                    
+                    log.info("--> [Logic] Gỡ quyền Manager của User {} tại phòng {}", employee.getId(), oldDepartment.getName());
+                    oldDepartment.setManager(null);
+                    departmentRepository.save(oldDepartment); // Lưu cập nhật bảng Department
+                }
+            }
+        }
+
+        // B. Xử lý trường hợp THĂNG CHỨC (Set quyền Manager mới)
+        // Điều kiện: Role mới là MANAGER và có phòng ban
+        if (newRole == EmployeeRole.MANAGER && newDepartment != null) {
+            // Kiểm tra xem phòng mới đã có Manager chưa?
+            Employee currentManager = newDepartment.getManager();
+            
+            // Nếu chưa có ai HOẶC người đó không phải là mình -> Set mình làm Manager
+            if (currentManager == null || !currentManager.getId().equals(employee.getId())) {
+                log.info("--> [Logic] Thăng chức User {} làm Manager phòng {}", employee.getId(), newDepartment.getName());
+                newDepartment.setManager(employee);
+                departmentRepository.save(newDepartment); // Lưu cập nhật bảng Department
+            }
+        }
+        // =================================================================
+        // [LOGIC MỚI KẾT THÚC]
+        // =================================================================
+
+        // 5. Save Employee
         Employee savedEmployee = employeeRepository.save(employee);
 
-        // 10. Gửi RabbitMQ đồng bộ (Kèm ID để Update đúng người)
+        // 6. Gửi RabbitMQ đồng bộ
         try {
             EmployeeSyncEvent event = new EmployeeSyncEvent(
-                savedEmployee.getId(), // [MỚI] Bắt buộc có ID để Core biết update ai
+                savedEmployee.getId(),
                 savedEmployee.getEmail(),
                 savedEmployee.getFullName(),
                 savedEmployee.getPhone(),
@@ -340,10 +385,10 @@ public class EmployeeService {
                 savedEmployee.getCompanyId(),
                 savedEmployee.getRole().name(), 
                 savedEmployee.getStatus().name(),
-                null // Update thì không gửi password
+                null // Update không gửi password
             );
             employeeProducer.sendEmployeeUpdatedEvent(event);
-            log.info("--> [UPDATE] Đã đồng bộ User {} (Status: {}) sang Core", savedEmployee.getEmail(), savedEmployee.getStatus());
+            log.info("--> [UPDATE] Đã đồng bộ User {} sang Core", savedEmployee.getEmail());
         } catch (Exception e) {
             log.error("Lỗi gửi RabbitMQ: {}", e.getMessage());
         }
