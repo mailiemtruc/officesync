@@ -6,9 +6,10 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import com.fasterxml.jackson.databind.ObjectMapper; // [MỚI]
 import com.officesync.core.config.RabbitMQConfig;
 import com.officesync.core.dto.UserCreatedEvent;
-import com.officesync.core.dto.UserStatusChangedEvent; // Import mới
+import com.officesync.core.dto.UserStatusChangedEvent;
 
 @Service
 public class RabbitMQProducer {
@@ -18,24 +19,42 @@ public class RabbitMQProducer {
     @Autowired
     private RabbitTemplate rabbitTemplate;
 
-    // Hàm cũ (Giữ nguyên)
+    @Autowired
+    private ObjectMapper objectMapper; // [MỚI] Inject để chuyển đổi JSON
+
+    // 1. Gửi sự kiện tạo User (Phản hồi về HR)
     public void sendUserCreatedEvent(UserCreatedEvent event) {
-        LOGGER.info(String.format("--> RabbitMQ Sending User Create: %s", event.toString()));
-        rabbitTemplate.convertAndSend(
-            RabbitMQConfig.EXCHANGE_INTERNAL, 
-            RabbitMQConfig.ROUTING_KEY_COMPANY_CREATE, 
-            event
-        );
+        try {
+            LOGGER.info(String.format("--> RabbitMQ Sending User Create: %s", event.getEmail()));
+            
+            // [QUAN TRỌNG] Object -> JSON String
+            String jsonMessage = objectMapper.writeValueAsString(event);
+
+            rabbitTemplate.convertAndSend(
+                RabbitMQConfig.EXCHANGE_INTERNAL, 
+                RabbitMQConfig.ROUTING_KEY_COMPANY_CREATE, 
+                jsonMessage // Gửi String
+            );
+        } catch (Exception e) {
+            LOGGER.error("Lỗi parse JSON UserCreated: " + e.getMessage());
+        }
     }
 
-    // 🔴 HÀM MỚI: Gửi sự kiện khóa/mở khóa tài khoản
+    // 2. Gửi sự kiện thay đổi trạng thái
     public void sendUserStatusChangedEvent(UserStatusChangedEvent event) {
-        LOGGER.info(String.format("--> RabbitMQ Sending User Status Change: %s", event.toString()));
-        
-        rabbitTemplate.convertAndSend(
-            RabbitMQConfig.EXCHANGE_INTERNAL, 
-            RabbitMQConfig.ROUTING_KEY_USER_STATUS, // Dùng Key mới
-            event
-        );
+        try {
+            LOGGER.info(String.format("--> RabbitMQ Sending Status Change: %s -> %s", event.getUserId(), event.getStatus()));
+            
+            // [QUAN TRỌNG] Object -> JSON String
+            String jsonMessage = objectMapper.writeValueAsString(event);
+            
+            rabbitTemplate.convertAndSend(
+                RabbitMQConfig.EXCHANGE_INTERNAL, 
+                RabbitMQConfig.ROUTING_KEY_USER_STATUS, 
+                jsonMessage // Gửi String
+            );
+        } catch (Exception e) {
+            LOGGER.error("Lỗi parse JSON StatusChange: " + e.getMessage());
+        }
     }
 }

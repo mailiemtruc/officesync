@@ -28,44 +28,33 @@ public class DepartmentService {
     private final EmployeeRepository employeeRepository;
     private final EmployeeProducer employeeProducer; // [MỚI] Inject Producer để bắn RabbitMQ
 
-   // =================================================================
-    // 1. TẠO PHÒNG BAN (VÁ LỖI BẢO MẬT)
-    // =================================================================
+ 
     @Transactional
     public Department createDepartmentFull(String name, String description, Long managerId, List<Long> memberIds, Long companyId) {
         // 1. Khởi tạo đối tượng
         Department dept = new Department();
         dept.setName(name);
         dept.setDescription(description);
-        dept.setCompanyId(companyId); // [QUAN TRỌNG] Phòng ban thuộc công ty này
+        dept.setCompanyId(companyId); 
         dept.setColor(generateRandomColor());
-        dept.setDepartmentCode(generateRandomDeptCode()); // Đảm bảo sinh code
-
-        Department savedDept = departmentRepository.save(dept);
+        
+        Department savedDept = saveDepartmentWithRetry(dept);
 
         // 2. Xử lý Manager
         if (managerId != null) {
             Employee newManager = employeeRepository.findById(managerId)
                     .orElseThrow(() -> new RuntimeException("Manager not found"));
 
-            // [SECURITY CHECK - QUAN TRỌNG NHẤT]
-            // Chặn việc gán nhân viên công ty khác làm quản lý cho công ty này
             if (!newManager.getCompanyId().equals(companyId)) {
                 throw new RuntimeException("LỖI BẢO MẬT: Nhân viên này không thuộc công ty của bạn!");
             }
 
-            // Kiểm tra xem ông này có đang làm quản lý phòng KHÁC không?
             Optional<Department> oldManagedDeptOpt = departmentRepository.findByManagerId(managerId);
             if (oldManagedDeptOpt.isPresent()) {
                 Department oldDept = oldManagedDeptOpt.get();
-                // Nếu đúng là quản lý phòng cũ -> Gỡ quyền bên đó
                 if (!oldDept.getId().equals(savedDept.getId())) {
                     oldDept.setManager(null);
-                    
-                    // [FIX LỖI] Dùng saveAndFlush để Database cập nhật NGAY LẬP TỨC
-                    // Việc này giải phóng managerId=8 trước khi gán cho phòng mới
                     departmentRepository.saveAndFlush(oldDept); 
-                    
                     log.info("--> Đã gỡ quyền quản lý của {} tại phòng cũ {}", newManager.getEmail(), oldDept.getName());
                 }
             }
@@ -84,11 +73,7 @@ public class DepartmentService {
         if (memberIds != null && !memberIds.isEmpty()) {
             List<Employee> members = employeeRepository.findAllById(memberIds);
             for (Employee emp : members) {
-                // [SECURITY CHECK] Bỏ qua những ông không cùng công ty (tránh hack)
-                if (!emp.getCompanyId().equals(companyId)) {
-                    log.warn("Bỏ qua ID {} vì khác công ty", emp.getId());
-                    continue; 
-                }
+                if (!emp.getCompanyId().equals(companyId)) continue; 
 
                 if (managerId != null && emp.getId().equals(managerId)) continue;
 
@@ -109,41 +94,6 @@ public class DepartmentService {
 
         return departmentRepository.save(savedDept);
     }
-// =================================================================
-    // 3. BỔ NHIỆM (ASSIGN MANAGER) - VÁ LỖI BẢO MẬT
-    // =================================================================
-    @Transactional
-    public Department assignManager(Long departmentId, Long employeeId) {
-        Department department = departmentRepository.findById(departmentId)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy phòng ban"));
-
-        Employee newManager = employeeRepository.findById(employeeId)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy nhân viên"));
-
-        // [SECURITY CHECK]
-        if (!newManager.getCompanyId().equals(department.getCompanyId())) {
-             throw new RuntimeException("LỖI BẢO MẬT: Nhân viên và phòng ban không cùng công ty!");
-        }
-
-        if (newManager.getDepartment() == null || !newManager.getDepartment().getId().equals(departmentId)) {
-            newManager.setDepartment(department);
-        }
-
-        boolean roleChanged = false;
-        if (newManager.getRole() == EmployeeRole.STAFF) {
-            newManager.setRole(EmployeeRole.MANAGER);
-            roleChanged = true;
-        }
-
-        Employee savedManager = employeeRepository.save(newManager);
-        department.setManager(savedManager);
-        
-        if (roleChanged) {
-            syncEmployeeToCore(savedManager);
-        }
-
-        return departmentRepository.save(department);
-    }
 
   
 
@@ -151,6 +101,7 @@ public class DepartmentService {
     private void syncEmployeeToCore(Employee emp) {
         try {
             EmployeeSyncEvent event = new EmployeeSyncEvent(
+                emp.getId(), // [MỚI] Bắt buộc thêm ID vào đầu tiên
                 emp.getEmail(),
                 emp.getFullName(),
                 emp.getPhone(),

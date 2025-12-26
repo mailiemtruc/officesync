@@ -3,6 +3,7 @@ package com.officesync.hr_service.Producer;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
 
+import com.fasterxml.jackson.databind.ObjectMapper; // [MỚI] Import cái này
 import com.officesync.hr_service.Config.RabbitMQConfig;
 import com.officesync.hr_service.DTO.EmployeeSyncEvent;
 
@@ -15,46 +16,62 @@ import lombok.extern.slf4j.Slf4j;
 public class EmployeeProducer {
 
     private final RabbitTemplate rabbitTemplate;
+    private final ObjectMapper objectMapper; // [MỚI] Inject ObjectMapper
 
+    // 1. Gửi TẠO MỚI
     public void sendEmployeeCreatedEvent(EmployeeSyncEvent event) {
-        log.info("--> [RabbitMQ] Gửi yêu cầu tạo User sang Core Service: {}", event.getEmail());
-        
-        rabbitTemplate.convertAndSend(
-            RabbitMQConfig.EMPLOYEE_EXCHANGE,
-            RabbitMQConfig.EMPLOYEE_ROUTING_KEY,
-            event
-        );
+        try {
+            log.info("--> [RabbitMQ] Gửi yêu cầu tạo User: {}", event.getEmail());
+            
+            // [QUAN TRỌNG] Chuyển Object -> String JSON
+            String jsonMessage = objectMapper.writeValueAsString(event);
+            
+            rabbitTemplate.convertAndSend(
+                RabbitMQConfig.EMPLOYEE_EXCHANGE,
+                RabbitMQConfig.EMPLOYEE_ROUTING_KEY,
+                jsonMessage // Gửi chuỗi String đi, không gửi Object nữa
+            );
+        } catch (Exception e) {
+            log.error("Lỗi parse JSON Create: {}", e.getMessage());
+        }
     }
 
-    // [MỚI] Hàm gửi sự kiện CẬP NHẬT
+    // 2. Gửi CẬP NHẬT
     public void sendEmployeeUpdatedEvent(EmployeeSyncEvent event) {
-        log.info("--> [RabbitMQ] Gửi yêu cầu CẬP NHẬT User sang Core Service: {}", event.getEmail());
-        
-        // Gửi với routing key "employee.update"
-        rabbitTemplate.convertAndSend(
-            RabbitMQConfig.EMPLOYEE_EXCHANGE,
-            RabbitMQConfig.EMPLOYEE_UPDATE_ROUTING_KEY,
-            event
-        );
+        try {
+            log.info("--> [RabbitMQ] Gửi yêu cầu CẬP NHẬT User: {}", event.getEmail());
+            
+            // [QUAN TRỌNG] Chuyển Object -> String JSON
+            String jsonMessage = objectMapper.writeValueAsString(event);
+            
+            rabbitTemplate.convertAndSend(
+                RabbitMQConfig.EMPLOYEE_EXCHANGE,
+                RabbitMQConfig.EMPLOYEE_UPDATE_ROUTING_KEY,
+                jsonMessage // Gửi chuỗi String
+            );
+        } catch (Exception e) {
+            log.error("Lỗi parse JSON Update: {}", e.getMessage());
+        }
     }
 
-    public void sendDeleteFileEvent(String fileName) {
-        log.info("--> [RabbitMQ] Gửi yêu cầu XÓA file sang Storage: {}", fileName);
-        rabbitTemplate.convertAndSend(
-            RabbitMQConfig.FILE_EXCHANGE,
-            RabbitMQConfig.FILE_DELETE_ROUTING_KEY,
-            fileName // Chỉ cần gửi chuỗi tên file
-        );
-    }
-
-   
+    // 3. Gửi XÓA USER
     public void sendEmployeeDeletedEvent(Long userId) {
         log.info("--> [RabbitMQ] Delete User ID: {}", userId);
-        
+        // ID là số (Long), gửi trực tiếp cũng được, hoặc chuyển thành String cho an toàn tuyệt đối
         rabbitTemplate.convertAndSend(
             RabbitMQConfig.EMPLOYEE_EXCHANGE,
             RabbitMQConfig.EMPLOYEE_DELETE_ROUTING_KEY,
-            userId // Gửi ID sang
+            String.valueOf(userId) // [KHUYÊN DÙNG] Gửi String ID
+        );
+    }
+    
+    // 4. Gửi XÓA FILE
+    public void sendDeleteFileEvent(String fileName) {
+        log.info("--> [RabbitMQ] Gửi yêu cầu XÓA file: {}", fileName);
+        rabbitTemplate.convertAndSend(
+            RabbitMQConfig.FILE_EXCHANGE,
+            RabbitMQConfig.FILE_DELETE_ROUTING_KEY,
+            fileName // String sẵn rồi thì cứ gửi
         );
     }
 }

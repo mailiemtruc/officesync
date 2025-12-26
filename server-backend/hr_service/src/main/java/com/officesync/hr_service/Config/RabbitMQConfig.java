@@ -7,6 +7,7 @@ import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
 import org.springframework.amqp.support.converter.MessageConverter;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -20,6 +21,11 @@ public class RabbitMQConfig {
     // Tên hàng đợi phải TRÙNG KHỚP với bên Core Service
     public static final String QUEUE_COMPANY_CREATE = "company.create.queue";
 
+    // 1. Định nghĩa tên Exchange và Routing Key của Core
+    public static final String INTERNAL_EXCHANGE = "internal.exchange";
+    public static final String ROUTING_KEY_USER_STATUS = "user.status.change";
+
+   
     // Khai báo Queue để đảm bảo nó tồn tại (nếu Core chưa chạy thì HR chạy lên vẫn tạo queue này)
     @Bean
     public Queue queue() {
@@ -56,10 +62,9 @@ public class RabbitMQConfig {
     public static final String EMPLOYEE_QUEUE = "employee.create.queue";
     public static final String EMPLOYEE_UPDATE_ROUTING_KEY = "employee.update";
     public static final String EMPLOYEE_ROUTING_WILDCARD = "employee.#";
-    public static final String FILE_EXCHANGE = "file.exchange"; // Hoặc dùng chung employee.exchange cũng được
+    public static final String FILE_EXCHANGE = "file.exchange";
     public static final String FILE_DELETE_ROUTING_KEY = "file.delete";
     public static final String FILE_DELETE_QUEUE = "file.delete.queue";
-    // [MỚI] Routing key cho sự kiện xóa nhân viên
     public static final String EMPLOYEE_DELETE_ROUTING_KEY = "employee.delete";
     @Bean
     public TopicExchange employeeExchange() {
@@ -93,5 +98,23 @@ public class RabbitMQConfig {
     @Bean
     public Binding fileBinding(Queue fileDeleteQueue, TopicExchange fileExchange) {
         return BindingBuilder.bind(fileDeleteQueue).to(fileExchange).with(FILE_DELETE_ROUTING_KEY);
+    }
+
+     // 2. Khai báo Exchange (Để code bên dưới có cái mà dùng)
+    @Bean
+    public TopicExchange internalExchange() {
+        return new TopicExchange(INTERNAL_EXCHANGE);
+    }
+
+    // 3. [QUAN TRỌNG NHẤT] Nối dây: Bảo Exchange đẩy tin "Status" vào Queue "company.create"
+    @Bean
+    public Binding bindingUserStatus(
+            @Qualifier("queue") Queue companyQueue, 
+            TopicExchange internalExchange) {
+        
+        return BindingBuilder
+                .bind(companyQueue)
+                .to(internalExchange)
+                .with(ROUTING_KEY_USER_STATUS);
     }
 }

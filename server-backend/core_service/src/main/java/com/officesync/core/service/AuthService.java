@@ -199,34 +199,32 @@ public class AuthService {
     }
 
     // =========================================================
-    // [MỚI] HÀM SYNC DUY NHẤT (UPSERT: Create or Update)
+    // [PHIÊN BẢN GỘP] KHÔNG TÁCH HÀM PHỤ
     // =========================================================
     @Transactional
     public void syncEmployeeAccount(EmployeeSyncEvent event) {
         User user = null;
 
-        // ƯU TIÊN 1: Tìm theo ID (Chính xác 100% vì đã đồng bộ)
+        // 1. Tìm theo ID
         if (event.getId() != null) {
-            System.out.println("--> [Sync] Tìm User theo ID: " + event.getId());
             user = userRepository.findById(event.getId()).orElse(null);
         }
 
-        // ƯU TIÊN 2: Nếu không có ID hoặc tìm không thấy, mới tìm theo Email (Fallback)
+        // 2. Tìm theo Email
         if (user == null) {
-            System.out.println("--> [Sync] Không có ID, tìm theo Email: " + event.getEmail());
             user = userRepository.findByEmail(event.getEmail()).orElse(null);
         }
 
         // --- XỬ LÝ UPSERT ---
         if (user != null) {
-            // === UPDATE ===
-            // Vì đã tìm được đúng người (qua ID), ta cứ thế set Email mới
-            if (!user.getEmail().equals(event.getEmail())) {
-                System.out.println("--> [Sync] Phát hiện đổi Email: " + user.getEmail() + " -> " + event.getEmail());
-                user.setEmail(event.getEmail());
+            // === CASE 1: UPDATE ===
+            System.out.println("--> [Sync] Tìm thấy User cũ (ID: " + user.getId() + "), tiến hành Update.");
+            // [FIX LỖI] THÊM DÒNG NÀY ĐỂ CẬP NHẬT EMAIL
+            if (event.getEmail() != null && !event.getEmail().isEmpty()) {
+                
+                
+                user.setEmail(event.getEmail()); 
             }
-
-            // Cập nhật các thông tin khác
             user.setFullName(event.getFullName());
             user.setMobileNumber(event.getPhone());
             user.setDateOfBirth(event.getDateOfBirth());
@@ -238,15 +236,37 @@ public class AuthService {
                 user.setPassword(passwordEncoder.encode(event.getPassword()));
             }
 
-            userRepository.save(user);
+            User savedUser = userRepository.save(user);
+
+            // [FIX LỖI] Nếu HR chưa biết ID (event.id == null) -> Phải gửi lại ID cho HR
+            if (event.getId() == null) {
+                // --- ĐOẠN CODE GỬI RABBITMQ (LẶP LẠI LẦN 1) ---
+                try {
+                    UserCreatedEvent responseEvent = new UserCreatedEvent();
+                    responseEvent.setId(savedUser.getId());
+                    responseEvent.setCompanyId(savedUser.getCompanyId());
+                    responseEvent.setEmail(savedUser.getEmail());
+                    responseEvent.setFullName(savedUser.getFullName());
+                    responseEvent.setMobileNumber(savedUser.getMobileNumber());
+                    responseEvent.setDateOfBirth(savedUser.getDateOfBirth());
+                    responseEvent.setRole(savedUser.getRole());
+                    responseEvent.setStatus(savedUser.getStatus());
+                    
+                    rabbitMQProducer.sendUserCreatedEvent(responseEvent);
+                    System.out.println("    -> [UPDATE-SYNC] Đã bắn trả ID " + savedUser.getId() + " về HR.");
+                } catch (Exception e) {
+                    System.err.println("Lỗi bắn event UserCreated: " + e.getMessage());
+                }
+                // ------------------------------------------------
+            }
 
         } else {
-            // --- CREATE (Như cũ) ---
-            System.out.println("--> [Sync] Không tìm thấy User cũ/mới, tạo mới: " + event.getEmail());
+            // === CASE 2: CREATE ===
+            System.out.println("--> [Sync] Không tìm thấy User, tạo mới: " + event.getEmail());
             
             User newUser = new User();
             newUser.setCompanyId(event.getCompanyId());
-            newUser.setEmail(event.getEmail()); // Luôn set email mới nhất
+            newUser.setEmail(event.getEmail());
             newUser.setFullName(event.getFullName());
             newUser.setMobileNumber(event.getPhone());
             newUser.setDateOfBirth(event.getDateOfBirth());
@@ -260,7 +280,7 @@ public class AuthService {
             User savedUser = userRepository.save(newUser);
             savePasswordHistory(savedUser);
 
-            // 🔴 BẮN EVENT CHO CÁC SERVICE KHÁC (Wallet, etc.)
+            // --- ĐOẠN CODE GỬI RABBITMQ (LẶP LẠI LẦN 2) ---
             try {
                 UserCreatedEvent responseEvent = new UserCreatedEvent();
                 responseEvent.setId(savedUser.getId());
@@ -273,10 +293,11 @@ public class AuthService {
                 responseEvent.setStatus(savedUser.getStatus());
                 
                 rabbitMQProducer.sendUserCreatedEvent(responseEvent);
-                System.out.println("    -> Đã bắn UserCreatedEvent cho Wallet Service");
+                System.out.println("    -> [CREATE-SYNC] Đã bắn trả ID " + savedUser.getId() + " về HR.");
             } catch (Exception e) {
                 System.err.println("Lỗi bắn event UserCreated: " + e.getMessage());
             }
+            // ------------------------------------------------
         }
     }
 

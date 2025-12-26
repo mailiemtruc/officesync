@@ -9,6 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.officesync.hr_service.Config.SnowflakeIdGenerator;
 import com.officesync.hr_service.DTO.EmployeeSyncEvent;
 import com.officesync.hr_service.DTO.UserCreatedEvent;
+import com.officesync.hr_service.DTO.UserStatusChangedEvent;
 import com.officesync.hr_service.Model.Department;
 import com.officesync.hr_service.Model.Employee;
 import com.officesync.hr_service.Model.EmployeeRole;
@@ -74,11 +75,13 @@ public class EmployeeService {
         Employee savedEmployee = saveEmployeeWithRetry(newEmployee);
 
         // 6. GỬI MQ SANG CORE
+       // [SỬA ĐỔI QUAN TRỌNG TẠI ĐÂY]
         if (savedEmployee != null) {
             try {
                 String passwordToSend = (password != null && !password.isEmpty()) ? password : "123456";
 
                 EmployeeSyncEvent event = new EmployeeSyncEvent(
+                    null, // [QUAN TRỌNG] Gửi NULL để Core tự sinh ID mới
                     savedEmployee.getEmail(),
                     savedEmployee.getFullName(),
                     savedEmployee.getPhone(),
@@ -90,7 +93,7 @@ public class EmployeeService {
                 );
                 
                 employeeProducer.sendEmployeeCreatedEvent(event);
-                log.info("--> Đã gửi yêu cầu tạo User sang Core (Email: {})", savedEmployee.getEmail());
+                log.info("--> Đã gửi yêu cầu tạo User sang Core (Email: {}). ID gửi đi là NULL", savedEmployee.getEmail());
                 
             } catch (Exception e) {
                 log.error("Lỗi gửi MQ sang Core: {}", e.getMessage());
@@ -98,6 +101,30 @@ public class EmployeeService {
         }
 
         return savedEmployee;
+    }
+
+    // [MỚI] Hàm xử lý cập nhật trạng thái
+    @Transactional
+    public void updateEmployeeStatusFromEvent(UserStatusChangedEvent event) {
+        log.info("--> [Core -> HR] Nhận yêu cầu đổi status. UserID: {}, Status: {}", event.getUserId(), event.getStatus());
+
+        // 1. Tìm nhân viên theo ID
+        java.util.Optional<Employee> empOpt = employeeRepository.findById(event.getUserId());
+
+        if (empOpt.isPresent()) {
+            Employee emp = empOpt.get();
+            try {
+                // 2. Chuyển String sang Enum và Lưu
+                emp.setStatus(EmployeeStatus.valueOf(event.getStatus()));
+                employeeRepository.save(emp);
+                
+                log.info("--> Đã cập nhật trạng thái user {} thành {}", emp.getEmail(), event.getStatus());
+            } catch (Exception e) {
+                log.error("Trạng thái không hợp lệ: {}", event.getStatus());
+            }
+        } else {
+            log.warn("Không tìm thấy nhân viên ID {} để cập nhật.", event.getUserId());
+        }
     }
     // =================================================================
     // 2. LOGIC CHO RABBITMQ (Consumer gọi hàm này)
@@ -238,7 +265,7 @@ public class EmployeeService {
             String statusStr, 
             String roleStr, 
             Long departmentId,
-            String email // [MỚI] Thêm tham số email
+            String email
     ) {
         Employee employee = employeeRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Employee not found"));
@@ -246,33 +273,31 @@ public class EmployeeService {
         // 1. FullName
         if (fullName != null && !fullName.isEmpty()) employee.setFullName(fullName);
 
-        // 2. [MỚI] Check Email Duplicate & Update
+        // 2. Check Email
         if (email != null && !email.isEmpty()) {
-            // Kiểm tra: Nếu email thay đổi VÀ email mới đã tồn tại
             if (!email.equals(employee.getEmail()) && employeeRepository.existsByEmail(email)) {
-                throw new RuntimeException("Email already exists"); // [TIẾNG ANH]
+                throw new RuntimeException("Email already exists");
             }
             employee.setEmail(email);
         }
 
-        // 3. Check Phone Duplicate & Update
+        // 3. Check Phone
         if (phone != null && !phone.isEmpty()) {
             if (!phone.equals(employee.getPhone()) && employeeRepository.existsByPhone(phone)) {
-                throw new RuntimeException("Phone already exists"); // [TIẾNG ANH] - Như code gốc
+                throw new RuntimeException("Phone already exists");
             }
             employee.setPhone(phone);
         }
 
-       // 4. [ĐÃ FIX] Date of Birth (Không nuốt lỗi)
+        // 4. Date of Birth
         if (dob != null && !dob.isEmpty()) {
             try { 
                 employee.setDateOfBirth(java.time.LocalDate.parse(dob)); 
             } catch (Exception e) {
-                // Log warning và giữ nguyên ngày cũ, hoặc ném lỗi tùy bạn. 
-                // Ở đây tôi chọn ném lỗi để FE biết đường sửa.
                 throw new RuntimeException("Invalid Date format (yyyy-MM-dd required)."); 
             }
         }
+        
         // 5. Avatar
         if (avatarUrl != null && !avatarUrl.equals(employee.getAvatarUrl())) {
             deleteOldAvatarFromStorage(employee.getAvatarUrl());
@@ -283,20 +308,19 @@ public class EmployeeService {
         if (statusStr != null && !statusStr.isEmpty()) {
             try {
                 employee.setStatus(EmployeeStatus.valueOf(statusStr.toUpperCase()));
-            } catch (Exception e) { /* Ignore invalid status */ }
+            } catch (Exception e) { }
         }
 
         // 7. Role
         if (roleStr != null && !roleStr.isEmpty()) {
             try {
                 employee.setRole(EmployeeRole.valueOf(roleStr.toUpperCase()));
-            } catch (Exception e) { /* Ignore */ }
+            } catch (Exception e) { }
         }
 
         // 8. Department
         if (departmentId != null) {
-            Department dept = departmentRepository.findById(departmentId)
-                    .orElse(null); 
+            Department dept = departmentRepository.findById(departmentId).orElse(null); 
             if (dept != null) {
                 employee.setDepartment(dept);
             }
@@ -305,9 +329,10 @@ public class EmployeeService {
         // 9. Save
         Employee savedEmployee = employeeRepository.save(employee);
 
-        // 10. Gửi RabbitMQ đồng bộ (Email đã được cập nhật vào savedEmployee)
+        // 10. Gửi RabbitMQ đồng bộ (Kèm ID để Update đúng người)
         try {
             EmployeeSyncEvent event = new EmployeeSyncEvent(
+                savedEmployee.getId(), // [MỚI] Bắt buộc có ID để Core biết update ai
                 savedEmployee.getEmail(),
                 savedEmployee.getFullName(),
                 savedEmployee.getPhone(),
@@ -315,7 +340,7 @@ public class EmployeeService {
                 savedEmployee.getCompanyId(),
                 savedEmployee.getRole().name(), 
                 savedEmployee.getStatus().name(),
-                null
+                null // Update thì không gửi password
             );
             employeeProducer.sendEmployeeUpdatedEvent(event);
             log.info("--> [UPDATE] Đã đồng bộ User {} (Status: {}) sang Core", savedEmployee.getEmail(), savedEmployee.getStatus());

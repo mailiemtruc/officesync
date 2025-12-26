@@ -69,16 +69,6 @@ public class DepartmentController {
         return ResponseEntity.ok(departmentService.getAllDepartments());
     }
 
-    // API: Bổ nhiệm trưởng phòng
-    @PutMapping("/{deptId}/manager")
-    public ResponseEntity<Department> assignManager(
-            @PathVariable Long deptId,
-            @RequestBody Map<String, Long> payload) {
-        
-        Long employeeId = payload.get("employeeId");
-        Department updated = departmentService.assignManager(deptId, employeeId);
-        return ResponseEntity.ok(updated);
-    }
 
     @Data
     public static class UpdateDepartmentRequest {

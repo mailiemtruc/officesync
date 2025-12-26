@@ -10,6 +10,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @NoArgsConstructor
 public class EmployeeSyncEvent {
+    private Long id; // [MỚI] Thêm trường này để đồng bộ Update/Delete
     private String email;
     private String fullName;
     private String phone;
