@@ -1,3 +1,4 @@
+import 'dart:convert'; // [MỚI] Thêm import này để dùng jsonDecode
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -7,6 +8,9 @@ class ApiClient {
 
   // Base URL cho Storage Service (Lưu file)
   static const String storageUrl = 'http://10.0.2.2:8090/api';
+
+  // Base URL cho Note Service (Port 8082)
+  static const String noteUrl = 'http://10.0.2.2:8082/api';
 
   final Dio _dio = Dio(
     BaseOptions(
@@ -19,21 +23,42 @@ class ApiClient {
 
   final _storage = const FlutterSecureStorage();
 
+  // [ĐÃ SỬA] Hàm này giờ sẽ lấy thêm User ID để gửi Header
   Future<Options> _getOptions() async {
     String? token = await _storage.read(key: 'auth_token');
+
+    // Đọc thông tin user từ bộ nhớ (đã lưu lúc Login)
+    String? userInfoStr = await _storage.read(key: 'user_info');
+    String? userId;
+
+    if (userInfoStr != null) {
+      try {
+        final userData = jsonDecode(userInfoStr);
+        // Lấy ID ra để gửi cho Backend (Lưu ý: Backend nhận Long nên mình gửi String số)
+        userId = userData['id'].toString();
+      } catch (e) {
+        print("Lỗi đọc user info: $e");
+      }
+    }
+
     return Options(
       headers: {
         'Content-Type': 'application/json',
         if (token != null) 'Authorization': 'Bearer $token',
+
+        // [QUAN TRỌNG] Gửi kèm ID để Note Service (và các service khác) biết ai đang gọi
+        if (userId != null) 'X-User-Id': userId,
       },
     );
   }
 
-  // --- CORE SERVICE METHODS (Port 8080) ---
+  // --- CORE & NOTE SERVICE METHODS ---
 
   Future<Response> post(String path, {dynamic data}) async {
     try {
       final options = await _getOptions();
+      // Dio thông minh: Nếu 'path' bắt đầu bằng http (ví dụ noteUrl),
+      // nó sẽ bỏ qua baseUrl mặc định (8080) và dùng url đầy đủ đó.
       return await _dio.post(path, data: data, options: options);
     } on DioException catch (e) {
       throw Exception(_handleError(e));
@@ -68,35 +93,25 @@ class ApiClient {
   }
 
   // --- STORAGE SERVICE METHODS (Port 8090) ---
+  // (Phần này giữ nguyên không đổi)
 
-  /// Hàm upload ảnh sang Storage Service
-  /// Trả về: URL của ảnh (String) để sau đó gửi sang Core Service
   Future<String> uploadImageToStorage(String filePath) async {
     try {
-      // 1. Tạo instance Dio riêng cho Storage Service (Vì khác Port 8090)
       final storageDio = Dio(
         BaseOptions(
           baseUrl: storageUrl,
           connectTimeout: const Duration(seconds: 60),
-          headers: {
-            // Upload file cần content-type này, Dio sẽ tự xử lý boundary
-            'Content-Type': 'multipart/form-data',
-          },
+          headers: {'Content-Type': 'multipart/form-data'},
         ),
       );
 
-      // 2. Chuẩn bị dữ liệu FormData
       String fileName = filePath.split('/').last;
       FormData formData = FormData.fromMap({
-        // Key "file" phải khớp với @RequestParam("file") trong FileUploadController java
         "file": await MultipartFile.fromFile(filePath, filename: fileName),
       });
 
-      // 3. Gọi API: POST /api/files/upload
       final response = await storageDio.post('/files/upload', data: formData);
 
-      // 4. Xử lý kết quả trả về
-      // Backend trả về: { "url": "http://10.0.2.2:8090/img/..." }
       if (response.statusCode == 200 && response.data != null) {
         final data = response.data;
         if (data is Map && data.containsKey('url')) {
@@ -106,7 +121,6 @@ class ApiClient {
 
       throw Exception("Invalid response from Storage Service");
     } on DioException catch (e) {
-      // Tận dụng hàm xử lý lỗi có sẵn
       throw Exception(_handleError(e));
     }
   }

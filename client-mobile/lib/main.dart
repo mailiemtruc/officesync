@@ -15,6 +15,8 @@ import 'features/hr_service/presentation/pages/my_requests_page.dart';
 import 'features/hr_service/presentation/pages/manager_request_list_page.dart';
 import 'features/hr_service/presentation/pages/employee_list_page.dart';
 
+import 'features/note_service/presentation/pages/note_list_screen.dart';
+
 void main() {
   runApp(const OfficeSyncApp());
 }
@@ -60,6 +62,7 @@ class OfficeSyncApp extends StatelessWidget {
         '/my_requests': (context) => const MyRequestsPage(),
         '/manager_requests': (context) => const ManagerRequestListPage(),
         '/employees': (context) => const EmployeeListPage(),
+        '/notes': (context) => const NoteListScreen(),
       },
     );
   }

@@ -377,6 +377,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
             LayoutBuilder(
               builder: (context, constraints) {
+                final double itemWidth = (constraints.maxWidth - 16) / 2;
                 return Wrap(
                   spacing: 16,
                   runSpacing: 16,
@@ -409,6 +410,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       color: const Color(0xFF8B5CF6),
                       route: '/employees',
                       width: (constraints.maxWidth - 16) / 2,
+                    ),
+
+                    // 4. Personal Notes (Mục mới)
+                    _buildMenuItem(
+                      context,
+                      title: 'Personal Notes',
+                      // Dùng Icon notePencil hoặc note cho hợp ngữ cảnh
+                      icon: PhosphorIconsRegular.notePencil,
+                      // Màu vàng cam nhạt
+                      color: const Color(0xFFFFB74D),
+                      route:
+                          '/notes', // Đảm bảo route này đã khai báo ở main.dart
+                      width: itemWidth,
                     ),
                   ],
                 );
