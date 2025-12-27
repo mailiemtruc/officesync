@@ -74,21 +74,47 @@ class _AddMembersPageState extends State<AddMembersPage> {
     if (_currentUserId == null) return;
     setState(() => _isLoading = true);
     try {
+      // 1. Lấy dữ liệu thô từ API
       final result = await _repository.getEmployeeSuggestions(
         _currentUserId!,
         keyword,
       );
+
       if (mounted) {
         setState(() {
-          // [LOGIC] Lọc bỏ người đang là Manager (Server có thể chưa lọc ID cụ thể này)
-          _displayList = result
-              .where((e) => e.id != widget.excludeManagerId)
-              .toList();
+          // 2. Bắt đầu chuỗi lọc
+          List<EmployeeModel> filtered = result;
+
+          // [MỚI] BỘ LỌC ROLE: Chỉ hiển thị STAFF
+          // Loại bỏ tất cả những người đang là MANAGER hoặc ADMIN
+          filtered = filtered.where((e) {
+            // Kiểm tra null safety và so sánh chuỗi (không phân biệt hoa thường cho chắc chắn)
+            return e.role.toUpperCase() == 'STAFF';
+          }).toList();
+
+          // 3. Lọc theo Tab "Unassigned" (nếu đang chọn tab này)
+          if (_currentFilter == 'Unassigned') {
+            filtered = filtered.where((e) {
+              final dept = e.departmentName;
+              return dept == null || dept.isEmpty || dept == "Unassigned";
+            }).toList();
+          }
+
+          // 4. Lọc bỏ Manager hiện tại của phòng này (Logic cũ giữ nguyên để an toàn)
+          if (widget.excludeManagerId != null) {
+            filtered = filtered
+                .where((e) => e.id != widget.excludeManagerId)
+                .toList();
+          }
+
+          // 5. Gán kết quả
+          _displayList = filtered;
           _isLoading = false;
         });
       }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
+      print("Search error: $e");
     }
   }
 
@@ -396,7 +422,16 @@ class _AddMembersPageState extends State<AddMembersPage> {
   Widget _buildTabButton(String label) {
     bool isSelected = _currentFilter == label;
     return GestureDetector(
-      onTap: () => setState(() => _currentFilter = label),
+      onTap: () {
+        // Chỉ reload nếu bấm vào tab khác tab hiện tại
+        if (_currentFilter != label) {
+          setState(() {
+            _currentFilter = label;
+          });
+          // [QUAN TRỌNG] Gọi lại hàm search với từ khóa hiện tại để áp dụng bộ lọc mới
+          _performSearch(_searchController.text);
+        }
+      },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
         decoration: BoxDecoration(

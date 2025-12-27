@@ -315,16 +315,19 @@ public class EmployeeService {
             try { employee.setRole(EmployeeRole.valueOf(roleStr.toUpperCase())); } catch (Exception e) { }
         }
 
-        // 4. Cập nhật Phòng ban mới
+          // 4. Cập nhật Phòng ban mới [ĐÃ SỬA LOGIC TẠI ĐÂY]
         if (departmentId != null) {
-            Department dept = departmentRepository.findById(departmentId).orElse(null); 
-            if (dept != null) {
-                employee.setDepartment(dept);
+            if (departmentId == 0) {
+                employee.setDepartment(null);
+            } else {
+                // Nếu ID > 0 -> Tìm và gán phòng ban như bình thường
+                Department dept = departmentRepository.findById(departmentId).orElse(null); 
+                if (dept != null) {
+                    employee.setDepartment(dept);
+                }
             }
-        } else {
-            // Trường hợp set về null (nếu logic cho phép, ở đây giữ nguyên logic của bạn là check null rồi mới set)
-            // Nếu muốn cho phép gỡ phòng ban thì thêm logic else { employee.setDepartment(null); }
         }
+
 
         // =================================================================
         // [LOGIC MỚI BẮT ĐẦU] ĐỒNG BỘ MANAGER ID VÀO BẢNG DEPARTMENT
