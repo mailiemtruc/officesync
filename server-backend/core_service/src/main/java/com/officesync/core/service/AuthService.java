@@ -45,6 +45,8 @@ public class AuthService {
     // 🔴 INJECT RABBITMQ PRODUCER
     @Autowired private RabbitMQProducer rabbitMQProducer;
 
+    
+
     // Cache OTP
     @Data @AllArgsConstructor
     static class OtpData {
@@ -298,6 +300,26 @@ public class AuthService {
                 System.err.println("Lỗi bắn event UserCreated: " + e.getMessage());
             }
             // ------------------------------------------------
+        }
+    }
+    
+    // Hàm xóa User theo ID (Dùng trong CoreConsumer)
+    @Transactional
+    public void deleteUser(Long userId) {
+        User user = userRepository.findById(userId).orElse(null);
+        
+        if (user != null) {
+            // Xóa lịch sử mật khẩu trước để tránh lỗi khóa ngoại (Foreign Key)
+            List<PasswordHistory> history = passwordHistoryRepository.findByUserIdOrderByCreatedAtDesc(userId);
+            if (!history.isEmpty()) {
+                passwordHistoryRepository.deleteAll(history);
+            }
+
+            // Xóa User
+            userRepository.delete(user);
+            System.out.println("--> [DELETE] Đã xóa User ID: " + userId + " (" + user.getEmail() + ")");
+        } else {
+            System.out.println("--> [DELETE] User ID " + userId + " không tồn tại, bỏ qua.");
         }
     }
 
