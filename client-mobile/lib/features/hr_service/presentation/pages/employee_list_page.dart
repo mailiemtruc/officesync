@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-
+import 'employee_profile_page.dart';
 // --- IMPORTS ---
 import '../../../../core/config/app_colors.dart';
 import '../../data/models/employee_model.dart';
@@ -174,9 +174,12 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
     }
   }
 
-  // --- LOGIC: SHOW OPTION VÀ GỌI API THẬT ---
-  void _showOptions(BuildContext context, EmployeeModel employee) {
-    showModalBottomSheet(
+  // Tìm hàm _showOptions và sửa lại như sau:
+  void _showOptions(BuildContext context, EmployeeModel employee) async {
+    // [1] Thêm async
+
+    // [2] Thêm await để chờ BottomSheet đóng lại và hứng kết quả
+    final result = await showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
@@ -185,10 +188,13 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
         onToggleLock: () => _handleToggleLock(employee),
         onDelete: () => _handleDeleteEmployee(employee.id!),
       ),
-    ).then((_) {
-      // Refresh list khi đóng sheet (đề phòng có thay đổi từ màn Edit)
+    );
+
+    // [3] Kiểm tra kết quả
+    // Nếu result == true (từ trang Edit trả về) -> Load lại data
+    if (result == true) {
       _fetchData(keyword: _searchController.text);
-    });
+    }
   }
 
   // Xóa nhân viên (Logic thật)
@@ -330,17 +336,16 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
           child: EmployeeCard(
             employee: emp,
             onMenuTap: () => _showOptions(context, emp),
-            onTap: () async {
-              // Mở trang edit khi tap vào card
-              final result = await Navigator.push(
+
+            // [SỬA LẠI ĐOẠN NÀY]
+            onTap: () {
+              Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => EditProfileEmployeePage(employee: emp),
+                  // Chuyển hướng sang trang Profile thay vì trang Edit
+                  builder: (context) => EmployeeProfilePage(employee: emp),
                 ),
               );
-              if (result == true) {
-                _fetchData(); // Reload nếu có edit
-              }
             },
           ),
         );

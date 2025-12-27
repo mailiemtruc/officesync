@@ -61,7 +61,7 @@ class _SelectManagerPageState extends State<SelectManagerPage> {
 
       if (mounted) {
         setState(() {
-          _displayList = result;
+          _displayList = result.where((e) => e.id != _currentUserId).toList();
           _isLoading = false;
         });
       }

@@ -48,18 +48,24 @@ class EmployeeBottomSheet extends StatelessWidget {
               child: Row(
                 children: [
                   ClipOval(
-                    child:
-                        (employee.avatarUrl != null &&
-                            employee.avatarUrl!.isNotEmpty)
-                        ? Image.network(
-                            employee.avatarUrl!,
-                            width: 46,
-                            height: 46,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) =>
-                                const Icon(Icons.person, size: 46),
-                          )
-                        : const Icon(Icons.person, size: 46),
+                    child: SizedBox(
+                      width: 46,
+                      height: 46,
+                      child:
+                          (employee.avatarUrl != null &&
+                              employee.avatarUrl!.isNotEmpty)
+                          ? Image.network(
+                              employee.avatarUrl!,
+                              width: 46,
+                              height: 46,
+                              fit: BoxFit.cover,
+                              // Nếu lỗi ảnh -> Dùng avatar mặc định
+                              errorBuilder: (_, __, ___) =>
+                                  _buildDefaultAvatar(),
+                            )
+                          // Nếu không có ảnh -> Dùng avatar mặc định
+                          : _buildDefaultAvatar(),
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -82,11 +88,12 @@ class EmployeeBottomSheet extends StatelessWidget {
                               color: Color(0xFF555252),
                               fontSize: 13,
                               fontFamily: 'Inter',
-                              fontWeight: FontWeight.w300,
+                              fontWeight: FontWeight.w400,
                             ),
                             children: [
                               TextSpan(
-                                text: 'ID: ${employee.employeeCode ?? "N/A"}',
+                                text:
+                                    'Employee Code: ${employee.employeeCode ?? "N/A"}',
                               ),
                               const TextSpan(text: '  |  '),
                               TextSpan(
@@ -131,16 +138,18 @@ class EmployeeBottomSheet extends StatelessWidget {
               icon: PhosphorIcons.pencilSimple(),
               text: 'Edit Information',
               color: const Color(0xFF374151),
-              onTap: () {
-                Navigator.pop(context);
-                // Truyền object employee sang trang edit
-                Navigator.push(
+              onTap: () async {
+                final result = await Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (context) =>
                         EditProfileEmployeePage(employee: employee),
                   ),
                 );
+
+                if (context.mounted) {
+                  Navigator.pop(context, result);
+                }
               },
             ),
             const Divider(height: 1, color: Color(0xFFE5E7EB)),
@@ -215,30 +224,52 @@ class EmployeeBottomSheet extends StatelessWidget {
     );
   }
 
+  // Helper tạo avatar mặc định (giống EmployeeCard)
+  Widget _buildDefaultAvatar() {
+    return Container(
+      width: 46,
+      height: 46,
+      alignment: Alignment.center,
+      color: const Color(0xFFEFF1F5), // Màu nền xám
+      child: const Icon(
+        Icons.person,
+        color: Color(0xFF9CA3AF), // Màu icon xám đậm
+        size: 24,
+      ),
+    );
+  }
+
   Widget _buildActionItem({
     required IconData icon,
     required String text,
     required Color color,
     required VoidCallback onTap,
   }) {
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-        child: Row(
-          children: [
-            Icon(icon, size: 24, color: color),
-            const SizedBox(width: 16),
-            Text(
-              text,
-              style: TextStyle(
-                color: color,
-                fontSize: 16,
-                fontFamily: 'Inter',
-                fontWeight: FontWeight.w600,
+    // [QUAN TRỌNG] Bọc trong Material để InkWell vẽ được hiệu ứng sóng nước
+    return Material(
+      color: Colors.transparent, // Nền trong suốt để không che background trắng
+      child: InkWell(
+        onTap: onTap,
+        // [MỚI] Tùy chỉnh màu hiệu ứng lan tỏa dựa theo màu icon (VD: Xóa thì lan màu đỏ nhạt)
+        splashColor: color.withOpacity(0.1),
+        highlightColor: color.withOpacity(0.05),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          child: Row(
+            children: [
+              Icon(icon, size: 24, color: color),
+              const SizedBox(width: 16),
+              Text(
+                text,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 16,
+                  fontFamily: 'Inter',
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
