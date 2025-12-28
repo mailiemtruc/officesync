@@ -11,40 +11,42 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # --- CÁC THƯ VIỆN CŨ CỦA BẠN (GIỮ NGUYÊN) ---
+  # --- UI & Utilities ---
   flutter_staggered_grid_view: ^0.7.0
   flutter_secure_storage: ^9.0.0
-
   url_launcher: ^6.3.0
-  # [THÊM 2 DÒNG NÀY]
+  cupertino_icons: ^1.0.8
+  phosphor_flutter: ^2.1.0
+  intl: ^0.20.2
+  google_fonts: ^6.1.0
+
+  # --- Media ---
   video_player: ^2.8.6
   chewie: ^1.8.1
-  cupertino_icons: ^1.0.8
-  dio: ^5.9.0
-  phosphor_flutter: ^2.1.0
   image_picker: ^1.2.1
-  intl: ^0.20.2
+
+  # --- Networking & Security ---
+  dio: ^5.9.0
   bcrypt: ^1.1.3
 
-  # --- EDITOR (Cố định bản 10.8.4 để chạy code ổn định) ---
+  # --- Editor (Cố định version) ---
   flutter_quill: 10.8.4
-  google_fonts: ^6.1.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-
   flutter_launcher_icons: ^0.13.1
   flutter_lints: ^6.0.0
 
-# --- CẤU HÌNH FLUTTER (GIỮ NGUYÊN) ---
+# --- Cấu hình Override (Quan trọng) ---
+dependency_overrides:
+  intl: ^0.20.2
+
 flutter:
   uses-material-design: true
-
   assets:
     - assets/images/
 
-# --- CẤU HÌNH ICON APP (GIỮ NGUYÊN) ---
 flutter_launcher_icons:
   android: true
   ios: true
@@ -52,8 +54,3 @@ flutter_launcher_icons:
   adaptive_icon_background: "#FFFFFF"
   image_path: "assets/images/logo.png"
   min_sdk_android: 21
-
-# --- [QUAN TRỌNG] PHẦN NÀY ĐỂ SỬA LỖI VERSION ---
-# Bắt buộc phải có đoạn này để flutter_quill chịu chạy với intl mới
-dependency_overrides:
-  intl: ^0.20.2
