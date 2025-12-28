@@ -290,7 +290,7 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildLabel('Email or Mobile Number'),
+                  _buildLabel('Email'),
 
                   _buildEmailField(),
 
