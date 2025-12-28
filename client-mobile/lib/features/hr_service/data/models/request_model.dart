@@ -17,7 +17,11 @@ class RequestModel {
   final String? durationUnit;
   final String reason;
   final String? rejectReason;
-  // Có thể thêm requesterName nếu Backend trả về nested object
+
+  // [QUAN TRỌNG] Thêm trường này để hết lỗi đỏ bên trang Detail
+  final String? evidenceUrl;
+  // [MỚI] Thêm trường này để hứng ngày tạo đơn từ Backend
+  final DateTime? createdAt;
 
   RequestModel({
     this.id,
@@ -30,6 +34,8 @@ class RequestModel {
     this.durationUnit,
     required this.reason,
     this.rejectReason,
+    this.evidenceUrl, // [MỚI]
+    this.createdAt, // [MỚI]
   });
 
   // --- 1. FROM JSON (Nhận từ Backend) ---
@@ -47,6 +53,11 @@ class RequestModel {
       durationUnit: json['durationUnit'],
       reason: json['reason'] ?? '',
       rejectReason: json['rejectReason'],
+      evidenceUrl: json['evidenceUrl'],
+      // [MỚI] Parse ngày tạo an toàn (tránh lỗi null)
+      createdAt: json['createdAt'] != null
+          ? DateTime.parse(json['createdAt'])
+          : null,
     );
   }
 
@@ -60,6 +71,7 @@ class RequestModel {
       'reason': reason,
       'durationVal': durationVal,
       'durationUnit': durationUnit,
+      'evidenceUrl': evidenceUrl, // [MỚI]
     };
   }
 
