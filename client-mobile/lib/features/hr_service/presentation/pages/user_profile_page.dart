@@ -7,15 +7,12 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
-
 import 'change_password_page.dart';
 import '../../../../core/config/app_colors.dart';
 import 'edit_profile_page.dart';
-
 import '../../domain/repositories/employee_repository_impl.dart';
 import '../../data/datasources/employee_remote_data_source.dart';
 import '../../data/models/employee_model.dart';
-import '../../data/newsfeed_api.dart';
 
 class UserProfilePage extends StatefulWidget {
   final Map<String, dynamic> userInfo;

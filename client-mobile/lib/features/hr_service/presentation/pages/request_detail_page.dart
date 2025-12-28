@@ -1,8 +1,12 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-
+import 'package:url_launcher/url_launcher.dart';
+import 'package:video_player/video_player.dart';
+import 'package:chewie/chewie.dart';
 import '../../../../core/config/app_colors.dart';
 import '../../data/models/request_model.dart';
 import '../../widgets/confirm_bottom_sheet.dart';
@@ -26,7 +30,6 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
   @override
   void initState() {
     super.initState();
-    // Khởi tạo Repository
     _repository = RequestRepositoryImpl(
       remoteDataSource: RequestRemoteDataSource(),
     );
@@ -34,7 +37,6 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
 
   // --- LOGIC BACKEND: HỦY ĐƠN ---
   Future<void> _handleCancelRequest() async {
-    // 1. Lấy User ID
     String? userId;
     String? userInfo = await _storage.read(key: 'user_info');
     if (userInfo != null) {
@@ -45,17 +47,15 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
 
     if (userId == null) return;
 
-    // 2. Gọi API
     setState(() => _isCancelling = true);
     try {
-      // Giả sử request.id là String hoặc Int, cần chuyển về String cho hàm cancel
       await _repository.cancelRequest(widget.request.id.toString(), userId);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Request cancelled successfully")),
+          const SnackBar(content: Text("Request deleted successfully")),
         );
-        Navigator.pop(context, true); // Trả về true để trang trước reload
+        Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) {
@@ -74,20 +74,103 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (context) => ConfirmBottomSheet(
-        title: 'Cancel Request?',
+        title: 'Delete Request?',
         message:
-            'Are you sure you want to cancel this request? This action cannot be undone.',
-        confirmText: 'Yes, Cancel',
+            'Are you sure you want to delete this request? This action cannot be undone.',
+        confirmText: 'Yes, Delete',
         confirmColor: const Color(0xFFDC2626),
         onConfirm: () {
-          Navigator.pop(context); // Đóng Dialog
-          _handleCancelRequest(); // Gọi API hủy
+          Navigator.pop(context);
+          _handleCancelRequest();
         },
       ),
     );
   }
 
-  // --- LOGIC WORKFLOW (Giữ nguyên logic hiển thị của bạn) ---
+  // --- LOGIC XỬ LÝ ERL & MỞ FILE ---
+
+  // 1. Hàm fix localhost cho Android Emulator
+  String _fixUrl(String url) {
+    if (Platform.isAndroid && url.contains('localhost')) {
+      return url.replaceFirst('localhost', '10.0.2.2');
+    }
+    return url;
+  }
+
+  void _openFile(String url) {
+    final String fixedUrl = _fixUrl(url);
+    final String lowerUrl = fixedUrl.toLowerCase();
+
+    // CHECK 1: Nếu là ẢNH -> Mở trình xem ảnh (code cũ)
+    if (lowerUrl.endsWith('.jpg') ||
+        lowerUrl.endsWith('.jpeg') ||
+        lowerUrl.endsWith('.png') ||
+        lowerUrl.endsWith('.webp')) {
+      final List<String> allImages = _getEvidenceUrls()
+          .map((e) => _fixUrl(e))
+          .where((e) {
+            final l = e.toLowerCase();
+            return l.endsWith('.jpg') ||
+                l.endsWith('.jpeg') ||
+                l.endsWith('.png') ||
+                l.endsWith('.webp');
+          })
+          .toList();
+
+      int initialIndex = allImages.indexOf(fixedUrl);
+      if (initialIndex == -1) initialIndex = 0;
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => _FullScreenImageViewer(
+            imageUrls: allImages,
+            initialIndex: initialIndex,
+          ),
+        ),
+      );
+    }
+    // CHECK 2: Nếu là VIDEO -> Mở trình xem Video trong App (MỚI)
+    else if (lowerUrl.endsWith('.mp4') ||
+        lowerUrl.endsWith('.mov') ||
+        lowerUrl.endsWith('.avi')) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => _FullScreenVideoPlayer(videoUrl: fixedUrl),
+        ),
+      );
+    }
+    // CHECK 3: Các file khác (PDF, Doc...) -> Vẫn mở ngoài
+    else {
+      _launchExternalUrl(fixedUrl);
+    }
+  }
+
+  Future<void> _launchExternalUrl(String url) async {
+    final uri = Uri.parse(url);
+    try {
+      if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+        throw 'Could not launch $url';
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Cannot open file: $e")));
+      }
+    }
+  }
+
+  List<String> _getEvidenceUrls() {
+    if (widget.request.evidenceUrl != null &&
+        widget.request.evidenceUrl!.isNotEmpty) {
+      return widget.request.evidenceUrl!.split(';');
+    }
+    return [];
+  }
+
+  // [SỬA QUAN TRỌNG] Cập nhật logic hiển thị thời gian trong Timeline
   List<Map<String, dynamic>> _getWorkflowSteps() {
     const colorGreen = Color(0xFF10B981);
     const colorRed = Color(0xFFDC2626);
@@ -96,10 +179,19 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
 
     final status = widget.request.status;
 
+    // Logic format thời gian tạo đơn
+    String submittedTime = 'Submitted';
+    if (widget.request.createdAt != null) {
+      // Ví dụ: 14:30, 28/12/2025
+      submittedTime = DateFormat(
+        'HH:mm, dd/MM/yyyy',
+      ).format(widget.request.createdAt!);
+    }
+
     final steps = [
       {
         'title': 'Request Submitted',
-        'time': 'Submitted', // Có thể bind ngày tạo nếu có
+        'time': submittedTime, // [SỬA] Hiển thị giờ thật thay vì chữ cứng
         'actor': 'You',
         'dotColor': colorGreen,
         'lineColor': colorGrey,
@@ -109,7 +201,7 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
       {
         'title': 'Manager Review',
         'time': status == RequestStatus.PENDING ? 'Processing...' : 'Reviewed',
-        'actor': 'Manager', // Có thể bind tên manager nếu có
+        'actor': 'Manager',
         'dotColor': status == RequestStatus.PENDING ? colorBlue : colorGreen,
         'lineColor': colorGrey,
         'isLast': false,
@@ -161,7 +253,6 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
     return steps;
   }
 
-  // --- DIALOG LÝ DO TỪ CHỐI (Giữ nguyên UI) ---
   void _showRejectionDialog(BuildContext context) {
     showDialog(
       context: context,
@@ -282,15 +373,7 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
   Widget build(BuildContext context) {
     final isPending = widget.request.status == RequestStatus.PENDING;
     final isRejected = widget.request.status == RequestStatus.REJECTED;
-
-    // Logic Evidence: Giả sử evidenceUrl là chuỗi các URL cách nhau dấu chấm phẩy
-    // Nếu bạn chưa update Model, hãy tạm thời dùng biến giả lập hoặc map từ reason (nếu có)
-    // Ở đây mình check nếu có dữ liệu evidence thì hiển thị
-    // final hasEvidence = widget.request.evidenceUrl != null && widget.request.evidenceUrl!.isNotEmpty;
-
-    // TẠM THỜI: Để không lỗi code vì Model cũ chưa có evidenceUrl, mình sẽ ẩn phần này nếu null
-    // Bạn có thể mở comment bên dưới khi Model đã update
-    // List<String> evidenceList = widget.request.evidenceUrl?.split(';') ?? [];
+    final evidenceList = _getEvidenceUrls();
 
     return Scaffold(
       backgroundColor: const Color(0xFFF9F9F9),
@@ -326,23 +409,22 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
                           ),
                         ),
 
-                        // [TÍCH HỢP] Chỉ hiện Evidence nếu có
-                        // if (evidenceList.isNotEmpty) ...[
-                        //   const SizedBox(height: 24),
-                        //   _buildSectionTitle('ATTACHMENT'),
-                        //   const SizedBox(height: 12),
-                        //   // Render list ảnh
-                        //   ...evidenceList.map((url) => Padding(
-                        //     padding: const EdgeInsets.only(bottom: 8.0),
-                        //     child: _buildAttachmentCard(url), // Truyền URL vào
-                        //   )).toList(),
-                        // ],
-
-                        // Placeholder UI cho Evidence (Giữ nguyên code cũ của bạn)
-                        const SizedBox(height: 24),
-                        _buildSectionTitle('ATTACHMENT'),
-                        const SizedBox(height: 12),
-                        _buildAttachmentCard("evidence.jpg"), // Static demo
+                        // [SỬA] HIỆN FILE MINH CHỨNG
+                        if (evidenceList.isNotEmpty) ...[
+                          const SizedBox(height: 24),
+                          _buildSectionTitle('ATTACHMENT'),
+                          const SizedBox(height: 12),
+                          ...evidenceList
+                              .map(
+                                (url) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 8.0),
+                                  child: _buildAttachmentCard(
+                                    url,
+                                  ), // Truyền URL
+                                ),
+                              )
+                              .toList(),
+                        ],
 
                         const SizedBox(height: 24),
                         _buildSectionTitle('APPROVAL WORKFLOW'),
@@ -354,7 +436,6 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
                   ),
                 ),
 
-                // [TÍCH HỢP] Nút Hủy Đơn (Chỉ hiện khi Pending)
                 if (isPending)
                   Padding(
                     padding: const EdgeInsets.only(
@@ -420,9 +501,16 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
     );
   }
 
-  // --- CÁC WIDGET CON (GIỮ NGUYÊN UI) ---
+  // --- CÁC WIDGET CON ---
 
   Widget _buildMainStatusCard(BuildContext context, bool isRejected) {
+    // [LOGIC SỬA] Ưu tiên lấy requestCode, nếu không có thì lấy ID
+    String displayCode =
+        widget.request.requestCode != null &&
+            widget.request.requestCode!.isNotEmpty
+        ? widget.request.requestCode!
+        : (widget.request.id?.toString().padLeft(4, '0') ?? "N/A");
+
     return Container(
       width: double.infinity,
       clipBehavior: Clip.hardEdge,
@@ -457,8 +545,9 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
                   ),
                 ),
                 const SizedBox(height: 4),
+                // [HIỂN THỊ] Mã Code
                 Text(
-                  '#REQ-${widget.request.id?.toString().padLeft(4, '0') ?? "N/A"}',
+                  '#$displayCode',
                   style: const TextStyle(
                     color: Color(0xFF94A3B8),
                     fontSize: 14,
@@ -529,8 +618,146 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
     );
   }
 
+  // [UPDATED] English Version
+  Widget _buildAttachmentCard(String fileUrl) {
+    final String fixedUrl = _fixUrl(fileUrl);
+    final String lowerUrl = fixedUrl.toLowerCase();
+
+    final bool isImage =
+        lowerUrl.endsWith('.jpg') ||
+        lowerUrl.endsWith('.jpeg') ||
+        lowerUrl.endsWith('.png') ||
+        lowerUrl.endsWith('.webp');
+
+    final bool isVideo =
+        lowerUrl.endsWith('.mp4') ||
+        lowerUrl.endsWith('.mov') ||
+        lowerUrl.endsWith('.avi');
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFECF1FF)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => _openFile(fileUrl),
+          child: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Row(
+              children: [
+                // Thumbnail / Icon
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: SizedBox(
+                    width: 60,
+                    height: 60,
+                    child: isImage
+                        ? Image.network(
+                            fixedUrl,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Container(
+                                color: Colors.grey[200],
+                                child: const Icon(
+                                  Icons.broken_image,
+                                  color: Colors.grey,
+                                ),
+                              );
+                            },
+                            loadingBuilder: (context, child, loadingProgress) {
+                              if (loadingProgress == null) return child;
+                              return Container(
+                                color: Colors.grey[100],
+                                child: const Center(
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                              );
+                            },
+                          )
+                        : Container(
+                            color: isVideo
+                                ? Colors.orange.withOpacity(0.1)
+                                : const Color(0xFFEFF6FF),
+                            child: Icon(
+                              isVideo
+                                  ? PhosphorIcons.playCircle(
+                                      PhosphorIconsStyle.fill,
+                                    )
+                                  : PhosphorIcons.fileText(
+                                      PhosphorIconsStyle.fill,
+                                    ),
+                              color: isVideo
+                                  ? Colors.orange
+                                  : AppColors.primary,
+                              size: 32,
+                            ),
+                          ),
+                  ),
+                ),
+
+                const SizedBox(width: 16),
+
+                // Info Text (Translated to English)
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        isImage
+                            ? "Evidence Image" // Hình ảnh minh chứng
+                            : isVideo
+                            ? "Evidence Video" // Video minh chứng
+                            : "Attached Document", // Tài liệu đính kèm
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                          fontFamily: 'Inter',
+                          color: Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        "Tap to view details", // Nhấn để xem chi tiết
+                        style: TextStyle(
+                          color: Colors.grey[500],
+                          fontSize: 12,
+                          fontFamily: 'Inter',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 16,
+                  color: Color(0xFFBDC6DE),
+                ),
+                const SizedBox(width: 8),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ... (Các widget info grid, workflow list giữ nguyên) ...
   Widget _buildInfoGrid() {
-    // Logic hiển thị thông tin tùy theo loại Request (Giữ nguyên)
     if (widget.request.type == RequestType.ANNUAL_LEAVE) {
       return Container(
         padding: const EdgeInsets.all(20),
@@ -547,11 +774,7 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
         ),
         child: Column(
           children: [
-            _buildInfoRow(
-              'Date Range',
-              widget.request.dateRange,
-              '',
-            ), // Tùy biến text
+            _buildInfoRow('Date Range', widget.request.dateRange, ''),
             const Divider(height: 24, color: Color(0xFFF1F5F9)),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -678,79 +901,6 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
           ),
         ),
       ],
-    );
-  }
-
-  // [SỬA] Widget Attachment nhận tên file/url
-  Widget _buildAttachmentCard(String fileName) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFECF1FF)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: const Color(0xFFEFF6FF),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(
-              PhosphorIcons.fileImage(PhosphorIconsStyle.fill),
-              color: AppColors.primary,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  fileName,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                    fontFamily: 'Inter',
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const Text(
-                  'Attachment',
-                  style: TextStyle(
-                    color: Colors.grey,
-                    fontSize: 12,
-                    fontFamily: 'Inter',
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(8),
-              onTap: () {
-                // Logic mở file/ảnh
-              },
-              child: const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                child: Text(
-                  'View',
-                  style: TextStyle(
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.w600,
-                    fontFamily: 'Inter',
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -918,4 +1068,162 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
       fontFamily: 'Inter',
     ),
   );
+}
+// --- Dán class này vào cuối file request_detail_page.dart ---
+
+class _FullScreenImageViewer extends StatelessWidget {
+  final List<String> imageUrls;
+  final int initialIndex;
+
+  const _FullScreenImageViewer({
+    super.key,
+    required this.imageUrls,
+    this.initialIndex = 0,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // PageController giúp mở đúng ảnh người dùng vừa bấm vào
+    final PageController controller = PageController(initialPage: initialIndex);
+
+    return Scaffold(
+      backgroundColor: Colors.black,
+      // AppBar trong suốt để tối ưu không gian xem
+      appBar: AppBar(
+        backgroundColor: Colors.black.withOpacity(0.5),
+        iconTheme: const IconThemeData(color: Colors.white),
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.close),
+          onPressed: () => Navigator.pop(context),
+        ),
+      ),
+      body: PageView.builder(
+        controller: controller,
+        itemCount: imageUrls.length,
+        itemBuilder: (context, index) {
+          return InteractiveViewer(
+            panEnabled: true, // Cho phép kéo ảnh
+            minScale: 0.5,
+            maxScale: 4.0, // Zoom tối đa 4x
+            child: Center(
+              child: Image.network(
+                imageUrls[index],
+                fit: BoxFit.contain, // Hiển thị trọn vẹn ảnh
+                loadingBuilder: (context, child, loadingProgress) {
+                  if (loadingProgress == null) return child;
+                  return const Center(
+                    child: CircularProgressIndicator(color: Colors.white),
+                  );
+                },
+                errorBuilder: (context, error, stackTrace) => const Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.broken_image, color: Colors.white, size: 40),
+                      SizedBox(height: 8),
+                      Text(
+                        'Failed to load image',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+// --- Class xem Video Full màn hình (MỚI) ---
+class _FullScreenVideoPlayer extends StatefulWidget {
+  final String videoUrl;
+  const _FullScreenVideoPlayer({required this.videoUrl});
+
+  @override
+  State<_FullScreenVideoPlayer> createState() => _FullScreenVideoPlayerState();
+}
+
+class _FullScreenVideoPlayerState extends State<_FullScreenVideoPlayer> {
+  late VideoPlayerController _videoPlayerController;
+  ChewieController? _chewieController;
+  bool _isError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializePlayer();
+  }
+
+  Future<void> _initializePlayer() async {
+    try {
+      _videoPlayerController = VideoPlayerController.networkUrl(
+        Uri.parse(widget.videoUrl),
+      );
+      await _videoPlayerController.initialize();
+
+      setState(() {
+        _chewieController = ChewieController(
+          videoPlayerController: _videoPlayerController,
+          autoPlay: true, // Tự động phát khi mở
+          looping: false, // Không lặp lại
+          aspectRatio: _videoPlayerController.value.aspectRatio,
+          errorBuilder: (context, errorMessage) {
+            return const Center(
+              child: Text(
+                'Video loading error',
+                style: TextStyle(color: Colors.white),
+              ),
+            );
+          },
+        );
+      });
+    } catch (e) {
+      setState(() => _isError = true);
+      debugPrint("Video Error: $e");
+    }
+  }
+
+  @override
+  void dispose() {
+    // Quan trọng: Phải giải phóng bộ nhớ khi tắt
+    _videoPlayerController.dispose();
+    _chewieController?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        iconTheme: const IconThemeData(color: Colors.white),
+        elevation: 0,
+      ),
+      body: SafeArea(
+        child: Center(
+          child: _isError
+              ? const Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.error_outline, color: Colors.red, size: 40),
+                    SizedBox(height: 10),
+                    Text(
+                      "This video cannot be played.",
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ],
+                )
+              : _chewieController != null &&
+                    _chewieController!.videoPlayerController.value.isInitialized
+              ? Chewie(controller: _chewieController!)
+              : const CircularProgressIndicator(color: Colors.white),
+        ),
+      ),
+    );
+  }
 }
