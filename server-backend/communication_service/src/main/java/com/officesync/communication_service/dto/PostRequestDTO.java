@@ -6,4 +6,5 @@ import lombok.Data;
 public class PostRequestDTO {
     private String content;
     private String imageUrl;
+    private String userAvatar;
 }
