@@ -22,6 +22,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   final _emailController = TextEditingController();
 
+  // [SỬA 1] Khai báo FocusNode cố định
+  final _emailFocusNode = FocusNode();
+
   static const List<String> _emailDomains = [
     '@gmail.com',
     '@outlook.com',
@@ -48,6 +51,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   @override
   void dispose() {
     _emailController.dispose();
+    // [SỬA 2] Hủy FocusNode để tránh rò rỉ bộ nhớ
+    _emailFocusNode.dispose();
     super.dispose();
   }
 
@@ -65,7 +70,10 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   Widget _buildEmailField() {
     return RawAutocomplete<String>(
       textEditingController: _emailController,
-      focusNode: FocusNode(),
+
+      // [SỬA 3] Sử dụng biến FocusNode đã khai báo
+      focusNode: _emailFocusNode,
+
       optionsBuilder: (TextEditingValue textEditingValue) {
         if (textEditingValue.text.isEmpty) {
           return const Iterable<String>.empty();

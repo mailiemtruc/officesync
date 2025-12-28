@@ -26,6 +26,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _phoneController = TextEditingController();
   final _dobController = TextEditingController();
 
+  // [SỬA 1] Khai báo FocusNode cố định cho email
+  final _emailFocusNode = FocusNode();
+
   static const List<String> _emailDomains = [
     '@gmail.com',
     '@outlook.com',
@@ -56,6 +59,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
     _emailController.dispose();
     _phoneController.dispose();
     _dobController.dispose();
+    // [SỬA 2] Hủy FocusNode để tránh rò rỉ bộ nhớ
+    _emailFocusNode.dispose();
     super.dispose();
   }
 
@@ -263,7 +268,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
   Widget _buildEmailField() {
     return RawAutocomplete<String>(
       textEditingController: _emailController,
-      focusNode: FocusNode(),
+
+      // [SỬA 3] Sử dụng biến FocusNode đã khai báo
+      focusNode: _emailFocusNode,
+
       optionsBuilder: (TextEditingValue textEditingValue) {
         if (textEditingValue.text.isEmpty) {
           return const Iterable<String>.empty();

@@ -39,6 +39,13 @@ public class Note {
     @Column(length = 20)
     private String color = "0xFFFFFFFF"; // Màu nền (mặc định trắng)
 
+    @Column(name = "pin")
+    private String pin; // Lưu mã pin 6 số (nếu null nghĩa là không khóa)
+
+    // Getter và Setter
+    public String getPin() { return pin; }
+    public void setPin(String pin) { this.pin = pin; }
+
     @CreatedDate
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;

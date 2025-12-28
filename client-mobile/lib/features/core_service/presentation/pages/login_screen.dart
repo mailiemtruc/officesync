@@ -25,6 +25,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _emailFocusNode = FocusNode();
   bool _isPasswordVisible = false;
 
   static const List<String> _emailDomains = [
@@ -54,13 +55,14 @@ class _LoginScreenState extends State<LoginScreen> {
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _emailFocusNode.dispose();
     super.dispose();
   }
 
   Widget _buildEmailField() {
     return RawAutocomplete<String>(
       textEditingController: _emailController,
-      focusNode: FocusNode(),
+      focusNode: _emailFocusNode,
       optionsBuilder: (TextEditingValue textEditingValue) {
         if (textEditingValue.text.isEmpty) {
           return const Iterable<String>.empty();
@@ -399,8 +401,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                       GestureDetector(
-                        onTap: () =>
-                            Navigator.pushReplacementNamed(context, '/signup'),
+                        // Dùng pushNamed để xếp chồng màn hình Sign Up lên trên Login
+                        // Khi back lại thì Login vẫn còn đó.
+                        onTap: () => Navigator.pushNamed(context, '/signup'),
                         child: const Text(
                           'Create Company',
                           style: TextStyle(

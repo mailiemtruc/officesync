@@ -163,6 +163,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
           children: [
             CustomButton(
               text: 'Log In',
+              // [QUAN TRỌNG] Dùng pushNamed để mở Login đè lên Register
+              // Khi người dùng bấm Back ở Login, nó sẽ quay về màn hình này (Register)
               onPressed: () => Navigator.pushNamed(context, '/login'),
             ),
             const SizedBox(height: 20),
@@ -170,6 +172,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               text: 'Create Company',
               backgroundColor: const Color(0xFFCAD6FF),
               textColor: AppColors.primary,
+              // [QUAN TRỌNG] Dùng pushNamed để mở SignUp đè lên Register
               onPressed: () => Navigator.pushNamed(context, '/signup'),
             ),
           ],
