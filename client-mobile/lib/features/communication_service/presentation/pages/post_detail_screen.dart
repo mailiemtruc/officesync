@@ -4,6 +4,8 @@ import '../../data/newsfeed_api.dart';
 import '../../data/models/post_model.dart';
 import '../../data/models/comment_model.dart';
 import '../../../../core/config/app_colors.dart';
+import 'dart:convert';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class PostDetailScreen extends StatefulWidget {
   final PostModel post;
@@ -16,6 +18,7 @@ class PostDetailScreen extends StatefulWidget {
 
 class _PostDetailScreenState extends State<PostDetailScreen> {
   final _api = NewsfeedApi();
+  final _storage = const FlutterSecureStorage();
   final _commentCtrl = TextEditingController();
 
   // ✅ Biến điều khiển focus và trạng thái reply
@@ -48,16 +51,26 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     });
   }
 
+  // ✅ THÊM HÀM LẤY AVATAR
+  Future<String> _getMyAvatar() async {
+    String? userInfoStr = await _storage.read(key: 'user_info');
+    if (userInfoStr != null) {
+      return jsonDecode(userInfoStr)['avatarUrl'] ?? "";
+    }
+    return "";
+  }
+
   Future<void> _handleSendComment() async {
     final content = _commentCtrl.text.trim();
     if (content.isEmpty) return;
 
     FocusScope.of(context).unfocus();
     // Lưu ý: Không clear text ngay để lỡ gửi lỗi user đỡ phải nhập lại
-
+    String myAvatar = await _getMyAvatar();
     final success = await _api.sendComment(
       widget.post.id,
       content,
+      myAvatar, // Truyền avatar vào
       parentId: _replyingTo?.id,
     );
 

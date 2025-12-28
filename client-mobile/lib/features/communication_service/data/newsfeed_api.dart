@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'models/post_model.dart';
@@ -31,12 +32,46 @@ class NewsfeedApi {
     }
   }
 
-  Future<bool> createPost(String content) async {
+  // 1. ✅ THÊM HÀM UPLOAD ẢNH (Mới)
+  Future<String> uploadImage(File file) async {
+    try {
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse(
+          'http://10.0.2.2:8090/api/files/upload',
+        ), // URL của Storage Service
+      );
+      request.files.add(await http.MultipartFile.fromPath('file', file.path));
+
+      var response = await request.send();
+      var responseData = await http.Response.fromStream(response);
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(responseData.body);
+        return data['url'] ?? ""; // Trả về link ảnh từ server
+      }
+    } catch (e) {
+      print("Upload error: $e");
+    }
+    return "";
+  }
+
+  // 2. ✅ SỬA HÀM CREATE POST (Thêm tham số imageUrl)
+  Future<bool> createPost(
+    String content,
+    String imageUrl,
+    String userAvatar,
+  ) async {
     final headers = await _getHeaders();
     final response = await http.post(
       Uri.parse(baseUrl),
       headers: headers,
-      body: jsonEncode({"content": content, "imageUrl": ""}),
+      body: jsonEncode({
+        "content": content,
+        "imageUrl":
+            imageUrl, // ✅ Truyền link ảnh thật vào đây (không để "" nữa)
+        "userAvatar": userAvatar,
+      }),
     );
     return response.statusCode == 200;
   }
@@ -56,7 +91,12 @@ class NewsfeedApi {
   }
 
   // 2. Gửi bình luận
-  Future<bool> sendComment(int postId, String content, {int? parentId}) async {
+  Future<bool> sendComment(
+    int postId,
+    String content,
+    String userAvatar, {
+    int? parentId,
+  }) async {
     final headers = await _getHeaders();
     final url = "$baseUrl/$postId/comments";
 
@@ -65,7 +105,8 @@ class NewsfeedApi {
       headers: headers,
       body: jsonEncode({
         "content": content,
-        "parentId": null, // Mặc định là null nếu không reply
+        "parentId": parentId,
+        "userAvatar": userAvatar, // ✅ Gửi kèm avatar
       }),
     );
 
@@ -94,5 +135,23 @@ class NewsfeedApi {
     final url = "$baseUrl/$postId/view";
     // Gọi fire-and-forget (không cần chờ kết quả trả về)
     http.post(Uri.parse(url), headers: headers);
+  }
+
+  // ✅ [MỚI] Gọi Backend cập nhật avatar ngay lập tức
+  Future<void> syncUserAvatar(String newAvatarUrl) async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.post(
+        Uri.parse("$baseUrl/sync-user"), // Gọi vào API vừa tạo
+        headers: headers,
+        body: jsonEncode({"avatarUrl": newAvatarUrl}),
+      );
+
+      if (response.statusCode == 200) {
+        print("--> Communication Service đã cập nhật Avatar mới!");
+      }
+    } catch (e) {
+      print("Lỗi sync avatar: $e");
+    }
   }
 }

@@ -6,6 +6,8 @@ import '../../widgets/post_card.dart';
 import 'create_post_screen.dart';
 import 'post_detail_screen.dart'; // Lát nữa tạo file này
 import '../../../../core/config/app_colors.dart';
+import 'dart:convert';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class NewsfeedScreen extends StatefulWidget {
   const NewsfeedScreen({super.key});
@@ -16,18 +18,45 @@ class NewsfeedScreen extends StatefulWidget {
 
 class _NewsfeedScreenState extends State<NewsfeedScreen> {
   final _api = NewsfeedApi();
+  final _storage = const FlutterSecureStorage();
   late Future<List<PostModel>> _postsFuture;
+  String _currentAvatar = ""; // Biến lưu avatar để hiển thị
 
   @override
   void initState() {
     super.initState();
+    _loadMyAvatar();
     _refreshPosts();
+  }
+
+  // Hàm load avatar từ bộ nhớ máy
+  Future<void> _loadMyAvatar() async {
+    String avatar = await _getMyAvatar();
+    if (mounted) {
+      setState(() {
+        _currentAvatar = avatar;
+      });
+    }
   }
 
   void _refreshPosts() {
     setState(() {
       _postsFuture = _api.fetchPosts();
     });
+  }
+
+  // ✅ THÊM HÀM LẤY AVATAR TỪ CACHE
+  Future<String> _getMyAvatar() async {
+    try {
+      String? userInfoStr = await _storage.read(key: 'user_info');
+      if (userInfoStr != null) {
+        final data = jsonDecode(userInfoStr);
+        return data['avatarUrl'] ?? "";
+      }
+    } catch (e) {
+      print(e);
+    }
+    return "";
   }
 
   @override
@@ -69,9 +98,15 @@ class _NewsfeedScreenState extends State<NewsfeedScreen> {
             color: Colors.white,
             child: Row(
               children: [
-                const CircleAvatar(
+                CircleAvatar(
                   radius: 20,
-                  backgroundColor: Colors.black, // Avatar đen giống design
+                  backgroundColor: const Color(0xFFE2E8F0),
+                  backgroundImage: _currentAvatar.isNotEmpty
+                      ? NetworkImage(_currentAvatar)
+                      : null,
+                  child: _currentAvatar.isEmpty
+                      ? const Icon(Icons.person, color: Colors.grey)
+                      : null,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -81,8 +116,20 @@ class _NewsfeedScreenState extends State<NewsfeedScreen> {
                         context,
                         MaterialPageRoute(
                           builder: (context) => CreatePostScreen(
-                            onPost: (content, image) async {
-                              await _api.createPost(content);
+                            myAvatarUrl: _currentAvatar,
+                            onPost: (content, imageFile) async {
+                              String imageUrl = "";
+                              // 1. Nếu người dùng có chọn ảnh -> Upload lên Server trước
+                              if (imageFile != null) {
+                                imageUrl = await _api.uploadImage(imageFile);
+                              }
+
+                              // 2. Gọi API tạo bài viết với link ảnh vừa có
+                              await _api.createPost(
+                                content,
+                                imageUrl,
+                                _currentAvatar,
+                              );
                               _refreshPosts();
                             },
                           ),
