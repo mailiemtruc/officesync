@@ -1,7 +1,17 @@
+// File: lib/presentation/pages/create_request_page.dart
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
-import 'dart:ui'; // Quan trọng: Để sửa lỗi PathMetric
+import 'dart:ui' as ui;
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:image_picker/image_picker.dart';
+
+// Import cấu hình và Data Layer
 import '../../../../core/config/app_colors.dart';
+import '../../data/datasources/request_remote_data_source.dart';
+import '../../domain/repositories/request_repository_impl.dart';
+import '../../data/models/request_model.dart';
 
 class CreateRequestPage extends StatefulWidget {
   const CreateRequestPage({super.key});
@@ -11,20 +21,379 @@ class CreateRequestPage extends StatefulWidget {
 }
 
 class _CreateRequestPageState extends State<CreateRequestPage> {
-  // 0: Leave, 1: Overtime, 2: Late/Early
+  // Logic Tab
   int _selectedTypeIndex = 0;
-  // Tab phụ cho Late/Early (0: Arrive Late, 1: Leave Early)
   int _lateEarlyTypeIndex = 0;
 
   final TextEditingController _reasonController = TextEditingController();
 
-  // Biến lưu trữ ngày giờ đã chọn
+  // Biến ngày giờ
   DateTime? _fromDate;
   DateTime? _toDate;
   TimeOfDay? _startTime;
   TimeOfDay? _endTime;
 
-  // Hàm chọn ngày
+  // --- LOGIC UPLOAD & EVIDENCE ---
+  final ImagePicker _picker = ImagePicker();
+  List<String> _uploadedUrls = []; // Lưu URL sau khi upload thành công
+  int _imageCount = 0; // Max 5
+  int _videoCount = 0; // Max 1
+  bool _isUploading = false;
+
+  // --- LOGIC SYSTEM ---
+  bool _isSubmitting = false;
+  final _storage = const FlutterSecureStorage();
+  late final RequestRepositoryImpl _repository;
+
+  @override
+  void initState() {
+    super.initState();
+    // Khởi tạo Repository
+    _repository = RequestRepositoryImpl(
+      remoteDataSource: RequestRemoteDataSource(),
+    );
+  }
+
+  // --- 1. GỌI REPOSITORY ĐỂ UPLOAD ---
+  Future<void> _pickAndUpload(ImageSource source, bool isVideo) async {
+    Navigator.pop(context); // Đóng BottomSheet
+
+    // Validate số lượng
+    if (isVideo && _videoCount >= 1) {
+      _showErrorSnackBar("Limit reached: Max 1 video allowed.");
+      return;
+    }
+    if (!isVideo && _imageCount >= 5) {
+      _showErrorSnackBar("Limit reached: Max 5 images allowed.");
+      return;
+    }
+
+    try {
+      final XFile? file = isVideo
+          ? await _picker.pickVideo(
+              source: source,
+              maxDuration: const Duration(minutes: 1),
+            )
+          : await _picker.pickImage(source: source, imageQuality: 70);
+
+      if (file != null) {
+        setState(() => _isUploading = true);
+
+        // [QUAN TRỌNG] Gọi Repository thay vì gọi trực tiếp http
+        String url = await _repository.uploadFile(File(file.path));
+
+        setState(() {
+          _uploadedUrls.add(url);
+          if (isVideo)
+            _videoCount++;
+          else
+            _imageCount++;
+          _isUploading = false;
+        });
+      }
+    } catch (e) {
+      print("Upload error: $e");
+      setState(() => _isUploading = false);
+      _showErrorSnackBar(
+        "Upload failed: ${e.toString().replaceAll('Exception: ', '')}",
+      );
+    }
+  }
+
+  // --- 2. BOTTOM SHEET UI (Giống UserProfile) ---
+  void _showUploadBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(27)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              "Add Evidence",
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                fontFamily: 'Inter',
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              "Max 5 Images • 1 Video",
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[600],
+                fontFamily: 'Inter',
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Mục chọn ẢNH
+            if (_imageCount < 5) ...[
+              ListTile(
+                leading: Icon(
+                  PhosphorIcons.camera(PhosphorIconsStyle.regular),
+                  color: AppColors.primary,
+                  size: 24,
+                ),
+                title: const Text(
+                  "Take Photo",
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontWeight: FontWeight.w600,
+                    fontSize: 16,
+                  ),
+                ),
+                onTap: () => _pickAndUpload(ImageSource.camera, false),
+              ),
+              ListTile(
+                leading: Icon(
+                  PhosphorIcons.image(PhosphorIconsStyle.regular),
+                  color: AppColors.primary,
+                  size: 24,
+                ),
+                title: const Text(
+                  "Choose Image",
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontWeight: FontWeight.w600,
+                    fontSize: 16,
+                  ),
+                ),
+                onTap: () => _pickAndUpload(ImageSource.gallery, false),
+              ),
+            ],
+
+            // Mục chọn VIDEO (Có đường kẻ phân cách nếu đã hiện mục ảnh)
+            if (_videoCount < 1) ...[
+              if (_imageCount < 5) const Divider(),
+              ListTile(
+                leading: Icon(
+                  PhosphorIcons.videoCamera(PhosphorIconsStyle.regular),
+                  color: Colors.orange,
+                  size: 24,
+                ),
+                title: const Text(
+                  "Record Video",
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontWeight: FontWeight.w600,
+                    fontSize: 16,
+                  ),
+                ),
+                onTap: () => _pickAndUpload(ImageSource.camera, true),
+              ),
+              ListTile(
+                leading: Icon(
+                  PhosphorIcons.filmStrip(PhosphorIconsStyle.regular),
+                  color: Colors.orange,
+                  size: 24,
+                ),
+                title: const Text(
+                  "Choose Video",
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontWeight: FontWeight.w600,
+                    fontSize: 16,
+                  ),
+                ),
+                onTap: () => _pickAndUpload(ImageSource.gallery, true),
+              ),
+            ],
+
+            const SizedBox(height: 10),
+            ListTile(
+              leading: Icon(
+                PhosphorIcons.x(PhosphorIconsStyle.regular),
+                color: Colors.red,
+                size: 24,
+              ),
+              title: const Text(
+                "Cancel",
+                style: TextStyle(
+                  color: Colors.red,
+                  fontFamily: 'Inter',
+                  fontWeight: FontWeight.w600,
+                  fontSize: 16,
+                ),
+              ),
+              onTap: () => Navigator.pop(context),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // --- LOGIC XÓA FILE ---
+  void _removeFile(int index) {
+    String url = _uploadedUrls[index];
+    bool isVideo =
+        url.toLowerCase().endsWith('.mp4') ||
+        url.toLowerCase().endsWith('.mov');
+    setState(() {
+      _uploadedUrls.removeAt(index);
+      if (isVideo)
+        _videoCount--;
+      else
+        _imageCount--;
+    });
+  }
+
+  // --- 3. LẤY ID CHUẨN (User Profile Style) ---
+  Future<String?> _getUserIdFromStorage() async {
+    try {
+      String? userInfoStr = await _storage.read(key: 'user_info');
+      if (userInfoStr != null) {
+        Map<String, dynamic> userMap = jsonDecode(userInfoStr);
+        return userMap['id']?.toString();
+      }
+      // Fallback
+      return await _storage.read(key: 'userId');
+    } catch (e) {
+      print("Error reading User ID: $e");
+    }
+    return null;
+  }
+
+  void _showErrorSnackBar(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  // --- HÀM SUBMIT ---
+  Future<void> _onSubmit() async {
+    if (_reasonController.text.trim().isEmpty) {
+      _showErrorSnackBar("Please enter a reason");
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+
+    try {
+      final userId = await _getUserIdFromStorage();
+      if (userId == null) throw Exception("User session not found.");
+
+      // Xử lý Ngày Giờ
+      DateTime startDateTime;
+      DateTime endDateTime;
+
+      if (_selectedTypeIndex == 0) {
+        // LEAVE
+        if (_fromDate == null || _toDate == null)
+          throw Exception("Please select From & To Date");
+        startDateTime = DateTime(
+          _fromDate!.year,
+          _fromDate!.month,
+          _fromDate!.day,
+          8,
+          0,
+        );
+        endDateTime = DateTime(
+          _toDate!.year,
+          _toDate!.month,
+          _toDate!.day,
+          17,
+          0,
+        );
+      } else if (_selectedTypeIndex == 1) {
+        // OVERTIME
+        if (_fromDate == null || _startTime == null || _endTime == null)
+          throw Exception("Please select Date & Time");
+        startDateTime = DateTime(
+          _fromDate!.year,
+          _fromDate!.month,
+          _fromDate!.day,
+          _startTime!.hour,
+          _startTime!.minute,
+        );
+        endDateTime = DateTime(
+          _fromDate!.year,
+          _fromDate!.month,
+          _fromDate!.day,
+          _endTime!.hour,
+          _endTime!.minute,
+        );
+      } else {
+        // LATE/EARLY
+        if (_fromDate == null || _startTime == null)
+          throw Exception("Please select Date & Time");
+        startDateTime = DateTime(
+          _fromDate!.year,
+          _fromDate!.month,
+          _fromDate!.day,
+          _startTime!.hour,
+          _startTime!.minute,
+        );
+        endDateTime = startDateTime.add(const Duration(hours: 1));
+      }
+
+      if (endDateTime.isBefore(startDateTime))
+        throw Exception("End time cannot be before Start time");
+
+      // Tính Duration
+      final durationDiff = endDateTime.difference(startDateTime);
+      double durationVal = durationDiff.inMinutes / 60.0;
+      String durationUnit = "HOURS";
+      if (_selectedTypeIndex == 0 && durationVal >= 24) {
+        durationVal = durationDiff.inDays.toDouble() + 1;
+        durationUnit = "DAYS";
+      }
+
+      // Map Enum
+      RequestType typeEnum = RequestType.ANNUAL_LEAVE;
+      if (_selectedTypeIndex == 1) typeEnum = RequestType.OVERTIME;
+      if (_selectedTypeIndex == 2) {
+        typeEnum = _lateEarlyTypeIndex == 0
+            ? RequestType.LATE_ARRIVAL
+            : RequestType.EARLY_DEPARTURE;
+      }
+
+      // Nối URL ảnh thành chuỗi
+      String? evidenceString = _uploadedUrls.isNotEmpty
+          ? _uploadedUrls.join(';')
+          : null;
+
+      final requestModel = RequestModel(
+        type: typeEnum,
+        status: RequestStatus.PENDING,
+        startTime: startDateTime,
+        endTime: endDateTime,
+        reason: _reasonController.text,
+        durationVal: double.parse(durationVal.toStringAsFixed(1)),
+        durationUnit: durationUnit,
+      );
+
+      // Gọi Repository
+      await _repository.createRequest(
+        userId: userId,
+        request: requestModel,
+        evidenceUrl: evidenceString, // [MỚI] Truyền evidence
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Request submitted successfully!")),
+        );
+        Navigator.pop(context, true);
+      }
+    } catch (e) {
+      _showErrorSnackBar(e.toString().replaceAll("Exception: ", ""));
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
+  // --- Helper UI ---
+  // (Giữ nguyên các hàm _selectDate, _selectTime, _formatDate, _formatTime)
   Future<void> _selectDate(BuildContext context, bool isFrom) async {
     final DateTime? picked = await showDatePicker(
       context: context,
@@ -36,6 +405,7 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
       setState(() {
         if (isFrom) {
           _fromDate = picked;
+          if (_selectedTypeIndex != 0) _toDate = picked;
         } else {
           _toDate = picked;
         }
@@ -43,7 +413,6 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
     }
   }
 
-  // Hàm chọn giờ
   Future<void> _selectTime(BuildContext context, bool isStart) async {
     final TimeOfDay? picked = await showTimePicker(
       context: context,
@@ -60,13 +429,11 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
     }
   }
 
-  // Helper format ngày
   String _formatDate(DateTime? date) {
     if (date == null) return 'dd/mm/yyyy';
     return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
   }
 
-  // Helper format giờ
   String _formatTime(TimeOfDay? time) {
     if (time == null) return '--:--';
     return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
@@ -86,11 +453,8 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SizedBox(height: 20),
-                  // Header
                   _buildHeader(context, 'CREATE REQUEST'),
                   const SizedBox(height: 24),
-
-                  // 1. Request Type Selector (Tabs có Icon + Hiệu ứng)
                   _buildSectionTitle('REQUEST TYPE'),
                   const SizedBox(height: 12),
                   Row(
@@ -122,17 +486,11 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
                       ),
                     ],
                   ),
-
                   const SizedBox(height: 24),
-
-                  // 2. Nội dung thay đổi theo Tab
                   if (_selectedTypeIndex == 0) _buildLeaveBody(),
                   if (_selectedTypeIndex == 1) _buildOvertimeBody(),
                   if (_selectedTypeIndex == 2) _buildLateEarlyBody(),
-
                   const SizedBox(height: 24),
-
-                  // 3. Lý do (Dùng chung)
                   _buildSectionTitle('REASON'),
                   const SizedBox(height: 12),
                   Container(
@@ -154,93 +512,140 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
                       ),
                     ),
                   ),
-
                   const SizedBox(height: 24),
 
-                  // 4. Evidence (Upload Button - Dotted Border + Hiệu ứng)
-                  _buildSectionTitle('EVIDENCE (OPTIONAL)'),
+                  // --- PHẦN EVIDENCE HIỂN THỊ ---
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _buildSectionTitle('EVIDENCE (OPTIONAL)'),
+                      Text(
+                        "$_imageCount/5 Images • $_videoCount/1 Video",
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 12),
-                  // Khối Upload File
-                  DottedBorder(
-                    borderType: BorderType.RRect,
-                    radius: const Radius.circular(12),
-                    dashPattern: const [6, 3], // Nét đứt
-                    color: const Color(0xFFA1ACCC),
-                    strokeWidth: 1,
-                    child: Material(
-                      color: const Color(0xFFF9FAFB), // Màu nền
-                      borderRadius: BorderRadius.circular(12),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(12),
-                        onTap: () {
-                          // TODO: Handle upload
-                          print("Upload tapped");
-                        },
-                        child: SizedBox(
-                          height: 140,
-                          width: double.infinity,
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
+
+                  // Thumbnail List
+                  if (_uploadedUrls.isNotEmpty)
+                    Container(
+                      height: 90,
+                      margin: const EdgeInsets.only(bottom: 12),
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: _uploadedUrls.length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 8),
+                        itemBuilder: (context, index) {
+                          String url = _uploadedUrls[index];
+                          bool isVideo =
+                              url.toLowerCase().endsWith('.mp4') ||
+                              url.toLowerCase().endsWith('.mov');
+                          return Stack(
                             children: [
-                              // --- ICON UPLOAD CHUẨN THIẾT KẾ ---
-                              Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: Colors.white, // Nền trắng
-                                  shape: BoxShape.circle,
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: const Color(
-                                        0xFF2260FF,
-                                      ).withOpacity(0.15), // Bóng xanh nhạt
-                                      blurRadius: 10,
-                                      offset: const Offset(0, 4),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Container(
+                                  width: 90,
+                                  height: 90,
+                                  color: Colors.grey[300],
+                                  child: isVideo
+                                      ? const Icon(
+                                          Icons.videocam,
+                                          color: Colors.black54,
+                                          size: 40,
+                                        )
+                                      : Image.network(
+                                          url,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (_, __, ___) =>
+                                              const Icon(Icons.error),
+                                        ),
+                                ),
+                              ),
+                              Positioned(
+                                top: 4,
+                                right: 4,
+                                child: GestureDetector(
+                                  onTap: () => _removeFile(index),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(2),
+                                    decoration: const BoxDecoration(
+                                      color: Colors.white,
+                                      shape: BoxShape.circle,
                                     ),
-                                  ],
-                                ),
-                                child: Icon(
-                                  PhosphorIcons.uploadSimple(
-                                    PhosphorIconsStyle.bold,
+                                    child: const Icon(
+                                      Icons.close,
+                                      size: 14,
+                                      color: Colors.red,
+                                    ),
                                   ),
-                                  color: AppColors.primary, // Icon xanh
-                                  size: 24,
-                                ),
-                              ),
-                              // ----------------------------------
-                              const SizedBox(height: 12),
-                              const Text(
-                                'Tap to upload File',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 14,
-                                  color: Colors.black,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              const Text(
-                                'Image (JPG, PNG) or PDF',
-                                style: TextStyle(
-                                  color: Color(0xFF64748B),
-                                  fontSize: 12,
                                 ),
                               ),
                             ],
+                          );
+                        },
+                      ),
+                    ),
+
+                  // Upload Button (ẩn nếu đã full)
+                  if (_imageCount < 5 || _videoCount < 1)
+                    DottedBorder(
+                      borderType: BorderType.RRect,
+                      radius: const Radius.circular(12),
+                      dashPattern: const [6, 3],
+                      color: const Color(0xFFA1ACCC),
+                      strokeWidth: 1,
+                      child: Material(
+                        color: const Color(0xFFF9FAFB),
+                        borderRadius: BorderRadius.circular(12),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(12),
+                          onTap: _isUploading ? null : _showUploadBottomSheet,
+                          child: SizedBox(
+                            height: 80,
+                            width: double.infinity,
+                            child: _isUploading
+                                ? const Center(
+                                    child: CircularProgressIndicator(),
+                                  )
+                                : Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        PhosphorIcons.uploadSimple(
+                                          PhosphorIconsStyle.bold,
+                                        ),
+                                        color: AppColors.primary,
+                                        size: 24,
+                                      ),
+                                      const SizedBox(height: 8),
+                                      const Text(
+                                        'Tap to upload Photo/Video',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 14,
+                                          color: Colors.black,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                           ),
                         ),
                       ),
                     ),
-                  ),
 
                   const SizedBox(height: 40),
-
-                  // 5. Submit Button
                   SizedBox(
                     width: double.infinity,
                     height: 50,
                     child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                      },
+                      onPressed: (_isSubmitting || _isUploading)
+                          ? null
+                          : _onSubmit,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primary,
                         shape: RoundedRectangleBorder(
@@ -248,14 +653,23 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
                         ),
                         elevation: 4,
                       ),
-                      child: const Text(
-                        'Submit Request',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                      child: _isSubmitting
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : const Text(
+                              'Submit Request',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                     ),
                   ),
                   const SizedBox(height: 20),
@@ -268,8 +682,7 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
     );
   }
 
-  // --- Các Widget con cho từng loại form ---
-
+  // --- Build Widgets ---
   Widget _buildLeaveBody() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -345,9 +758,6 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
     );
   }
 
-  // --- Helper Widgets ---
-
-  // Nút chọn loại (Tabs có Icon + Hiệu ứng)
   Widget _buildTypeButton({
     required String title,
     required IconData icon,
@@ -376,8 +786,6 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
           color: Colors.transparent,
           child: InkWell(
             onTap: () => setState(() => _selectedTypeIndex = index),
-            splashColor: AppColors.primary.withOpacity(0.1),
-            highlightColor: AppColors.primary.withOpacity(0.05),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -408,7 +816,6 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
     );
   }
 
-  // Input Date Selector (+ Hiệu ứng)
   Widget _buildDateSelector(String label, bool isFrom) {
     return Container(
       decoration: _buildBlockDecoration(),
@@ -456,7 +863,6 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
     );
   }
 
-  // Input Time Selector (+ Hiệu ứng)
   Widget _buildTimeSelector(String label, bool isStart) {
     return Container(
       decoration: _buildBlockDecoration(),
@@ -504,7 +910,6 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
     );
   }
 
-  // Toggle button Late/Early (+ Hiệu ứng)
   Widget _buildToggleOption(String text, int index) {
     bool isSelected = _lateEarlyTypeIndex == index;
     return Material(
@@ -531,7 +936,6 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
     );
   }
 
-  // Block hiển thị người nhận (Send To) - ĐÃ SỬA ICON & MÀU SẮC CHUẨN
   Widget _buildSendToBlock() {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -542,7 +946,6 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
       ),
       child: Row(
         children: [
-          // Icon Users màu xanh, nền trắng
           Container(
             padding: const EdgeInsets.all(8),
             decoration: const BoxDecoration(
@@ -550,11 +953,9 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
               shape: BoxShape.circle,
             ),
             child: Icon(
-              PhosphorIcons.usersThree(
-                PhosphorIconsStyle.fill,
-              ), // Icon nhóm người
+              PhosphorIcons.usersThree(PhosphorIconsStyle.fill),
               size: 20,
-              color: const Color(0xFF2563EB), // Màu xanh dương chuẩn
+              color: const Color(0xFF2563EB),
             ),
           ),
           const SizedBox(width: 12),
@@ -577,11 +978,10 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
               ],
             ),
           ),
-          // Icon KHÓA (Lock) màu xám nhạt
           Icon(
             PhosphorIcons.lockKey(),
             size: 20,
-            color: const Color(0xFF94A3B8), // Màu xám chuẩn
+            color: const Color(0xFF94A3B8),
           ),
         ],
       ),
@@ -649,7 +1049,7 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
   }
 }
 
-// Widget DottedBorder (CustomPainter - Tích hợp sẵn)
+// ... DottedBorder & Painter Class (GIỮ NGUYÊN) ...
 class DottedBorder extends StatelessWidget {
   final Widget child;
   final Color color;
@@ -701,13 +1101,12 @@ class _DottedBorderPainter extends CustomPainter {
   });
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final Paint paint = Paint()
+  void paint(ui.Canvas canvas, ui.Size size) {
+    final ui.Paint paint = ui.Paint()
       ..color = color
       ..strokeWidth = strokeWidth
       ..style = PaintingStyle.stroke;
-
-    Path path = Path();
+    ui.Path path = ui.Path();
     if (borderType == BorderType.RRect) {
       path.addRRect(
         RRect.fromRectAndRadius(
@@ -718,10 +1117,9 @@ class _DottedBorderPainter extends CustomPainter {
     } else {
       path.addRect(Rect.fromLTWH(0, 0, size.width, size.height));
     }
-
-    Path dashPath = Path();
+    ui.Path dashPath = ui.Path();
     double distance = 0.0;
-    for (PathMetric pathMetric in path.computeMetrics()) {
+    for (ui.PathMetric pathMetric in path.computeMetrics()) {
       while (distance < pathMetric.length) {
         double len = dashPattern[0];
         if (distance + len > pathMetric.length)
@@ -731,9 +1129,7 @@ class _DottedBorderPainter extends CustomPainter {
           Offset.zero,
         );
         distance += dashPattern[0];
-        if (distance < pathMetric.length) {
-          distance += dashPattern[1];
-        }
+        if (distance < pathMetric.length) distance += dashPattern[1];
       }
     }
     canvas.drawPath(dashPath, paint);

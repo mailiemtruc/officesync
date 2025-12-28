@@ -33,7 +33,7 @@ public class Department extends BaseEntity {
     @Column(nullable = false, length = 100)
     private String name; 
 
- @Column(name = "department_code", length = 20, unique = true, updatable = false)
+    @Column(name = "department_code", length = 20, unique = true, updatable = false)
     private String departmentCode;
     @Column(name = "color", length = 10)
     private String color;
@@ -43,6 +43,10 @@ public class Department extends BaseEntity {
     // Lưu ý: 'employees' là tên bảng trong DB, 'department_id' là khóa ngoại
     @Formula("(SELECT count(*) FROM employees e WHERE e.department_id = id)")
     private int memberCount;
+
+    @Column(name = "is_hr", nullable = false)
+    private Boolean isHr = false; 
+
     @OneToOne
     @JoinColumn(name = "manager_id")
     @JsonIgnoreProperties({"department", "hibernateLazyInitializer", "handler"})

@@ -1,28 +1,106 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
 import '../../../../core/config/app_colors.dart';
 import '../../data/models/request_model.dart';
 import '../../widgets/confirm_bottom_sheet.dart';
+import '../../domain/repositories/request_repository_impl.dart';
+import '../../data/datasources/request_remote_data_source.dart';
 
-class RequestDetailPage extends StatelessWidget {
+class RequestDetailPage extends StatefulWidget {
   final RequestModel request;
 
   const RequestDetailPage({super.key, required this.request});
 
-  // --- LOGIC WORKFLOW CHUẨN ---
+  @override
+  State<RequestDetailPage> createState() => _RequestDetailPageState();
+}
+
+class _RequestDetailPageState extends State<RequestDetailPage> {
+  late final RequestRepositoryImpl _repository;
+  final _storage = const FlutterSecureStorage();
+  bool _isCancelling = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Khởi tạo Repository
+    _repository = RequestRepositoryImpl(
+      remoteDataSource: RequestRemoteDataSource(),
+    );
+  }
+
+  // --- LOGIC BACKEND: HỦY ĐƠN ---
+  Future<void> _handleCancelRequest() async {
+    // 1. Lấy User ID
+    String? userId;
+    String? userInfo = await _storage.read(key: 'user_info');
+    if (userInfo != null) {
+      userId = jsonDecode(userInfo)['id'].toString();
+    } else {
+      userId = await _storage.read(key: 'userId');
+    }
+
+    if (userId == null) return;
+
+    // 2. Gọi API
+    setState(() => _isCancelling = true);
+    try {
+      // Giả sử request.id là String hoặc Int, cần chuyển về String cho hàm cancel
+      await _repository.cancelRequest(widget.request.id.toString(), userId);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Request cancelled successfully")),
+        );
+        Navigator.pop(context, true); // Trả về true để trang trước reload
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Error: $e")));
+      }
+    } finally {
+      if (mounted) setState(() => _isCancelling = false);
+    }
+  }
+
+  void _showCancelDialog(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => ConfirmBottomSheet(
+        title: 'Cancel Request?',
+        message:
+            'Are you sure you want to cancel this request? This action cannot be undone.',
+        confirmText: 'Yes, Cancel',
+        confirmColor: const Color(0xFFDC2626),
+        onConfirm: () {
+          Navigator.pop(context); // Đóng Dialog
+          _handleCancelRequest(); // Gọi API hủy
+        },
+      ),
+    );
+  }
+
+  // --- LOGIC WORKFLOW (Giữ nguyên logic hiển thị của bạn) ---
   List<Map<String, dynamic>> _getWorkflowSteps() {
-    // Định nghĩa các màu chuẩn (Solid - Không trong suốt)
     const colorGreen = Color(0xFF10B981);
     const colorRed = Color(0xFFDC2626);
     const colorBlue = Color(0xFF2563EB);
-    // Màu xám thống nhất cho đường kẻ
     const colorGrey = Color(0xFFCBD5E1);
+
+    final status = widget.request.status;
 
     final steps = [
       {
         'title': 'Request Submitted',
-        'time': 'Oct 10, 2025 • 09:30 AM',
-        'actor': 'By: Nguyen Van A',
+        'time': 'Submitted', // Có thể bind ngày tạo nếu có
+        'actor': 'You',
         'dotColor': colorGreen,
         'lineColor': colorGrey,
         'isLast': false,
@@ -30,20 +108,16 @@ class RequestDetailPage extends StatelessWidget {
       },
       {
         'title': 'Manager Review',
-        'time': request.status == RequestStatus.pending
-            ? 'Processing...'
-            : 'Reviewed',
-        'actor': 'Assignee: Tran Thi B',
-        'dotColor': request.status == RequestStatus.pending
-            ? colorBlue
-            : colorGreen,
+        'time': status == RequestStatus.PENDING ? 'Processing...' : 'Reviewed',
+        'actor': 'Manager', // Có thể bind tên manager nếu có
+        'dotColor': status == RequestStatus.PENDING ? colorBlue : colorGreen,
         'lineColor': colorGrey,
         'isLast': false,
-        'status': request.status == RequestStatus.pending ? 'current' : 'done',
+        'status': status == RequestStatus.PENDING ? 'current' : 'done',
       },
     ];
 
-    if (request.status == RequestStatus.pending) {
+    if (status == RequestStatus.PENDING) {
       steps.add({
         'title': 'Final Decision',
         'time': 'Waiting for approval',
@@ -53,31 +127,41 @@ class RequestDetailPage extends StatelessWidget {
         'isLast': true,
         'status': 'waiting',
       });
-    } else if (request.status == RequestStatus.approved) {
+    } else if (status == RequestStatus.APPROVED) {
       steps.add({
         'title': 'Request Approved',
-        'time': 'Oct 20 • 09:20 AM',
+        'time': 'Approved',
         'actor': 'System updated successfully.',
         'dotColor': const Color(0xFF10B981),
         'lineColor': Colors.transparent,
         'isLast': true,
         'status': 'approved_done',
       });
-    } else if (request.status == RequestStatus.rejected) {
+    } else if (status == RequestStatus.REJECTED) {
       steps.add({
         'title': 'Request Rejected',
-        'time': 'Oct 20 • 09:20 AM',
+        'time': 'Rejected',
         'actor': 'Tap \'See reason\' for details',
         'dotColor': colorRed,
         'lineColor': Colors.transparent,
         'isLast': true,
         'status': 'rejected_done',
       });
+    } else if (status == RequestStatus.CANCELLED) {
+      steps.add({
+        'title': 'Request Cancelled',
+        'time': 'Cancelled by you',
+        'actor': '',
+        'dotColor': Colors.grey,
+        'lineColor': Colors.transparent,
+        'isLast': true,
+        'status': 'cancelled_done',
+      });
     }
     return steps;
   }
 
-  // --- DIALOG LÝ DO TỪ CHỐI ---
+  // --- DIALOG LÝ DO TỪ CHỐI (Giữ nguyên UI) ---
   void _showRejectionDialog(BuildContext context) {
     showDialog(
       context: context,
@@ -97,8 +181,6 @@ class RequestDetailPage extends StatelessWidget {
                   child: InkWell(
                     onTap: () => Navigator.pop(context),
                     borderRadius: BorderRadius.circular(20),
-                    splashColor: Colors.transparent,
-                    highlightColor: Colors.grey.withOpacity(0.2),
                     child: Container(
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
@@ -154,40 +236,15 @@ class RequestDetailPage extends StatelessWidget {
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
+                  children: [
                     Text(
-                      '"Please plan your commute better. We have a strict client meeting at 8:30 AM every Monday that cannot be missed."',
-                      style: TextStyle(
+                      '"${widget.request.rejectReason ?? "No reason provided."}"',
+                      style: const TextStyle(
                         fontStyle: FontStyle.italic,
                         color: Color(0xFF334155),
                         height: 1.5,
                         fontFamily: 'Inter',
                       ),
-                    ),
-                    SizedBox(height: 12),
-                    Divider(height: 1, color: Color(0xFFE2E8F0)),
-                    SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'From: Tran Thi B',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF64748B),
-                            fontFamily: 'Inter',
-                          ),
-                        ),
-                        Text(
-                          'Oct 20, 09:15',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Color(0xFF94A3B8),
-                            fontFamily: 'Inter',
-                          ),
-                        ),
-                      ],
                     ),
                   ],
                 ),
@@ -198,18 +255,12 @@ class RequestDetailPage extends StatelessWidget {
                 height: 45,
                 child: ElevatedButton(
                   onPressed: () => Navigator.pop(context),
-                  style:
-                      ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF1E293B),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        splashFactory: NoSplash.splashFactory,
-                      ).copyWith(
-                        overlayColor: MaterialStateProperty.all(
-                          Colors.white.withOpacity(0.25),
-                        ),
-                      ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1E293B),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
                   child: const Text(
                     'Close',
                     style: TextStyle(
@@ -227,29 +278,19 @@ class RequestDetailPage extends StatelessWidget {
     );
   }
 
-  void _showCancelDialog(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) => ConfirmBottomSheet(
-        title: 'Cancel Request?',
-        message:
-            'Are you sure you want to cancel this request? This action cannot be undone.',
-        confirmText: 'Yes, Cancel',
-        confirmColor: const Color(0xFFDC2626),
-        onConfirm: () {
-          Navigator.pop(context);
-          Navigator.pop(context);
-        },
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    final isPending = request.status == RequestStatus.pending;
-    final isRejected = request.status == RequestStatus.rejected;
+    final isPending = widget.request.status == RequestStatus.PENDING;
+    final isRejected = widget.request.status == RequestStatus.REJECTED;
+
+    // Logic Evidence: Giả sử evidenceUrl là chuỗi các URL cách nhau dấu chấm phẩy
+    // Nếu bạn chưa update Model, hãy tạm thời dùng biến giả lập hoặc map từ reason (nếu có)
+    // Ở đây mình check nếu có dữ liệu evidence thì hiển thị
+    // final hasEvidence = widget.request.evidenceUrl != null && widget.request.evidenceUrl!.isNotEmpty;
+
+    // TẠM THỜI: Để không lỗi code vì Model cũ chưa có evidenceUrl, mình sẽ ẩn phần này nếu null
+    // Bạn có thể mở comment bên dưới khi Model đã update
+    // List<String> evidenceList = widget.request.evidenceUrl?.split(';') ?? [];
 
     return Scaffold(
       backgroundColor: const Color(0xFFF9F9F9),
@@ -275,7 +316,7 @@ class RequestDetailPage extends StatelessWidget {
                         _buildSectionTitle('REASON'),
                         const SizedBox(height: 8),
                         Text(
-                          '"${request.description}"',
+                          '"${widget.request.description}"',
                           style: const TextStyle(
                             color: Color(0xFF334155),
                             fontSize: 16,
@@ -284,10 +325,25 @@ class RequestDetailPage extends StatelessWidget {
                             fontFamily: 'Inter',
                           ),
                         ),
+
+                        // [TÍCH HỢP] Chỉ hiện Evidence nếu có
+                        // if (evidenceList.isNotEmpty) ...[
+                        //   const SizedBox(height: 24),
+                        //   _buildSectionTitle('ATTACHMENT'),
+                        //   const SizedBox(height: 12),
+                        //   // Render list ảnh
+                        //   ...evidenceList.map((url) => Padding(
+                        //     padding: const EdgeInsets.only(bottom: 8.0),
+                        //     child: _buildAttachmentCard(url), // Truyền URL vào
+                        //   )).toList(),
+                        // ],
+
+                        // Placeholder UI cho Evidence (Giữ nguyên code cũ của bạn)
                         const SizedBox(height: 24),
                         _buildSectionTitle('ATTACHMENT'),
                         const SizedBox(height: 12),
-                        _buildAttachmentCard(),
+                        _buildAttachmentCard("evidence.jpg"), // Static demo
+
                         const SizedBox(height: 24),
                         _buildSectionTitle('APPROVAL WORKFLOW'),
                         const SizedBox(height: 16),
@@ -297,7 +353,8 @@ class RequestDetailPage extends StatelessWidget {
                     ),
                   ),
                 ),
-                // NÚT CANCEL REQUEST
+
+                // [TÍCH HỢP] Nút Hủy Đơn (Chỉ hiện khi Pending)
                 if (isPending)
                   Padding(
                     padding: const EdgeInsets.only(
@@ -308,52 +365,50 @@ class RequestDetailPage extends StatelessWidget {
                     child: SizedBox(
                       width: double.infinity,
                       height: 50,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFFDC2626).withOpacity(0.15),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
+                      child: ElevatedButton(
+                        onPressed: _isCancelling
+                            ? null
+                            : () => _showCancelDialog(context),
+                        style:
+                            ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFFEF2F2),
+                              foregroundColor: const Color(0xFFDC2626),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                side: const BorderSide(
+                                  color: Color(0xFFFCA5A5),
+                                ),
+                              ),
+                              elevation: 0,
+                            ).copyWith(
+                              overlayColor: MaterialStateProperty.all(
+                                const Color(0xFFDC2626).withOpacity(0.1),
+                              ),
                             ),
-                          ],
-                        ),
-                        child: ElevatedButton(
-                          onPressed: () => _showCancelDialog(context),
-                          style:
-                              ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFFFEF2F2),
-                                foregroundColor: const Color(0xFFDC2626),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  side: const BorderSide(
-                                    color: Color(0xFFFCA5A5),
+                        child: _isCancelling
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  color: Color(0xFFDC2626),
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: const [
+                                  Icon(PhosphorIconsRegular.x, size: 18),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    'Cancel Request',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w700,
+                                      fontFamily: 'Inter',
+                                    ),
                                   ),
-                                ),
-                                elevation: 0,
-                                splashFactory: NoSplash.splashFactory,
-                              ).copyWith(
-                                overlayColor: MaterialStateProperty.all(
-                                  const Color(0xFFDC2626).withOpacity(0.1),
-                                ),
+                                ],
                               ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: const [
-                              Icon(PhosphorIconsRegular.x, size: 18),
-                              SizedBox(width: 8),
-                              Text(
-                                'Cancel Request',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w700,
-                                  fontFamily: 'Inter',
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
                       ),
                     ),
                   ),
@@ -365,7 +420,7 @@ class RequestDetailPage extends StatelessWidget {
     );
   }
 
-  // --- WIDGETS CON ---
+  // --- CÁC WIDGET CON (GIỮ NGUYÊN UI) ---
 
   Widget _buildMainStatusCard(BuildContext context, bool isRejected) {
     return Container(
@@ -387,14 +442,14 @@ class RequestDetailPage extends StatelessWidget {
           Container(
             height: 6,
             width: double.infinity,
-            color: request.statusColor,
+            color: widget.request.statusColor,
           ),
           Padding(
             padding: const EdgeInsets.all(20),
             child: Column(
               children: [
                 Text(
-                  request.title,
+                  widget.request.title,
                   style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w700,
@@ -403,7 +458,7 @@ class RequestDetailPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '#REQ-${request.id.padLeft(4, '0')}',
+                  '#REQ-${widget.request.id?.toString().padLeft(4, '0') ?? "N/A"}',
                   style: const TextStyle(
                     color: Color(0xFF94A3B8),
                     fontSize: 14,
@@ -417,13 +472,13 @@ class RequestDetailPage extends StatelessWidget {
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: request.statusBgColor,
+                    color: widget.request.statusBgColor,
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    request.statusText.toUpperCase(),
+                    widget.request.statusText.toUpperCase(),
                     style: TextStyle(
-                      color: request.statusColor,
+                      color: widget.request.statusColor,
                       fontWeight: FontWeight.w700,
                       fontSize: 12,
                       fontFamily: 'Inter',
@@ -437,8 +492,6 @@ class RequestDetailPage extends StatelessWidget {
                     child: InkWell(
                       onTap: () => _showRejectionDialog(context),
                       borderRadius: BorderRadius.circular(20),
-                      splashColor: Colors.transparent,
-                      highlightColor: Colors.grey.withOpacity(0.2),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 8,
@@ -477,7 +530,8 @@ class RequestDetailPage extends StatelessWidget {
   }
 
   Widget _buildInfoGrid() {
-    if (request.type == RequestType.leave) {
+    // Logic hiển thị thông tin tùy theo loại Request (Giữ nguyên)
+    if (widget.request.type == RequestType.ANNUAL_LEAVE) {
       return Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
@@ -493,9 +547,11 @@ class RequestDetailPage extends StatelessWidget {
         ),
         child: Column(
           children: [
-            _buildInfoRow('From Date', 'Oct 24, 2025', '08:00 AM'),
-            const Divider(height: 24, color: Color(0xFFF1F5F9)),
-            _buildInfoRow('To Date', 'Oct 26, 2025', '05:30 PM'),
+            _buildInfoRow(
+              'Date Range',
+              widget.request.dateRange,
+              '',
+            ), // Tùy biến text
             const Divider(height: 24, color: Color(0xFFF1F5F9)),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -510,9 +566,9 @@ class RequestDetailPage extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '3 Days',
-                  style: TextStyle(
-                    color: const Color(0xFF2563EB),
+                  widget.request.duration,
+                  style: const TextStyle(
+                    color: Color(0xFF2563EB),
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
                     fontFamily: 'Inter',
@@ -539,11 +595,19 @@ class RequestDetailPage extends StatelessWidget {
         ),
         child: Column(
           children: [
-            _buildSimpleInfoRow('Date', 'Oct 24, 2025'),
+            _buildSimpleInfoRow(
+              'Date',
+              widget.request.dateRange.split('•')[0].trim(),
+            ),
             const Divider(height: 24, color: Color(0xFFF1F5F9)),
-            _buildSimpleInfoRow('Duration', request.duration),
+            _buildSimpleInfoRow('Duration', widget.request.duration),
             const Divider(height: 24, color: Color(0xFFF1F5F9)),
-            _buildSimpleInfoRow('Time', '08:00 - 11:00 AM'),
+            _buildSimpleInfoRow(
+              'Time',
+              widget.request.dateRange.contains('•')
+                  ? widget.request.dateRange.split('•')[1].trim()
+                  : "N/A",
+            ),
           ],
         ),
       );
@@ -576,14 +640,15 @@ class RequestDetailPage extends StatelessWidget {
                 fontFamily: 'Inter',
               ),
             ),
-            Text(
-              time,
-              style: const TextStyle(
-                color: Color(0xFF94A3B8),
-                fontSize: 13,
-                fontFamily: 'Inter',
+            if (time.isNotEmpty)
+              Text(
+                time,
+                style: const TextStyle(
+                  color: Color(0xFF94A3B8),
+                  fontSize: 13,
+                  fontFamily: 'Inter',
+                ),
               ),
-            ),
           ],
         ),
       ],
@@ -616,7 +681,8 @@ class RequestDetailPage extends StatelessWidget {
     );
   }
 
-  Widget _buildAttachmentCard() {
+  // [SỬA] Widget Attachment nhận tên file/url
+  Widget _buildAttachmentCard(String fileName) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -639,20 +705,21 @@ class RequestDetailPage extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 12),
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'ticket_booking.jpg',
-                  style: TextStyle(
+                  fileName,
+                  style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
                     fontFamily: 'Inter',
                   ),
+                  overflow: TextOverflow.ellipsis,
                 ),
-                Text(
-                  '2.4 MB',
+                const Text(
+                  'Attachment',
                   style: TextStyle(
                     color: Colors.grey,
                     fontSize: 12,
@@ -666,9 +733,9 @@ class RequestDetailPage extends StatelessWidget {
             color: Colors.transparent,
             child: InkWell(
               borderRadius: BorderRadius.circular(8),
-              splashColor: Colors.transparent,
-              highlightColor: Colors.grey.withOpacity(0.2),
-              onTap: () {},
+              onTap: () {
+                // Logic mở file/ảnh
+              },
               child: const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 child: Text(
@@ -704,16 +771,18 @@ class RequestDetailPage extends StatelessWidget {
 
         Color titleColor = Colors.black;
         Color actorColor = const Color(0xFF64748B);
-        FontWeight titleWeight = FontWeight.bold; // Mặc định là Bold
+        FontWeight titleWeight = FontWeight.bold;
 
         if (status == 'approved_done') {
-          titleColor = const Color(0xFF10B981); // Solid Green
+          titleColor = const Color(0xFF10B981);
           actorColor = const Color(0xFF10B981);
-          // SỬA: Tăng độ đậm lên mức cao nhất (Black - w900)
           titleWeight = FontWeight.w900;
         } else if (status == 'rejected_done') {
           titleColor = const Color(0xFFDC2626);
           actorColor = const Color(0xFFF87171);
+        } else if (status == 'cancelled_done') {
+          titleColor = Colors.grey;
+          actorColor = Colors.grey;
         }
 
         return IntrinsicHeight(
@@ -755,7 +824,7 @@ class RequestDetailPage extends StatelessWidget {
                         title,
                         style: TextStyle(
                           color: titleColor,
-                          fontWeight: titleWeight, // Dùng biến này
+                          fontWeight: titleWeight,
                           fontSize: 16,
                           fontFamily: 'Inter',
                         ),
@@ -790,9 +859,7 @@ class RequestDetailPage extends StatelessWidget {
                                 style: TextStyle(
                                   color: actorColor,
                                   fontSize: 13,
-                                  // SỬA: Trả lại in nghiêng (italic)
                                   fontStyle: FontStyle.italic,
-                                  // SỬA: Bỏ độ đậm w500 để trông thanh thoát hơn
                                   fontWeight: FontWeight.normal,
                                   fontFamily: 'Inter',
                                 ),

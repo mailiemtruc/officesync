@@ -23,5 +23,7 @@ public interface DepartmentRepository extends JpaRepository<Department, Long> {
            "AND (LOWER(d.name) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
            "OR LOWER(d.departmentCode) LIKE LOWER(CONCAT('%', :keyword, '%')))")
     List<Department> searchDepartments(@Param("companyId") Long companyId, @Param("keyword") String keyword);
+    
 
+    Optional<Department> findByCompanyIdAndIsHrTrue(Long companyId);
 }

@@ -24,7 +24,7 @@ public class Request extends BaseEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-@Column(name = "request_code", length = 20, unique = true, updatable = false)
+  @Column(name = "request_code", length = 20, unique = true, updatable = false)
     private String requestCode;
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)

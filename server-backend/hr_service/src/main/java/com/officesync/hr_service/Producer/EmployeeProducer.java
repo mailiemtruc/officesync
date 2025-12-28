@@ -3,7 +3,7 @@ package com.officesync.hr_service.Producer;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
 
-import com.fasterxml.jackson.databind.ObjectMapper; // [MỚI] Import cái này
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.officesync.hr_service.Config.RabbitMQConfig;
 import com.officesync.hr_service.DTO.EmployeeSyncEvent;
 
