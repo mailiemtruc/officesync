@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:officesync/features/communication_service/data/newsfeed_api.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:intl/intl.dart';
@@ -14,6 +15,7 @@ import 'edit_profile_page.dart';
 import '../../domain/repositories/employee_repository_impl.dart';
 import '../../data/datasources/employee_remote_data_source.dart';
 import '../../data/models/employee_model.dart';
+import '../../data/newsfeed_api.dart';
 
 class UserProfilePage extends StatefulWidget {
   final Map<String, dynamic> userInfo;
@@ -30,6 +32,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
   bool _isUploading = false;
   final ImagePicker _picker = ImagePicker();
   final _storage = const FlutterSecureStorage();
+  final _newsfeedApi = NewsfeedApi();
 
   @override
   void initState() {
@@ -202,6 +205,10 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
       if (response.statusCode == 200) {
         print("--> Update HR Profile success!");
+        // ✅ THÊM DÒNG NÀY: Cập nhật cache ngay lập tức
+        await _updateLocalUserStorage(avatarUrl);
+        // ✅ 2. [THÊM DÒNG NÀY] Bắn tin sang Communication Service ngay!
+        await _newsfeedApi.syncUserAvatar(avatarUrl);
         ScaffoldMessenger.of(context).showSnackBar(
           // [TIẾNG ANH]
           const SnackBar(
@@ -219,6 +226,21 @@ class _UserProfilePageState extends State<UserProfilePage> {
       }
     } catch (e) {
       print("Error saving profile: $e");
+    }
+  }
+
+  // ✅ THÊM HÀM NÀY XUỐNG DƯỚI CÙNG
+  Future<void> _updateLocalUserStorage(String newAvatarUrl) async {
+    try {
+      String? userInfoStr = await _storage.read(key: 'user_info');
+      if (userInfoStr != null) {
+        Map<String, dynamic> userMap = jsonDecode(userInfoStr);
+        userMap['avatarUrl'] = newAvatarUrl; // Cập nhật link mới
+        await _storage.write(key: 'user_info', value: jsonEncode(userMap));
+        print("--> Đã cập nhật Avatar mới vào SecureStorage");
+      }
+    } catch (e) {
+      print("Lỗi cập nhật Storage: $e");
     }
   }
 
