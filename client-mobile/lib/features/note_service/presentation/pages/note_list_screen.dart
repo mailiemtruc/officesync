@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'package:flutter_quill/flutter_quill.dart' as quill;
 import 'package:flutter/material.dart';
 import 'package:bcrypt/bcrypt.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
@@ -31,6 +33,24 @@ class _NoteListScreenState extends State<NoteListScreen> {
 
   final TextEditingController _searchController = TextEditingController();
   Timer? _debounce;
+
+  // Hàm chuyển đổi JSON (Quill Delta) sang Plain Text
+  String _getPlainText(String jsonContent) {
+    if (jsonContent.isEmpty) return "";
+    try {
+      // 1. Decode chuỗi JSON thành List
+      final jsonData = jsonDecode(jsonContent);
+
+      // 2. Tạo Quill Document từ dữ liệu JSON
+      final doc = quill.Document.fromJson(jsonData);
+
+      // 3. Lấy văn bản thuần và thay thế xuống dòng bằng khoảng trắng
+      return doc.toPlainText().trim().replaceAll('\n', ' ');
+    } catch (e) {
+      // Nếu lỗi (hoặc dữ liệu cũ không phải JSON), trả về nguyên gốc
+      return jsonContent;
+    }
+  }
 
   @override
   void initState() {
@@ -506,8 +526,8 @@ class _NoteListScreenState extends State<NoteListScreen> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    // Che nội dung
-                    isLocked ? "••••••••" : note.content.replaceAll('\n', ' '),
+                    // Nếu bị khóa thì hiện dấu chấm, nếu không thì parse JSON ra text
+                    isLocked ? "••••••••" : _getPlainText(note.content),
                     style: TextStyle(
                       fontSize: 14,
                       color: isLocked ? Colors.grey[300] : Colors.grey[500],
