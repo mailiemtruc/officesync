@@ -1,668 +1,680 @@
-// import 'package:flutter/material.dart';
-// import 'package:phosphor_flutter/phosphor_flutter.dart';
-// import '../../../../core/config/app_colors.dart';
-// import '../../data/models/request_model.dart';
-// import 'manager_request_review_page.dart';
+import 'dart:convert';
+import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-// class ManagerRequestListPage extends StatefulWidget {
-//   const ManagerRequestListPage({super.key});
+// [MỚI] Import thư viện WebSocket
+import 'package:stomp_dart_client/stomp.dart';
+import 'package:stomp_dart_client/stomp_config.dart';
+import 'package:stomp_dart_client/stomp_frame.dart';
 
-//   @override
-//   State<ManagerRequestListPage> createState() => _ManagerRequestListPageState();
-// }
+import '../../../../core/config/app_colors.dart';
+import '../../data/models/request_model.dart';
+import 'manager_request_review_page.dart';
+import '../../data/datasources/request_remote_data_source.dart';
 
-// class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
-//   bool _isToReviewTab = true;
+class ManagerRequestListPage extends StatefulWidget {
+  const ManagerRequestListPage({super.key});
 
-//   // --- DỮ LIỆU MẪU (MOCK DATA) ---
-//   final List<Map<String, dynamic>> _toReviewList = [
-//     {
-//       'employeeName': 'Nguyen Van A',
-//       'employeeId': '001',
-//       'dept': 'Business',
-//       'avatar': 'https://i.pravatar.cc/150?img=11',
-//       'request': RequestModel(
-//         id: '2025-090',
-//         type: RequestType.overtime,
-//         title: 'Overtime',
-//         description: 'Deadline.',
-//         dateRange: 'Oct 20, 2025',
-//         duration: '3 hours',
-//         status: RequestStatus.pending,
-//       ),
-//       'timeInfo': '18:00 - 21:00',
-//     },
-//     {
-//       'employeeName': 'Tran Thi B',
-//       'employeeId': '002',
-//       'dept': 'Human resources',
-//       'avatar': 'https://i.pravatar.cc/150?img=5',
-//       'request': RequestModel(
-//         id: '2025-089',
-//         type: RequestType.leave,
-//         title: 'Annual Leave',
-//         description: 'Family trip.',
-//         dateRange: 'Oct 20, 2025',
-//         duration: '3 Days',
-//         status: RequestStatus.pending,
-//       ),
-//       'timeInfo': '3 Days',
-//     },
-//     {
-//       'employeeName': 'Nguyen Van E',
-//       'employeeId': '004',
-//       'dept': 'Human resources',
-//       'avatar': 'https://i.pravatar.cc/150?img=8',
-//       'request': RequestModel(
-//         id: '2025-091',
-//         type: RequestType.lateEarly,
-//         title: 'Late Arrival',
-//         description: 'Traffic jam.',
-//         dateRange: 'Oct 21',
-//         duration: '1 Hour',
-//         status: RequestStatus.pending,
-//       ),
-//       'timeInfo': '1 Hour',
-//     },
-//   ];
+  @override
+  State<ManagerRequestListPage> createState() => _ManagerRequestListPageState();
+}
 
-//   final List<Map<String, dynamic>> _historyList = [
-//     {
-//       'employeeName': 'Nguyen Van K',
-//       'employeeId': '061',
-//       'dept': 'Human resources',
-//       'avatar': 'https://i.pravatar.cc/150?img=3',
-//       'request': RequestModel(
-//         id: '2025-001',
-//         type: RequestType.lateEarly,
-//         title: 'Late Arrival',
-//         description: 'Overslept.',
-//         dateRange: 'Oct 18, 2025',
-//         duration: '2 Hour',
-//         status: RequestStatus.rejected,
-//       ),
-//       'processedDate': 'Processed on Oct 18',
-//     },
-//     {
-//       'employeeName': 'Tran Thi B',
-//       'employeeId': '002',
-//       'dept': 'Human resources',
-//       'avatar': 'https://i.pravatar.cc/150?img=5',
-//       'request': RequestModel(
-//         id: '2025-003',
-//         type: RequestType.leave,
-//         title: 'Annual Leave',
-//         description: 'Sick.',
-//         dateRange: 'Oct 17, 2025',
-//         duration: '3 Days',
-//         status: RequestStatus.rejected,
-//       ),
-//       'processedDate': 'Processed on Oct 17',
-//     },
-//     {
-//       'employeeName': 'Nguyen Van A',
-//       'employeeId': '001',
-//       'dept': 'Business',
-//       'avatar': 'https://i.pravatar.cc/150?img=11',
-//       'request': RequestModel(
-//         id: '2025-002',
-//         type: RequestType.overtime,
-//         title: 'Overtime',
-//         description: 'System fix.',
-//         dateRange: 'Oct 20, 2025',
-//         duration: '3 hours',
-//         status: RequestStatus.approved,
-//       ),
-//       'processedDate': 'Processed on Oct 20',
-//     },
-//   ];
+class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
+  bool _isToReviewTab = true;
+  bool _isLoading = true;
+  final _storage = const FlutterSecureStorage();
+  final _dataSource = RequestRemoteDataSource();
 
-//   // --- HÀM XỬ LÝ ĐIỀU HƯỚNG ---
-//   void _onBottomNavTap(int index) {
-//     switch (index) {
-//       case 0:
-//         Navigator.pushNamedAndRemoveUntil(
-//           context,
-//           '/dashboard',
-//           (route) => false,
-//         );
-//         break;
-//       case 1:
-//         Navigator.pop(context);
-//         break;
-//       case 2:
-//         Navigator.pushNamed(context, '/user_profile');
-//         break;
-//     }
-//   }
+  // [MỚI] Biến Client WebSocket
+  StompClient? client;
+  String? _currentCompanyId;
 
-//   @override
-//   Widget build(BuildContext context) {
-//     final displayList = _isToReviewTab ? _toReviewList : _historyList;
+  // Dữ liệu lấy từ API
+  List<Map<String, dynamic>> _requestList = [];
 
-//     return Scaffold(
-//       backgroundColor: const Color(0xFFF9F9F9),
+  @override
+  void initState() {
+    super.initState();
+    _fetchRequests();
+    _initWebSocket(); // [MỚI] Bắt đầu kết nối Socket
+  }
 
-//       // --- THANH ĐIỀU HƯỚNG ---
-//       bottomNavigationBar: Container(
-//         decoration: BoxDecoration(
-//           boxShadow: [
-//             BoxShadow(
-//               color: Colors.black.withOpacity(0.05),
-//               blurRadius: 10,
-//               offset: const Offset(0, -5),
-//             ),
-//           ],
-//         ),
-//         child: BottomNavigationBar(
-//           backgroundColor: Colors.white,
-//           currentIndex: 1, // Đang ở nhánh Menu
-//           onTap: _onBottomNavTap,
-//           selectedItemColor: AppColors.primary,
-//           unselectedItemColor: Colors.grey,
-//           showUnselectedLabels: true,
-//           type: BottomNavigationBarType.fixed,
-//           selectedLabelStyle: const TextStyle(
-//             fontFamily: 'Inter',
-//             fontWeight: FontWeight.w600,
-//             fontSize: 12,
-//           ),
-//           unselectedLabelStyle: const TextStyle(
-//             fontFamily: 'Inter',
-//             fontWeight: FontWeight.w500,
-//             fontSize: 12,
-//           ),
-//           items: [
-//             BottomNavigationBarItem(
-//               icon: Icon(PhosphorIconsRegular.house),
-//               activeIcon: Icon(PhosphorIconsFill.house),
-//               label: 'Home',
-//             ),
-//             BottomNavigationBarItem(
-//               icon: Icon(PhosphorIconsFill.squaresFour),
-//               activeIcon: Icon(PhosphorIconsFill.squaresFour),
-//               label: 'Menu',
-//             ),
-//             BottomNavigationBarItem(
-//               icon: Icon(PhosphorIconsRegular.user),
-//               activeIcon: Icon(PhosphorIconsFill.user),
-//               label: 'Profile',
-//             ),
-//           ],
-//         ),
-//       ),
+  @override
+  void dispose() {
+    client?.deactivate(); // [MỚI] Ngắt kết nối khi thoát màn hình
+    super.dispose();
+  }
 
-//       body: SafeArea(
-//         child: Center(
-//           child: ConstrainedBox(
-//             constraints: const BoxConstraints(maxWidth: 600),
-//             child: Column(
-//               children: [
-//                 const SizedBox(height: 20),
-//                 _buildHeader(context),
-//                 const SizedBox(height: 24),
+  // [HÀM MỚI] Cấu hình WebSocket Realtime
+  Future<void> _initWebSocket() async {
+    try {
+      // 1. Lấy CompanyID
+      String? userInfoStr = await _storage.read(key: 'user_info');
+      if (userInfoStr != null) {
+        final userMap = jsonDecode(userInfoStr);
+        _currentCompanyId = userMap['companyId']?.toString();
+      }
 
-//                 // Tabs
-//                 Padding(
-//                   padding: const EdgeInsets.symmetric(horizontal: 24),
-//                   child: _buildTabs(),
-//                 ),
+      if (_currentCompanyId == null) return;
 
-//                 const SizedBox(height: 24),
+      final socketUrl = 'ws://10.0.2.2:8081/ws-hr/websocket';
 
-//                 // Search Bar
-//                 Padding(
-//                   padding: const EdgeInsets.symmetric(horizontal: 24),
-//                   child: Row(
-//                     children: [
-//                       Expanded(child: _buildSearchBar()),
-//                       const SizedBox(width: 12),
-//                       _buildFilterButton(),
-//                     ],
-//                   ),
-//                 ),
+      client = StompClient(
+        config: StompConfig(
+          url: socketUrl,
+          onConnect: (StompFrame frame) {
+            print("--> [WebSocket] Connected!");
 
-//                 const SizedBox(height: 24),
+            // Topic: /topic/company/{id}/requests
+            final topic = '/topic/company/$_currentCompanyId/requests';
 
-//                 // Section Title
-//                 Padding(
-//                   padding: const EdgeInsets.symmetric(horizontal: 24),
-//                   child: Align(
-//                     alignment: Alignment.centerLeft,
-//                     child: Text(
-//                       _isToReviewTab ? 'TODAY' : 'SEPTEMBER 2025',
-//                       style: const TextStyle(
-//                         color: Color(0xFF655F5F),
-//                         fontSize: 16,
-//                         fontWeight: FontWeight.w600,
-//                         fontFamily: 'Inter',
-//                       ),
-//                     ),
-//                   ),
-//                 ),
+            client?.subscribe(
+              destination: topic,
+              callback: (StompFrame frame) {
+                if (frame.body != null) {
+                  print("--> [WebSocket] Msg: ${frame.body}");
 
-//                 const SizedBox(height: 12),
+                  // [LOGIC THÔNG MINH HƠN]
+                  // Nếu là chuỗi thông báo "NEW_REQUEST" -> Load lại cả list
+                  if (frame.body == "NEW_REQUEST") {
+                    if (mounted) _fetchRequests(isBackgroundRefresh: true);
+                  }
+                  // Nếu là JSON object -> Update item cụ thể
+                  else {
+                    try {
+                      final dynamic data = jsonDecode(frame.body!);
+                      final updatedReq = RequestModel.fromJson(data);
 
-//                 // List
-//                 Expanded(
-//                   child: ListView.builder(
-//                     padding: const EdgeInsets.symmetric(
-//                       horizontal: 24,
-//                       vertical: 8,
-//                     ),
-//                     itemCount: displayList.length,
-//                     itemBuilder: (context, index) {
-//                       final item = displayList[index];
-//                       return _ManagerRequestCard(
-//                         data: item,
-//                         onTap: () {
-//                           Navigator.push(
-//                             context,
-//                             MaterialPageRoute(
-//                               builder: (context) => ManagerRequestReviewPage(
-//                                 request: item['request'],
-//                                 employeeName: item['employeeName'],
-//                                 employeeId: item['employeeId'],
-//                                 employeeDept: item['dept'],
-//                                 employeeAvatar: item['avatar'],
-//                               ),
-//                             ),
-//                           );
-//                         },
-//                       );
-//                     },
-//                   ),
-//                 ),
-//               ],
-//             ),
-//           ),
-//         ),
-//       ),
-//     );
-//   }
+                      if (mounted) {
+                        setState(() {
+                          // Tìm request trong list hiện tại
+                          final index = _requestList.indexWhere(
+                            (item) =>
+                                (item['request'] as RequestModel).id ==
+                                updatedReq.id,
+                          );
 
-//   Widget _buildHeader(BuildContext context) {
-//     return Padding(
-//       padding: const EdgeInsets.symmetric(horizontal: 24),
-//       child: Stack(
-//         alignment: Alignment.center,
-//         children: [
-//           Align(
-//             alignment: Alignment.centerLeft,
-//             child: IconButton(
-//               padding: EdgeInsets.zero,
-//               constraints: const BoxConstraints(),
-//               icon: Icon(
-//                 PhosphorIcons.caretLeft(PhosphorIconsStyle.bold),
-//                 color: const Color(0xFF2260FF),
-//                 size: 24,
-//               ),
-//               onPressed: () => Navigator.pop(context),
-//             ),
-//           ),
-//           const Text(
-//             'REQUEST MANAGEMENT',
-//             style: TextStyle(
-//               color: Color(0xFF2260FF),
-//               fontSize: 24,
-//               fontFamily: 'Inter',
-//               fontWeight: FontWeight.w700,
-//             ),
-//           ),
-//         ],
-//       ),
-//     );
-//   }
+                          if (index != -1) {
+                            // Cập nhật object request mới vào map cũ
+                            _requestList[index]['request'] = updatedReq;
 
-//   Widget _buildTabs() {
-//     return Container(
-//       height: 52,
-//       padding: const EdgeInsets.all(4),
-//       decoration: BoxDecoration(
-//         color: const Color(0x72E6E5E5),
-//         borderRadius: BorderRadius.circular(10),
-//       ),
-//       child: Row(
-//         children: [
-//           Expanded(
-//             child: _buildTabItem(
-//               'To review (${_toReviewList.length})',
-//               _isToReviewTab,
-//               () => setState(() => _isToReviewTab = true),
-//             ),
-//           ),
-//           Expanded(
-//             child: _buildTabItem(
-//               'History',
-//               !_isToReviewTab,
-//               () => setState(() => _isToReviewTab = false),
-//             ),
-//           ),
-//         ],
-//       ),
-//     );
-//   }
+                            // Nếu muốn update cả timeInfo/processedDate nếu cần
+                            // _requestList[index]['timeInfo'] = updatedReq.duration;
+                          } else {
+                            // Trường hợp hiếm: Socket báo về đơn mới mà không gửi chuỗi "NEW_REQUEST"
+                            // Ta thêm vào đầu list luôn
+                            // (Cần cấu trúc Map giống hệt _fetchRequests)
+                            _fetchRequests(isBackgroundRefresh: true);
+                          }
+                        });
+                      }
+                    } catch (e) {
+                      // Fallback: Nếu parse lỗi thì cứ load lại API cho chắc
+                      if (mounted) _fetchRequests(isBackgroundRefresh: true);
+                    }
+                  }
+                }
+              },
+            );
+          },
+          onWebSocketError: (dynamic error) =>
+              print("--> [WebSocket] Error: $error"),
+        ),
+      );
 
-//   Widget _buildTabItem(String title, bool isActive, VoidCallback onTap) {
-//     return GestureDetector(
-//       onTap: onTap,
-//       child: Container(
-//         alignment: Alignment.center,
-//         decoration: BoxDecoration(
-//           color: isActive ? Colors.white : Colors.transparent,
-//           borderRadius: BorderRadius.circular(5),
-//           boxShadow: isActive
-//               ? [
-//                   BoxShadow(
-//                     color: Colors.black.withOpacity(0.05),
-//                     blurRadius: 4,
-//                   ),
-//                 ]
-//               : [],
-//         ),
-//         child: Text(
-//           title,
-//           style: TextStyle(
-//             color: isActive ? const Color(0xE52260FF) : const Color(0xFFB2AEAE),
-//             fontSize: 20,
-//             fontWeight: FontWeight.w600,
-//             fontFamily: 'Inter',
-//           ),
-//         ),
-//       ),
-//     );
-//   }
+      client?.activate();
+    } catch (e) {
+      print("--> [WebSocket] Init Error: $e");
+    }
+  }
 
-//   Widget _buildSearchBar() {
-//     return Container(
-//       height: 42,
-//       decoration: BoxDecoration(
-//         color: const Color(0x33C7C5C5),
-//         borderRadius: BorderRadius.circular(10),
-//         border: Border.all(color: const Color(0xFFD7D2D2)),
-//       ),
-//       child: TextField(
-//         decoration: InputDecoration(
-//           hintText: 'Search name, employee ID...',
-//           hintStyle: const TextStyle(
-//             color: Color(0xFF706464),
-//             fontSize: 15,
-//             fontWeight: FontWeight.w300,
-//             fontFamily: 'Inter',
-//           ),
-//           prefixIcon: Icon(
-//             PhosphorIcons.magnifyingGlass(),
-//             color: const Color(0xFF706464),
-//             size: 20,
-//           ),
-//           border: InputBorder.none,
-//           contentPadding: const EdgeInsets.symmetric(vertical: 8),
-//         ),
-//       ),
-//     );
-//   }
+  // [SỬA] Thêm tham số isBackgroundRefresh
+  Future<void> _fetchRequests({bool isBackgroundRefresh = false}) async {
+    if (!isBackgroundRefresh) {
+      setState(() => _isLoading = true);
+    }
 
-//   Widget _buildFilterButton() {
-//     return Container(
-//       width: 40,
-//       height: 42,
-//       decoration: BoxDecoration(
-//         color: const Color(0x33C7C5C5),
-//         borderRadius: BorderRadius.circular(10),
-//         border: Border.all(color: const Color(0xFFD7D2D2)),
-//       ),
-//       child: Material(
-//         color: Colors.transparent,
-//         borderRadius: BorderRadius.circular(10),
-//         child: InkWell(
-//           borderRadius: BorderRadius.circular(10),
-//           onTap: () {},
-//           child: Center(
-//             child: Icon(
-//               PhosphorIcons.funnel(PhosphorIconsStyle.regular),
-//               color: const Color(0xFF706464),
-//               size: 20,
-//             ),
-//           ),
-//         ),
-//       ),
-//     );
-//   }
-// }
+    try {
+      String? userId;
+      String? userInfoStr = await _storage.read(key: 'user_info');
 
-// class _ManagerRequestCard extends StatelessWidget {
-//   final Map<String, dynamic> data;
-//   final VoidCallback onTap;
+      if (userInfoStr != null) {
+        try {
+          final userMap = jsonDecode(userInfoStr);
+          userId = userMap['id']?.toString();
+        } catch (_) {}
+      }
 
-//   const _ManagerRequestCard({required this.data, required this.onTap});
+      if (userId == null) userId = await _storage.read(key: 'user_id');
 
-//   @override
-//   Widget build(BuildContext context) {
-//     final RequestModel request = data['request'];
-//     final String timeInfo = data['timeInfo'] ?? request.duration;
-//     final bool isManager = ['001', '004'].contains(data['employeeId']);
-//     final String processedDate = data['processedDate'] ?? '';
+      if (userId == null) {
+        setState(() => _isLoading = false);
+        return;
+      }
 
-//     return Container(
-//       margin: const EdgeInsets.only(bottom: 16),
-//       decoration: BoxDecoration(
-//         color: Colors.white,
-//         borderRadius: BorderRadius.circular(10),
-//         border: Border.all(width: 1, color: const Color(0x4CF1F1F1)),
-//         boxShadow: const [
-//           BoxShadow(
-//             color: Color(0x0C000000),
-//             blurRadius: 10,
-//             offset: Offset(0, 0),
-//             spreadRadius: 2,
-//           ),
-//         ],
-//       ),
-//       child: Material(
-//         color: Colors.transparent,
-//         borderRadius: BorderRadius.circular(10),
-//         child: InkWell(
-//           onTap: onTap,
-//           borderRadius: BorderRadius.circular(10),
-//           child: Padding(
-//             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-//             child: Row(
-//               crossAxisAlignment: CrossAxisAlignment.center,
-//               children: [
-//                 ClipOval(
-//                   child: Image.network(
-//                     data['avatar'],
-//                     width: 46,
-//                     height: 46,
-//                     fit: BoxFit.cover,
-//                     errorBuilder: (_, __, ___) => Container(
-//                       width: 46,
-//                       height: 46,
-//                       color: Colors.grey[200],
-//                     ),
-//                   ),
-//                 ),
-//                 const SizedBox(width: 14),
+      List<RequestModel> requests = await _dataSource.getManagerRequests(
+        userId,
+      );
 
-//                 Expanded(
-//                   child: Column(
-//                     crossAxisAlignment: CrossAxisAlignment.start,
-//                     mainAxisAlignment: MainAxisAlignment.center,
-//                     children: [
-//                       Row(
-//                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-//                         crossAxisAlignment: CrossAxisAlignment.start,
-//                         children: [
-//                           Expanded(
-//                             child: Text.rich(
-//                               TextSpan(
-//                                 children: [
-//                                   TextSpan(
-//                                     text: data['employeeName'],
-//                                     style: const TextStyle(
-//                                       fontSize: 16,
-//                                       fontWeight: FontWeight.w600,
-//                                       fontFamily: 'Inter',
-//                                       color: Colors.black,
-//                                     ),
-//                                   ),
-//                                   if (isManager) ...[
-//                                     const TextSpan(text: ' '),
-//                                     WidgetSpan(
-//                                       alignment: PlaceholderAlignment.middle,
-//                                       child: Container(
-//                                         padding: const EdgeInsets.symmetric(
-//                                           horizontal: 8,
-//                                           vertical: 2,
-//                                         ),
-//                                         decoration: BoxDecoration(
-//                                           color: const Color(0xFFECF1FF),
-//                                           borderRadius: BorderRadius.circular(
-//                                             5,
-//                                           ),
-//                                         ),
-//                                         child: const Text(
-//                                           'Manager',
-//                                           style: TextStyle(
-//                                             color: Color(0xFF2260FF),
-//                                             fontSize: 12,
-//                                             fontWeight: FontWeight.w600,
-//                                             fontFamily: 'Inter',
-//                                           ),
-//                                         ),
-//                                       ),
-//                                     ),
-//                                   ],
-//                                 ],
-//                               ),
-//                               maxLines: 2,
-//                               overflow: TextOverflow.ellipsis,
-//                             ),
-//                           ),
+      if (mounted) {
+        setState(() {
+          _requestList = requests.map((req) {
+            return {
+              'request': req, // Object chính
+              'id': req.id,
+              'employeeName': req.requesterName.isNotEmpty
+                  ? req.requesterName
+                  : 'Unknown',
+              'employeeId': req.requesterId,
+              'dept': req.requesterDept.isNotEmpty ? req.requesterDept : 'N/A',
+              'avatar': req.requesterAvatar,
+              'timeInfo': req.duration,
+              'processedDate': '', // Có thể format createdAt nếu cần
+            };
+          }).toList();
 
-//                           Container(
-//                             margin: const EdgeInsets.only(left: 8),
-//                             padding: const EdgeInsets.symmetric(
-//                               horizontal: 12,
-//                               vertical: 4,
-//                             ),
-//                             decoration: BoxDecoration(
-//                               color: _getExactStatusBgColor(request.status),
-//                               borderRadius: BorderRadius.circular(30),
-//                             ),
-//                             child: Text(
-//                               request.statusText,
-//                               style: TextStyle(
-//                                 color: _getExactStatusColor(request.status),
-//                                 fontSize: 12,
-//                                 fontWeight: FontWeight.w600,
-//                                 fontFamily: 'Inter',
-//                               ),
-//                             ),
-//                           ),
-//                         ],
-//                       ),
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      print("--> [LỖI] Fetch requests: $e");
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
 
-//                       const SizedBox(height: 6),
+  // ... (Phần UI và BottomNav giữ nguyên) ...
+  // Chỉ lưu ý phần gọi ManagerRequestReviewPage bên dưới:
 
-//                       Text(
-//                         'Employee ID: ${data['employeeId']} | ${data['dept']}',
-//                         style: const TextStyle(
-//                           color: Color(0xFF555252),
-//                           fontSize: 13,
-//                           fontWeight: FontWeight.w300,
-//                           fontFamily: 'Inter',
-//                         ),
-//                         maxLines: 1,
-//                         overflow: TextOverflow.ellipsis,
-//                       ),
+  @override
+  Widget build(BuildContext context) {
+    // Filter client-side
+    final displayList = _requestList.where((item) {
+      final req = item['request'] as RequestModel;
+      if (_isToReviewTab) {
+        return req.status == RequestStatus.PENDING;
+      } else {
+        return req.status != RequestStatus.PENDING;
+      }
+    }).toList();
 
-//                       const SizedBox(height: 6),
+    return Scaffold(
+      backgroundColor: const Color(0xFFF9F9F9),
+      // ... (BottomNavigationBar giữ nguyên)
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 600),
+            child: Column(
+              children: [
+                const SizedBox(height: 20),
+                _buildHeader(context),
+                const SizedBox(height: 24),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: _buildTabs(displayList.length),
+                ),
+                // ... (Phần Search & Filter giữ nguyên) ...
+                const SizedBox(height: 24),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Row(
+                    children: [
+                      Expanded(child: _buildSearchBar()),
+                      const SizedBox(width: 12),
+                      _buildFilterButton(),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      _isToReviewTab ? 'TODAY' : 'HISTORY',
+                      style: const TextStyle(
+                        color: Color(0xFF655F5F),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        fontFamily: 'Inter',
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
 
-//                       RichText(
-//                         maxLines: 1,
-//                         overflow: TextOverflow.ellipsis,
-//                         text: TextSpan(
-//                           children: [
-//                             TextSpan(
-//                               text: request.title,
-//                               style: const TextStyle(
-//                                 color: Color(0xFF2563EB),
-//                                 fontSize: 13,
-//                                 fontWeight: FontWeight.w600,
-//                                 fontFamily: 'Inter',
-//                               ),
-//                             ),
-//                             const TextSpan(
-//                               text: '    ',
-//                               style: TextStyle(fontSize: 13),
-//                             ),
-//                             TextSpan(
-//                               text: timeInfo,
-//                               style: const TextStyle(
-//                                 color: Color(0xFF555252),
-//                                 fontSize: 13,
-//                                 fontWeight: FontWeight.w300,
-//                                 fontFamily: 'Inter',
-//                               ),
-//                             ),
-//                           ],
-//                         ),
-//                       ),
+                // LIST VIEW
+                Expanded(
+                  child: _isLoading
+                      ? const Center(child: CircularProgressIndicator())
+                      : displayList.isEmpty
+                      ? const Center(child: Text("No requests found"))
+                      : ListView.builder(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 8,
+                          ),
+                          itemCount: displayList.length,
+                          itemBuilder: (context, index) {
+                            final item = displayList[index];
+                            return _ManagerRequestCard(
+                              data: item,
+                              onTap: () async {
+                                final result = await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        ManagerRequestReviewPage(
+                                          // [QUAN TRỌNG] Chỉ truyền request model
+                                          request: item['request'],
+                                        ),
+                                  ),
+                                );
 
-//                       if (processedDate.isNotEmpty) ...[
-//                         const SizedBox(height: 4),
-//                         Text(
-//                           processedDate,
-//                           style: const TextStyle(
-//                             color: Color(0xFF555252),
-//                             fontSize: 13,
-//                             fontWeight: FontWeight.w400,
-//                             fontFamily: 'Inter',
-//                           ),
-//                         ),
-//                       ],
-//                     ],
-//                   ),
-//                 ),
+                                if (result == true) {
+                                  _fetchRequests();
+                                }
+                              },
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
-//                 const SizedBox(width: 8),
-//                 Icon(
-//                   PhosphorIcons.caretRight(),
-//                   size: 20,
-//                   color: const Color(0xFF9CA3AF),
-//                 ),
-//               ],
-//             ),
-//           ),
-//         ),
-//       ),
-//     );
-//   }
+  // ... (Các Widget con _buildHeader, _buildTabs... giữ nguyên)
+  Widget _buildHeader(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: IconButton(
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              icon: Icon(
+                PhosphorIcons.caretLeft(PhosphorIconsStyle.bold),
+                color: const Color(0xFF2260FF),
+                size: 24,
+              ),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ),
+          const Text(
+            'REQUEST MANAGEMENT',
+            style: TextStyle(
+              color: Color(0xFF2260FF),
+              fontSize: 24,
+              fontFamily: 'Inter',
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
-//   Color _getExactStatusBgColor(RequestStatus status) {
-//     switch (status) {
-//       case RequestStatus.pending:
-//         return const Color(0xFFFFF7ED);
-//       case RequestStatus.rejected:
-//         return const Color(0xFFFEF2F2);
-//       case RequestStatus.approved:
-//         return const Color(0xFFF0FDF4);
-//       default:
-//         return const Color(0xFFF3F4F6);
-//     }
-//   }
+  Widget _buildTabs(int count) {
+    return Container(
+      height: 52,
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: const Color(0x72E6E5E5),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildTabItem(
+              'To review ($count)',
+              _isToReviewTab,
+              () => setState(() => _isToReviewTab = true),
+            ),
+          ),
+          Expanded(
+            child: _buildTabItem(
+              'History',
+              !_isToReviewTab,
+              () => setState(() => _isToReviewTab = false),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
-//   Color _getExactStatusColor(RequestStatus status) {
-//     switch (status) {
-//       case RequestStatus.pending:
-//         return const Color(0xFFEA580C);
-//       case RequestStatus.rejected:
-//         return const Color(0xFFDC2626);
-//       case RequestStatus.approved:
-//         return const Color(0xFF16A34A);
-//       default:
-//         return const Color(0xFF374151);
-//     }
-//   }
-// }
+  Widget _buildTabItem(String title, bool isActive, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: isActive ? Colors.white : Colors.transparent,
+          borderRadius: BorderRadius.circular(5),
+          boxShadow: isActive
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 4,
+                  ),
+                ]
+              : [],
+        ),
+        child: Text(
+          title,
+          style: TextStyle(
+            color: isActive ? const Color(0xE52260FF) : const Color(0xFFB2AEAE),
+            fontSize: 20,
+            fontWeight: FontWeight.w600,
+            fontFamily: 'Inter',
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSearchBar() {
+    return Container(
+      height: 42,
+      decoration: BoxDecoration(
+        color: const Color(0x33C7C5C5),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFD7D2D2)),
+      ),
+      child: TextField(
+        decoration: InputDecoration(
+          hintText: 'Search name, employee ID...',
+          hintStyle: const TextStyle(
+            color: Color(0xFF706464),
+            fontSize: 15,
+            fontWeight: FontWeight.w300,
+            fontFamily: 'Inter',
+          ),
+          prefixIcon: Icon(
+            PhosphorIcons.magnifyingGlass(),
+            color: const Color(0xFF706464),
+            size: 20,
+          ),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(vertical: 8),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilterButton() {
+    return Container(
+      width: 40,
+      height: 42,
+      decoration: BoxDecoration(
+        color: const Color(0x33C7C5C5),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFD7D2D2)),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: () {},
+          child: Center(
+            child: Icon(
+              PhosphorIcons.funnel(PhosphorIconsStyle.regular),
+              color: const Color(0xFF706464),
+              size: 20,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// Widget Card (Giữ nguyên, chỉ cần đảm bảo dùng data['request'].status để lấy màu)
+class _ManagerRequestCard extends StatelessWidget {
+  final Map<String, dynamic> data;
+  final VoidCallback onTap;
+
+  const _ManagerRequestCard({required this.data, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final RequestModel request =
+        data['request']; // [QUAN TRỌNG] Lấy request mới nhất
+    final String timeInfo = data['timeInfo'] ?? request.duration;
+    final bool isManager = ['001', '004'].contains(data['employeeId']);
+    final String processedDate = data['processedDate'] ?? '';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(width: 1, color: const Color(0x4CF1F1F1)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0C000000),
+            blurRadius: 10,
+            offset: Offset(0, 0),
+            spreadRadius: 2,
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(10),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                ClipOval(
+                  child: Image.network(
+                    data['avatar'],
+                    width: 46,
+                    height: 46,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Container(
+                      width: 46,
+                      height: 46,
+                      color: Colors.grey[200],
+                      child: const Icon(Icons.person, color: Colors.grey),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 14),
+
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Text.rich(
+                              TextSpan(
+                                children: [
+                                  TextSpan(
+                                    text: data['employeeName'],
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                      fontFamily: 'Inter',
+                                      color: Colors.black,
+                                    ),
+                                  ),
+                                  if (isManager) ...[
+                                    const TextSpan(text: ' '),
+                                    WidgetSpan(
+                                      alignment: PlaceholderAlignment.middle,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFECF1FF),
+                                          borderRadius: BorderRadius.circular(
+                                            5,
+                                          ),
+                                        ),
+                                        child: const Text(
+                                          'Manager',
+                                          style: TextStyle(
+                                            color: Color(0xFF2260FF),
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                            fontFamily: 'Inter',
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+
+                          // [QUAN TRỌNG] Badge hiển thị trạng thái realtime từ request.status
+                          Container(
+                            margin: const EdgeInsets.only(left: 8),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: _getExactStatusBgColor(request.status),
+                              borderRadius: BorderRadius.circular(30),
+                            ),
+                            child: Text(
+                              request.status.name,
+                              style: TextStyle(
+                                color: _getExactStatusColor(request.status),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                fontFamily: 'Inter',
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 6),
+
+                      Text(
+                        'Employee ID: ${data['employeeId']} | ${data['dept']}',
+                        style: const TextStyle(
+                          color: Color(0xFF555252),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w300,
+                          fontFamily: 'Inter',
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+
+                      const SizedBox(height: 6),
+
+                      RichText(
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        text: TextSpan(
+                          children: [
+                            TextSpan(
+                              text: request.type.name,
+                              style: const TextStyle(
+                                color: Color(0xFF2563EB),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                fontFamily: 'Inter',
+                              ),
+                            ),
+                            const TextSpan(
+                              text: '    ',
+                              style: TextStyle(fontSize: 13),
+                            ),
+                            TextSpan(
+                              text: timeInfo,
+                              style: const TextStyle(
+                                color: Color(0xFF555252),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w300,
+                                fontFamily: 'Inter',
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      if (processedDate.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          processedDate,
+                          style: const TextStyle(
+                            color: Color(0xFF555252),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w400,
+                            fontFamily: 'Inter',
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+
+                const SizedBox(width: 8),
+                Icon(
+                  PhosphorIcons.caretRight(),
+                  size: 20,
+                  color: const Color(0xFF9CA3AF),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Color _getExactStatusBgColor(RequestStatus status) {
+    switch (status) {
+      case RequestStatus.PENDING:
+        return const Color(0xFFFFF7ED);
+      case RequestStatus.REJECTED:
+        return const Color(0xFFFEF2F2);
+      case RequestStatus.APPROVED:
+        return const Color(0xFFF0FDF4);
+      default:
+        return const Color(0xFFF3F4F6);
+    }
+  }
+
+  Color _getExactStatusColor(RequestStatus status) {
+    switch (status) {
+      case RequestStatus.PENDING:
+        return const Color(0xFFEA580C);
+      case RequestStatus.REJECTED:
+        return const Color(0xFFDC2626);
+      case RequestStatus.APPROVED:
+        return const Color(0xFF16A34A);
+      default:
+        return const Color(0xFF374151);
+    }
+  }
+}

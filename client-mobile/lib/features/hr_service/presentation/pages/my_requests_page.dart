@@ -1,7 +1,12 @@
-import 'dart:convert'; // [QUAN TRỌNG] Thêm import này
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
+// [MỚI] Thêm thư viện Socket
+import 'package:stomp_dart_client/stomp.dart';
+import 'package:stomp_dart_client/stomp_config.dart';
+import 'package:stomp_dart_client/stomp_frame.dart';
 
 import '../../../../core/config/app_colors.dart';
 import '../../data/models/request_model.dart';
@@ -26,6 +31,9 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
   final _storage = const FlutterSecureStorage();
   late final RequestRepositoryImpl _repository;
 
+  // [MỚI] Biến Socket
+  StompClient? _stompClient;
+
   @override
   void initState() {
     super.initState();
@@ -35,7 +43,13 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
     _fetchRequests();
   }
 
-  // [SỬA LỖI] Logic lấy ID thông minh (Giống trang Profile/Create)
+  // [MỚI] Ngắt kết nối khi thoát
+  @override
+  void dispose() {
+    _stompClient?.deactivate();
+    super.dispose();
+  }
+
   Future<String?> _getUserIdFromStorage() async {
     try {
       String? userInfoStr = await _storage.read(key: 'user_info');
@@ -49,16 +63,62 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
     }
   }
 
-  // Hàm gọi API lấy dữ liệu
+  // [MỚI] Hàm khởi tạo WebSocket
+  void _initWebSocket(String userId) {
+    // Nếu đã connect rồi thì thôi
+    if (_stompClient != null && _stompClient!.isActive) return;
+
+    final socketUrl = 'ws://10.0.2.2:8081/ws-hr/websocket';
+
+    _stompClient = StompClient(
+      config: StompConfig(
+        url: socketUrl,
+        onConnect: (StompFrame frame) {
+          print("--> [MyRequests] Connected to WS");
+          // Subscribe kênh riêng của User để nhận tin: Tạo mới, Duyệt, Từ chối
+          _stompClient!.subscribe(
+            destination: '/topic/user/$userId/requests',
+            callback: (StompFrame frame) {
+              if (frame.body != null) {
+                print("--> [MyRequests] Update received: ${frame.body}");
+                final dynamic data = jsonDecode(frame.body!);
+                final updatedReq = RequestModel.fromJson(data);
+
+                if (mounted) {
+                  setState(() {
+                    final index = _requests.indexWhere(
+                      (r) => r.id == updatedReq.id,
+                    );
+                    if (index != -1) {
+                      // Cập nhật đơn đã có
+                      _requests[index] = updatedReq;
+                    } else {
+                      // Thêm đơn mới vào đầu list
+                      _requests.insert(0, updatedReq);
+                    }
+                  });
+                }
+              }
+            },
+          );
+        },
+        onWebSocketError: (dynamic error) => print("--> [WS Error]: $error"),
+      ),
+    );
+    _stompClient!.activate();
+  }
+
   Future<void> _fetchRequests() async {
     setState(() => _isLoading = true);
     try {
-      final userId = await _getUserIdFromStorage(); // [SỬA] Gọi hàm mới
+      final userId = await _getUserIdFromStorage();
       if (userId != null) {
+        // [MỚI] Kích hoạt Socket ngay khi có ID
+        _initWebSocket(userId);
+
         final data = await _repository.getMyRequests(userId);
         setState(() {
           _requests = data;
-          // Sắp xếp đơn mới nhất lên đầu
           _requests.sort((a, b) => b.startTime.compareTo(a.startTime));
         });
       } else {
@@ -73,7 +133,6 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
 
   List<RequestModel> get _filteredRequests {
     if (_selectedFilter == 'All') return _requests;
-    // Fix logic so sánh: Backend trả về PENDING (hoa), Filter có thể là Pending (thường)
     return _requests
         .where(
           (r) => r.statusText.toUpperCase() == _selectedFilter.toUpperCase(),
@@ -85,16 +144,12 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF9F9F9),
-
-      // ... (Phần BottomNavigationBar giữ nguyên) ...
       floatingActionButton: FloatingActionButton(
         onPressed: () async {
-          // [SỬA LỖI] Đợi kết quả trả về từ trang tạo
           final result = await Navigator.push(
             context,
             MaterialPageRoute(builder: (context) => const CreateRequestPage()),
           );
-          // Nếu tạo thành công (trả về true), load lại danh sách
           if (result == true) {
             _fetchRequests();
           }
@@ -145,7 +200,7 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
                 ),
 
                 const SizedBox(height: 24),
-                // Search & Filter (Giữ nguyên UI)
+                // Search & Filter
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: Row(
@@ -274,7 +329,6 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: () async {
-            // [SỬA LỖI] Điều hướng sang Detail và đợi kết quả (để reload nếu có Hủy đơn)
             final result = await Navigator.push(
               context,
               MaterialPageRoute(
@@ -282,7 +336,7 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
               ),
             );
             if (result == true) {
-              _fetchRequests(); // Reload nếu ở trong kia có thao tác Hủy
+              _fetchRequests();
             }
           },
           child: IntrinsicHeight(
@@ -378,7 +432,6 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
     );
   }
 
-  // ... (Giữ nguyên _buildSearchBar và _buildFilterButton) ...
   Widget _buildSearchBar() => Container(
     height: 45,
     decoration: BoxDecoration(

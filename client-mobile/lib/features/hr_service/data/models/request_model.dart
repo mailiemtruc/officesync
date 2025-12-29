@@ -22,7 +22,11 @@ class RequestModel {
   final String? evidenceUrl;
   // [MỚI] Thêm trường này để hứng ngày tạo đơn từ Backend
   final DateTime? createdAt;
-
+  // [MỚI] Thêm các field thông tin người gửi đơn
+  final String requesterName;
+  final String requesterId; // ID nhân viên
+  final String requesterAvatar;
+  final String requesterDept;
   RequestModel({
     this.id,
     this.requestCode,
@@ -36,17 +40,37 @@ class RequestModel {
     this.rejectReason,
     this.evidenceUrl, // [MỚI]
     this.createdAt, // [MỚI]
+    // [MỚI]
+    this.requesterName = 'Unknown',
+    this.requesterId = '',
+    this.requesterAvatar = '',
+    this.requesterDept = '',
   });
 
-  // --- 1. FROM JSON (Nhận từ Backend) ---
   factory RequestModel.fromJson(Map<String, dynamic> json) {
+    // [LOGIC MỚI] Bóc tách thông tin người gửi từ object lồng nhau 'requester'
+    String rName = 'Unknown';
+    String rId = '';
+    String rAvatar = '';
+    String rDept = '';
+
+    if (json['requester'] != null) {
+      final r = json['requester'];
+      rName = r['fullName'] ?? 'Unknown';
+      rId = r['employeeCode'] ?? r['id']?.toString() ?? '';
+      rAvatar = r['avatarUrl'] ?? '';
+
+      // Lấy tên phòng ban từ object lồng requester -> department
+      if (r['department'] != null) {
+        rDept = r['department']['name'] ?? '';
+      }
+    }
+
     return RequestModel(
       id: json['id'],
       requestCode: json['requestCode'] ?? '',
-      // Map String sang Enum
       type: _parseType(json['type']),
       status: _parseStatus(json['status']),
-      // Parse ISO Date String
       startTime: DateTime.parse(json['startTime']),
       endTime: DateTime.parse(json['endTime']),
       durationVal: (json['durationVal'] as num?)?.toDouble(),
@@ -54,10 +78,15 @@ class RequestModel {
       reason: json['reason'] ?? '',
       rejectReason: json['rejectReason'],
       evidenceUrl: json['evidenceUrl'],
-      // [MỚI] Parse ngày tạo an toàn (tránh lỗi null)
       createdAt: json['createdAt'] != null
           ? DateTime.parse(json['createdAt'])
           : null,
+
+      // Gán dữ liệu vừa bóc tách
+      requesterName: rName,
+      requesterId: rId,
+      requesterAvatar: rAvatar,
+      requesterDept: rDept,
     );
   }
 

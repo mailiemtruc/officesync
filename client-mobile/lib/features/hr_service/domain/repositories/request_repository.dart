@@ -15,4 +15,10 @@ abstract class RequestRepository {
   Future<String> uploadFile(File file);
 
   Future<bool> cancelRequest(String requestId, String userId);
+  Future<bool> processRequest(
+    String requestId,
+    String approverId,
+    String status,
+    String comment,
+  );
 }

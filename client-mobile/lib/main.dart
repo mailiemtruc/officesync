@@ -60,7 +60,7 @@ class OfficeSyncApp extends StatelessWidget {
 
         // --- CÁC ROUTE CHỨC NĂNG MỚI (MENU) ---
         '/my_requests': (context) => const MyRequestsPage(),
-        // '/manager_requests': (context) => const ManagerRequestListPage(),
+        '/manager_requests': (context) => const ManagerRequestListPage(),
         '/employees': (context) => const EmployeeListPage(),
         '/notes': (context) => const NoteListScreen(),
       },

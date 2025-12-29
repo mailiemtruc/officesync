@@ -119,4 +119,75 @@ class RequestRemoteDataSource {
       rethrow;
     }
   }
+
+  // [MỚI] Hàm xử lý Duyệt/Từ chối
+  Future<bool> processRequest(
+    String requestId,
+    String approverId,
+    String status,
+    String comment,
+  ) async {
+    try {
+      final url = Uri.parse('$baseUrl/$requestId/process');
+      print("--> Processing Request $requestId: $status");
+
+      final response = await http.post(
+        url,
+        headers: {
+          "Content-Type": "application/json",
+          "X-User-Id": approverId, // Header xác thực người duyệt
+        },
+        body: jsonEncode({
+          "status": status, // "APPROVED" hoặc "REJECTED"
+          "comment": comment,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        return true;
+      } else {
+        print("Failed: ${response.body}");
+        return false;
+      }
+    } catch (e) {
+      print("Error processing request: $e");
+      rethrow;
+    }
+  }
+
+  // [QUAN TRỌNG] Hàm này phải tồn tại và đúng Endpoint
+  Future<List<RequestModel>> getManagerRequests(String managerId) async {
+    try {
+      // Endpoint dành cho Manager/Admin duyệt đơn
+      final url = Uri.parse('$baseUrl/manager');
+
+      print(
+        "--> [API CALL] GET $url with User-Id: $managerId",
+      ); // Dòng này sẽ hiện trong log
+
+      final response = await http.get(
+        url,
+        headers: {
+          "Content-Type": "application/json",
+          "X-User-Id": managerId, // Backend cần cái này để biết ai đang hỏi
+        },
+      );
+
+      if (response.statusCode == 200) {
+        print(
+          "--> [API SUCCESS] Body: ${response.body}",
+        ); // In ra để xem Backend trả gì
+        final List<dynamic> data = jsonDecode(response.body);
+        return data.map((json) => RequestModel.fromJson(json)).toList();
+      } else {
+        print(
+          "--> [API ERROR] Code: ${response.statusCode} - Body: ${response.body}",
+        );
+        return [];
+      }
+    } catch (e) {
+      print("--> [API EXCEPTION] $e");
+      return [];
+    }
+  }
 }

@@ -48,4 +48,19 @@ class RequestRepositoryImpl implements RequestRepository {
   Future<bool> cancelRequest(String requestId, String userId) async {
     return await remoteDataSource.cancelRequest(requestId, userId);
   }
+
+  @override
+  Future<bool> processRequest(
+    String requestId,
+    String approverId,
+    String status,
+    String comment,
+  ) async {
+    return await remoteDataSource.processRequest(
+      requestId,
+      approverId,
+      status,
+      comment,
+    );
+  }
 }

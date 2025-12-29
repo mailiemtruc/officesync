@@ -7,6 +7,12 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
+
+// [MỚI] WebSocket Import
+import 'package:stomp_dart_client/stomp.dart';
+import 'package:stomp_dart_client/stomp_config.dart';
+import 'package:stomp_dart_client/stomp_frame.dart';
+
 import '../../../../core/config/app_colors.dart';
 import '../../data/models/request_model.dart';
 import '../../widgets/confirm_bottom_sheet.dart';
@@ -27,12 +33,78 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
   final _storage = const FlutterSecureStorage();
   bool _isCancelling = false;
 
+  // [LOGIC REALTIME]
+  late RequestModel _currentRequest;
+  StompClient? stompClient;
+
   @override
   void initState() {
     super.initState();
+    _currentRequest = widget.request; // Khởi tạo dữ liệu
     _repository = RequestRepositoryImpl(
       remoteDataSource: RequestRemoteDataSource(),
     );
+    _connectWebSocket(); // [MỚI]
+  }
+
+  // [MỚI] KẾT NỐI WEBSOCKET
+  // [SỬA LỖI QUAN TRỌNG]: Bỏ check userId null ở đây
+  void _connectWebSocket() {
+    final socketUrl = 'ws://10.0.2.2:8081/ws-hr/websocket';
+
+    stompClient = StompClient(
+      config: StompConfig(
+        url: socketUrl,
+        onConnect: (StompFrame frame) {
+          print("--> [RequestDetail] Connected WS");
+          final topic = '/topic/request/${widget.request.id}';
+
+          stompClient!.subscribe(
+            destination: topic,
+            callback: (StompFrame frame) {
+              if (frame.body != null) {
+                print("--> [RequestDetail] Received: ${frame.body}");
+                final Map<String, dynamic> data = jsonDecode(frame.body!);
+                final updatedReq = RequestModel.fromJson(data);
+
+                if (mounted) {
+                  setState(() {
+                    _currentRequest = updatedReq;
+                  });
+
+                  // Nếu bị hủy -> Back ra list
+                  if (updatedReq.status == RequestStatus.CANCELLED) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("Request has been cancelled."),
+                      ),
+                    );
+                    Navigator.pop(context, true);
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Status updated: ${_currentRequest.status.name}',
+                        ),
+                        backgroundColor: Colors.blueAccent,
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                }
+              }
+            },
+          );
+        },
+      ),
+    );
+    stompClient!.activate();
+  }
+
+  @override
+  void dispose() {
+    stompClient?.deactivate(); // Ngắt kết nối khi thoát trang
+    super.dispose();
   }
 
   // --- LOGIC BACKEND: HỦY ĐƠN ---
@@ -50,11 +122,9 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
     setState(() => _isCancelling = true);
     try {
       await _repository.cancelRequest(widget.request.id.toString(), userId);
-
+      // Không cần pop thủ công ở đây nếu WebSocket hoạt động tốt,
+      // nhưng giữ lại để UX nhanh hơn.
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Request deleted successfully")),
-        );
         Navigator.pop(context, true);
       }
     } catch (e) {
@@ -87,9 +157,7 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
     );
   }
 
-  // --- LOGIC XỬ LÝ ERL & MỞ FILE ---
-
-  // 1. Hàm fix localhost cho Android Emulator
+  // --- LOGIC XỬ LÝ URL & MỞ FILE ---
   String _fixUrl(String url) {
     if (Platform.isAndroid && url.contains('localhost')) {
       return url.replaceFirst('localhost', '10.0.2.2');
@@ -101,7 +169,6 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
     final String fixedUrl = _fixUrl(url);
     final String lowerUrl = fixedUrl.toLowerCase();
 
-    // CHECK 1: Nếu là ẢNH -> Mở trình xem ảnh (code cũ)
     if (lowerUrl.endsWith('.jpg') ||
         lowerUrl.endsWith('.jpeg') ||
         lowerUrl.endsWith('.png') ||
@@ -129,9 +196,7 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
           ),
         ),
       );
-    }
-    // CHECK 2: Nếu là VIDEO -> Mở trình xem Video trong App (MỚI)
-    else if (lowerUrl.endsWith('.mp4') ||
+    } else if (lowerUrl.endsWith('.mp4') ||
         lowerUrl.endsWith('.mov') ||
         lowerUrl.endsWith('.avi')) {
       Navigator.push(
@@ -140,9 +205,7 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
           builder: (context) => _FullScreenVideoPlayer(videoUrl: fixedUrl),
         ),
       );
-    }
-    // CHECK 3: Các file khác (PDF, Doc...) -> Vẫn mở ngoài
-    else {
+    } else {
       _launchExternalUrl(fixedUrl);
     }
   }
@@ -163,35 +226,35 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
   }
 
   List<String> _getEvidenceUrls() {
-    if (widget.request.evidenceUrl != null &&
-        widget.request.evidenceUrl!.isNotEmpty) {
-      return widget.request.evidenceUrl!.split(';');
+    // Sử dụng _currentRequest
+    if (_currentRequest.evidenceUrl != null &&
+        _currentRequest.evidenceUrl!.isNotEmpty) {
+      return _currentRequest.evidenceUrl!.split(';');
     }
     return [];
   }
 
-  // [SỬA QUAN TRỌNG] Cập nhật logic hiển thị thời gian trong Timeline
+  // [LOGIC WORKFLOW] Cập nhật timeline
   List<Map<String, dynamic>> _getWorkflowSteps() {
     const colorGreen = Color(0xFF10B981);
     const colorRed = Color(0xFFDC2626);
     const colorBlue = Color(0xFF2563EB);
     const colorGrey = Color(0xFFCBD5E1);
 
-    final status = widget.request.status;
+    // Dùng _currentRequest để update UI
+    final status = _currentRequest.status;
 
-    // Logic format thời gian tạo đơn
     String submittedTime = 'Submitted';
-    if (widget.request.createdAt != null) {
-      // Ví dụ: 14:30, 28/12/2025
+    if (_currentRequest.createdAt != null) {
       submittedTime = DateFormat(
         'HH:mm, dd/MM/yyyy',
-      ).format(widget.request.createdAt!);
+      ).format(_currentRequest.createdAt!);
     }
 
     final steps = [
       {
         'title': 'Request Submitted',
-        'time': submittedTime, // [SỬA] Hiển thị giờ thật thay vì chữ cứng
+        'time': submittedTime,
         'actor': 'You',
         'dotColor': colorGreen,
         'lineColor': colorGrey,
@@ -329,7 +392,7 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '"${widget.request.rejectReason ?? "No reason provided."}"',
+                      '"${_currentRequest.rejectReason ?? "No reason provided."}"',
                       style: const TextStyle(
                         fontStyle: FontStyle.italic,
                         color: Color(0xFF334155),
@@ -371,8 +434,10 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    final isPending = widget.request.status == RequestStatus.PENDING;
-    final isRejected = widget.request.status == RequestStatus.REJECTED;
+    // [QUAN TRỌNG] Sử dụng _currentRequest thay vì widget.request để UI tự update
+    final req = _currentRequest;
+    final isPending = req.status == RequestStatus.PENDING;
+    final isRejected = req.status == RequestStatus.REJECTED;
     final evidenceList = _getEvidenceUrls();
 
     return Scaffold(
@@ -392,14 +457,18 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _buildMainStatusCard(context, isRejected),
+                        _buildMainStatusCard(
+                          context,
+                          isRejected,
+                          req,
+                        ), // Truyền req
                         const SizedBox(height: 24),
-                        _buildInfoGrid(),
+                        _buildInfoGrid(req), // Truyền req
                         const SizedBox(height: 24),
                         _buildSectionTitle('REASON'),
                         const SizedBox(height: 8),
                         Text(
-                          '"${widget.request.description}"',
+                          '"${req.reason}"',
                           style: const TextStyle(
                             color: Color(0xFF334155),
                             fontSize: 16,
@@ -409,7 +478,6 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
                           ),
                         ),
 
-                        // [SỬA] HIỆN FILE MINH CHỨNG
                         if (evidenceList.isNotEmpty) ...[
                           const SizedBox(height: 24),
                           _buildSectionTitle('ATTACHMENT'),
@@ -418,9 +486,7 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
                               .map(
                                 (url) => Padding(
                                   padding: const EdgeInsets.only(bottom: 8.0),
-                                  child: _buildAttachmentCard(
-                                    url,
-                                  ), // Truyền URL
+                                  child: _buildAttachmentCard(url),
                                 ),
                               )
                               .toList(),
@@ -429,6 +495,7 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
                         const SizedBox(height: 24),
                         _buildSectionTitle('APPROVAL WORKFLOW'),
                         const SizedBox(height: 16),
+                        // [ĐÂY LÀ HÀM BẠN BỊ THIẾU Ở CÂU TRẢ LỜI TRƯỚC]
                         _buildWorkflowList(context),
                         const SizedBox(height: 80),
                       ],
@@ -503,13 +570,14 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
 
   // --- CÁC WIDGET CON ---
 
-  Widget _buildMainStatusCard(BuildContext context, bool isRejected) {
-    // [LOGIC SỬA] Ưu tiên lấy requestCode, nếu không có thì lấy ID
-    String displayCode =
-        widget.request.requestCode != null &&
-            widget.request.requestCode!.isNotEmpty
-        ? widget.request.requestCode!
-        : (widget.request.id?.toString().padLeft(4, '0') ?? "N/A");
+  Widget _buildMainStatusCard(
+    BuildContext context,
+    bool isRejected,
+    RequestModel req,
+  ) {
+    String displayCode = req.requestCode != null && req.requestCode!.isNotEmpty
+        ? req.requestCode!
+        : (req.id?.toString().padLeft(4, '0') ?? "N/A");
 
     return Container(
       width: double.infinity,
@@ -527,17 +595,13 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
       ),
       child: Column(
         children: [
-          Container(
-            height: 6,
-            width: double.infinity,
-            color: widget.request.statusColor,
-          ),
+          Container(height: 6, width: double.infinity, color: req.statusColor),
           Padding(
             padding: const EdgeInsets.all(20),
             child: Column(
               children: [
                 Text(
-                  widget.request.title,
+                  req.type.name, // Dùng req.type.name
                   style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w700,
@@ -545,7 +609,6 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
                   ),
                 ),
                 const SizedBox(height: 4),
-                // [HIỂN THỊ] Mã Code
                 Text(
                   '#$displayCode',
                   style: const TextStyle(
@@ -561,13 +624,13 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: widget.request.statusBgColor,
+                    color: req.statusBgColor,
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    widget.request.statusText.toUpperCase(),
+                    req.status.name,
                     style: TextStyle(
-                      color: widget.request.statusColor,
+                      color: req.statusColor,
                       fontWeight: FontWeight.w700,
                       fontSize: 12,
                       fontFamily: 'Inter',
@@ -618,7 +681,6 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
     );
   }
 
-  // [UPDATED] English Version
   Widget _buildAttachmentCard(String fileUrl) {
     final String fixedUrl = _fixUrl(fileUrl);
     final String lowerUrl = fixedUrl.toLowerCase();
@@ -657,7 +719,6 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
             padding: const EdgeInsets.all(8.0),
             child: Row(
               children: [
-                // Thumbnail / Icon
                 ClipRRect(
                   borderRadius: BorderRadius.circular(8),
                   child: SizedBox(
@@ -691,7 +752,7 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
                         : Container(
                             color: isVideo
                                 ? Colors.orange.withOpacity(0.1)
-                                : const Color(0xFFEFF6FF),
+                                : const Color(0xFFEFF1F5),
                             child: Icon(
                               isVideo
                                   ? PhosphorIcons.playCircle(
@@ -711,17 +772,16 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
 
                 const SizedBox(width: 16),
 
-                // Info Text (Translated to English)
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         isImage
-                            ? "Evidence Image" // Hình ảnh minh chứng
+                            ? "Evidence Image"
                             : isVideo
-                            ? "Evidence Video" // Video minh chứng
-                            : "Attached Document", // Tài liệu đính kèm
+                            ? "Evidence Video"
+                            : "Attached Document",
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 15,
@@ -731,7 +791,7 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        "Tap to view details", // Nhấn để xem chi tiết
+                        "Tap to view details",
                         style: TextStyle(
                           color: Colors.grey[500],
                           fontSize: 12,
@@ -756,9 +816,8 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
     );
   }
 
-  // ... (Các widget info grid, workflow list giữ nguyên) ...
-  Widget _buildInfoGrid() {
-    if (widget.request.type == RequestType.ANNUAL_LEAVE) {
+  Widget _buildInfoGrid(RequestModel req) {
+    if (req.type == RequestType.ANNUAL_LEAVE) {
       return Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
@@ -774,7 +833,7 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
         ),
         child: Column(
           children: [
-            _buildInfoRow('Date Range', widget.request.dateRange, ''),
+            _buildInfoRow('Date Range', req.dateRange, ''),
             const Divider(height: 24, color: Color(0xFFF1F5F9)),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -789,7 +848,7 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
                   ),
                 ),
                 Text(
-                  widget.request.duration,
+                  req.duration,
                   style: const TextStyle(
                     color: Color(0xFF2563EB),
                     fontSize: 16,
@@ -818,17 +877,14 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
         ),
         child: Column(
           children: [
-            _buildSimpleInfoRow(
-              'Date',
-              widget.request.dateRange.split('•')[0].trim(),
-            ),
+            _buildSimpleInfoRow('Date', req.dateRange.split('•')[0].trim()),
             const Divider(height: 24, color: Color(0xFFF1F5F9)),
-            _buildSimpleInfoRow('Duration', widget.request.duration),
+            _buildSimpleInfoRow('Duration', req.duration),
             const Divider(height: 24, color: Color(0xFFF1F5F9)),
             _buildSimpleInfoRow(
               'Time',
-              widget.request.dateRange.contains('•')
-                  ? widget.request.dateRange.split('•')[1].trim()
+              req.dateRange.contains('•')
+                  ? req.dateRange.split('•')[1].trim()
                   : "N/A",
             ),
           ],
@@ -904,6 +960,7 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
     );
   }
 
+  // [HÀM BỊ THIẾU ĐÃ ĐƯỢC BỔ SUNG]
   Widget _buildWorkflowList(BuildContext context) {
     final steps = _getWorkflowSteps();
     return ListView.builder(
@@ -1069,8 +1126,8 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
     ),
   );
 }
-// --- Dán class này vào cuối file request_detail_page.dart ---
 
+// --- Class xem Ảnh Full ---
 class _FullScreenImageViewer extends StatelessWidget {
   final List<String> imageUrls;
   final int initialIndex;
@@ -1083,12 +1140,10 @@ class _FullScreenImageViewer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // PageController giúp mở đúng ảnh người dùng vừa bấm vào
     final PageController controller = PageController(initialPage: initialIndex);
 
     return Scaffold(
       backgroundColor: Colors.black,
-      // AppBar trong suốt để tối ưu không gian xem
       appBar: AppBar(
         backgroundColor: Colors.black.withOpacity(0.5),
         iconTheme: const IconThemeData(color: Colors.white),
@@ -1103,13 +1158,13 @@ class _FullScreenImageViewer extends StatelessWidget {
         itemCount: imageUrls.length,
         itemBuilder: (context, index) {
           return InteractiveViewer(
-            panEnabled: true, // Cho phép kéo ảnh
+            panEnabled: true,
             minScale: 0.5,
-            maxScale: 4.0, // Zoom tối đa 4x
+            maxScale: 4.0,
             child: Center(
               child: Image.network(
                 imageUrls[index],
-                fit: BoxFit.contain, // Hiển thị trọn vẹn ảnh
+                fit: BoxFit.contain,
                 loadingBuilder: (context, child, loadingProgress) {
                   if (loadingProgress == null) return child;
                   return const Center(
@@ -1138,7 +1193,7 @@ class _FullScreenImageViewer extends StatelessWidget {
   }
 }
 
-// --- Class xem Video Full màn hình (MỚI) ---
+// --- Class xem Video Full ---
 class _FullScreenVideoPlayer extends StatefulWidget {
   final String videoUrl;
   const _FullScreenVideoPlayer({required this.videoUrl});
@@ -1168,8 +1223,8 @@ class _FullScreenVideoPlayerState extends State<_FullScreenVideoPlayer> {
       setState(() {
         _chewieController = ChewieController(
           videoPlayerController: _videoPlayerController,
-          autoPlay: true, // Tự động phát khi mở
-          looping: false, // Không lặp lại
+          autoPlay: true,
+          looping: false,
           aspectRatio: _videoPlayerController.value.aspectRatio,
           errorBuilder: (context, errorMessage) {
             return const Center(
@@ -1189,7 +1244,6 @@ class _FullScreenVideoPlayerState extends State<_FullScreenVideoPlayer> {
 
   @override
   void dispose() {
-    // Quan trọng: Phải giải phóng bộ nhớ khi tắt
     _videoPlayerController.dispose();
     _chewieController?.dispose();
     super.dispose();

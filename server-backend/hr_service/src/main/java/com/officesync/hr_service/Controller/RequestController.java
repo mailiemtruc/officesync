@@ -74,4 +74,14 @@ public class RequestController {
         requestService.cancelRequest(requestId, userId);
         return ResponseEntity.ok(Map.of("message", "Request deleted successfully"));
     }
+
+    // 4. [MỚI - QUAN TRỌNG] Lấy danh sách đơn cần duyệt (Dành cho Manager)
+    // Frontend gọi: GET /api/requests/manager
+    @GetMapping("/manager")
+    public ResponseEntity<List<Request>> getManagerRequests(
+            @RequestHeader("X-User-Id") Long managerId) {
+        
+        List<Request> requests = requestService.getRequestsForManager(managerId);
+        return ResponseEntity.ok(requests);
+    }
 }
