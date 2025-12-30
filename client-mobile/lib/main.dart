@@ -17,6 +17,12 @@ import 'features/hr_service/presentation/pages/employee_list_page.dart';
 
 import 'features/note_service/presentation/pages/note_list_screen.dart';
 
+// ======================= TASK_SERVICE ==============================
+import 'features/task_service/presentation/pages/task_list_page.dart';
+import 'features/task_service/presentation/pages/staff_task_screen.dart';
+import 'features/task_service/presentation/pages/management_task_screen.dart';
+// ======================= TASK_SERVICE ==============================
+
 void main() {
   runApp(const OfficeSyncApp());
 }
@@ -26,6 +32,10 @@ class OfficeSyncApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // ======================= TASK_SERVICE ==============================
+    //  'COMPANY_ADMIN', 'MANAGER', 'STAFF'
+    const String currentTestRole = 'COMPANY_ADMIN';
+    // ======================= TASK_SERVICE ==============================
     return MaterialApp(
       title: 'OfficeSync',
       debugShowCheckedModeBanner: false,
@@ -38,8 +48,57 @@ class OfficeSyncApp extends StatelessWidget {
         fontFamily: 'Inter',
       ),
 
-      home: const SplashScreen(),
+      // home: const SplashScreen(),
 
+      // ======================= TASK_SERVICE ==============================
+
+      // home: const DashboardScreen(
+      //   userInfo: {
+      //     'id': 'admin_01',
+      //     'fullName': 'CEO OfficeSync',
+      //     'role': 'COMPANY_ADMIN', // <-- Quan trọng: Đổi thành COMPANY_ADMIN
+      //     'avatarUrl': null,
+      //   },
+      // ),
+      // home: Navigator(
+      //   onGenerateRoute: (settings) {
+      //     // Định nghĩa Role muốn test ở đây
+      //     const String testRole =
+      //         'STAFF'; // Đổi thành 'MANAGER', 'COMPANY_ADMIN', hoặc 'STAFF'
+
+      //     return MaterialPageRoute(
+      //       builder: (context) {
+      //         if (testRole == 'STAFF') {
+      //           return const StaffTaskScreen(); // Staff dùng màn hình riêng
+      //         } else {
+      //           return const ManagementTaskScreen(
+      //             userRole: testRole,
+      //           ); // Manager/Admin dùng chung màn hình này
+      //         }
+      //       },
+      //       settings: const RouteSettings(arguments: testRole),
+      //     );
+      //   },
+      // ),
+      home: Builder(
+        builder: (context) {
+          if (currentTestRole == 'STAFF') {
+            return const StaffTaskScreen();
+          } else {
+            return const ManagementTaskScreen(userRole: currentTestRole);
+          }
+        },
+      ),
+      // home: const DashboardScreen(
+      //   userInfo: {
+      //     'id': 'user_001',
+      //     'fullName': 'Demo User ($currentTestRole)',
+      //     'role': currentTestRole, // Truyền Role vào Dashboard
+      //     'avatarUrl': null,
+      //   },
+      // ),
+
+      // ======================= TASK_SERVICE ==============================
       routes: {
         // Auth Routes
         '/register': (context) => const RegisterScreen(),
@@ -63,6 +122,29 @@ class OfficeSyncApp extends StatelessWidget {
         '/manager_requests': (context) => const ManagerRequestListPage(),
         '/employees': (context) => const EmployeeListPage(),
         '/notes': (context) => const NoteListScreen(),
+
+        // ======================= TASK_SERVICE ==============================
+        // Logic phân quyền: Route này nhận 'role' từ Dashboard gửi sang
+        '/tasks': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments;
+          // Mặc định là STAFF nếu không có args (để tránh crash app)
+          String role = args is String ? args : 'STAFF';
+
+          // 1. Nếu là STAFF -> Vào màn hình riêng của nhân viên (My Job & Forms)
+          if (role == 'STAFF') {
+            return const StaffTaskScreen();
+          }
+          // 2. Nếu là MANAGER -> Vào Management Screen (có Tabs My Job/Assigned)
+          else if (role == 'MANAGER') {
+            return const ManagementTaskScreen(userRole: 'MANAGER');
+          }
+          // 3. Nếu là COMPANY_ADMIN -> Vào Management Screen (Full quyền, xem báo cáo tháng)
+          else {
+            return const ManagementTaskScreen(userRole: 'COMPANY_ADMIN');
+          }
+        },
+
+        // ======================= TASK_SERVICE ==============================
       },
     );
   }
