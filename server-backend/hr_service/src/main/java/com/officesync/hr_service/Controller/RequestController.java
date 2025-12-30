@@ -1,8 +1,11 @@
 package com.officesync.hr_service.Controller;
 
+import java.util.List;
 import java.util.Map;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -13,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.officesync.hr_service.Model.Request;
 import com.officesync.hr_service.Model.RequestStatus;
 import com.officesync.hr_service.Service.RequestService;
+
 import lombok.RequiredArgsConstructor;
 
 @RestController
@@ -48,5 +52,36 @@ public class RequestController {
         
         Request processed = requestService.approveRequest(requestId, approverId, status, comment);
         return ResponseEntity.ok(processed);
+    }
+
+    // [MỚI] API Lấy danh sách đơn từ
+    // URL: GET /api/requests
+    // Header: X-User-Id: <id>
+    @GetMapping
+    public ResponseEntity<List<Request>> getMyRequests(
+            @RequestHeader("X-User-Id") Long userId) {
+        
+        List<Request> requests = requestService.getMyRequests(userId);
+        return ResponseEntity.ok(requests);
+    }
+
+   // [SỬA] Đổi thành DeleteMapping
+    @DeleteMapping("/{requestId}")
+    public ResponseEntity<?> cancelRequest(
+            @PathVariable Long requestId,
+            @RequestHeader("X-User-Id") Long userId) {
+        
+        requestService.cancelRequest(requestId, userId);
+        return ResponseEntity.ok(Map.of("message", "Request deleted successfully"));
+    }
+
+    // 4. [MỚI - QUAN TRỌNG] Lấy danh sách đơn cần duyệt (Dành cho Manager)
+    // Frontend gọi: GET /api/requests/manager
+    @GetMapping("/manager")
+    public ResponseEntity<List<Request>> getManagerRequests(
+            @RequestHeader("X-User-Id") Long managerId) {
+        
+        List<Request> requests = requestService.getRequestsForManager(managerId);
+        return ResponseEntity.ok(requests);
     }
 }

@@ -1,5 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
+import 'package:flutter_quill/flutter_quill.dart' as quill;
 import 'package:flutter/material.dart';
+import 'package:bcrypt/bcrypt.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../../../core/api/api_client.dart';
 import '../../../../core/config/app_colors.dart';
@@ -30,6 +33,24 @@ class _NoteListScreenState extends State<NoteListScreen> {
 
   final TextEditingController _searchController = TextEditingController();
   Timer? _debounce;
+
+  // Hàm chuyển đổi JSON (Quill Delta) sang Plain Text
+  String _getPlainText(String jsonContent) {
+    if (jsonContent.isEmpty) return "";
+    try {
+      // 1. Decode chuỗi JSON thành List
+      final jsonData = jsonDecode(jsonContent);
+
+      // 2. Tạo Quill Document từ dữ liệu JSON
+      final doc = quill.Document.fromJson(jsonData);
+
+      // 3. Lấy văn bản thuần và thay thế xuống dòng bằng khoảng trắng
+      return doc.toPlainText().trim().replaceAll('\n', ' ');
+    } catch (e) {
+      // Nếu lỗi (hoặc dữ liệu cũ không phải JSON), trả về nguyên gốc
+      return jsonContent;
+    }
+  }
 
   @override
   void initState() {
@@ -316,14 +337,13 @@ class _NoteListScreenState extends State<NoteListScreen> {
                 onPressed: () => Navigator.pop(context),
               ),
 
-              // [SỬA TẠI ĐÂY]
               const Text(
                 "NOTE",
                 style: TextStyle(
-                  fontSize: 24, // Tăng size lên 24 cho giống tiêu đề lớn
-                  fontWeight: FontWeight.w800, // In đậm (ExtraBold)
-                  color: Color(0xFF2260FF), // Màu xanh yêu cầu
-                  fontFamily: 'Inter', // Thêm font nếu cần
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF2260FF),
+                  fontFamily: 'Inter',
                 ),
               ),
 
@@ -339,7 +359,6 @@ class _NoteListScreenState extends State<NoteListScreen> {
           ),
           const SizedBox(height: 5),
 
-          // Thanh tìm kiếm giữ nguyên
           Container(
             height: 40,
             decoration: BoxDecoration(
@@ -385,13 +404,54 @@ class _NoteListScreenState extends State<NoteListScreen> {
 
   // --- ITEM CỦA DANH SÁCH ---
   Widget _buildListNoteItem(NoteModel note) {
+    // Kiểm tra xem note có cài mã PIN không
+    bool isLocked = note.pin != null && note.pin!.isNotEmpty;
+
     return GestureDetector(
       onTap: () async {
-        await Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => NoteEditorScreen(note: note)),
-        );
-        _fetchNotes(query: _searchController.text);
+        if (isLocked) {
+          // --- LOGIC MỞ KHÓA ---
+          final input = await _showPinDialog(context);
+
+          if (input == null) return; // Người dùng bấm hủy
+
+          // [PHẦN SỬA ĐỔI QUAN TRỌNG Ở ĐÂY] ---------------------------
+          bool isCorrect = false;
+          try {
+            // Dùng BCrypt để so sánh mật khẩu nhập vào (input) với mã Hash (note.pin)
+            isCorrect = BCrypt.checkpw(input, note.pin!);
+          } catch (e) {
+            // Fallback: Nếu dữ liệu cũ chưa mã hóa (còn là số thường), so sánh kiểu cũ
+            isCorrect = input == note.pin;
+          }
+          // -----------------------------------------------------------
+
+          if (isCorrect) {
+            // Đúng mã -> Vào màn hình sửa
+            if (!mounted) return;
+            await Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => NoteEditorScreen(note: note)),
+            );
+            _fetchNotes(query: _searchController.text);
+          } else {
+            // Sai mã -> Báo lỗi
+            if (!mounted) return;
+            CustomSnackBar.show(
+              context,
+              title: "Access denied",
+              message: "The PIN is incorrect!",
+              isError: true,
+            );
+          }
+        } else {
+          // --- KHÔNG KHÓA -> VÀO LUÔN ---
+          await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => NoteEditorScreen(note: note)),
+          );
+          _fetchNotes(query: _searchController.text);
+        }
       },
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
@@ -410,6 +470,7 @@ class _NoteListScreenState extends State<NoteListScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Dòng 1: Tiêu đề + Ghim + Khóa
             Row(
               children: [
                 if (note.isPinned)
@@ -423,19 +484,35 @@ class _NoteListScreenState extends State<NoteListScreen> {
                   ),
                 Expanded(
                   child: Text(
-                    note.title.isEmpty ? "No title" : note.title,
-                    style: const TextStyle(
+                    // Nếu khóa thì hiện "Secret"
+                    isLocked
+                        ? "Secret"
+                        : (note.title.isEmpty ? "No title" : note.title),
+                    style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 17,
-                      color: Colors.black87,
+                      color: isLocked ? Colors.grey[600] : Colors.black87,
+                      fontStyle: isLocked ? FontStyle.italic : FontStyle.normal,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                // Icon khóa
+                if (isLocked)
+                  const Padding(
+                    padding: EdgeInsets.only(left: 8),
+                    child: Icon(
+                      PhosphorIconsFill.lockKey,
+                      size: 18,
+                      color: Colors.redAccent,
+                    ),
+                  ),
               ],
             ),
             const SizedBox(height: 6),
+
+            // Dòng 2: Ngày + Nội dung
             Row(
               children: [
                 Text(
@@ -449,8 +526,13 @@ class _NoteListScreenState extends State<NoteListScreen> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    note.content.replaceAll('\n', ' '),
-                    style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+                    // Nếu bị khóa thì hiện dấu chấm, nếu không thì parse JSON ra text
+                    isLocked ? "••••••••" : _getPlainText(note.content),
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: isLocked ? Colors.grey[300] : Colors.grey[500],
+                      letterSpacing: isLocked ? 3 : 0,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -458,6 +540,8 @@ class _NoteListScreenState extends State<NoteListScreen> {
               ],
             ),
             const SizedBox(height: 10),
+
+            // Dòng 3: Folder
             Row(
               children: [
                 Icon(
@@ -518,5 +602,152 @@ class _NoteListScreenState extends State<NoteListScreen> {
     } catch (e) {
       return "";
     }
+  }
+
+  // --- [GIAO DIỆN NHẬP PIN ĐẸP (STYLE BANKING)] ---
+  Future<String?> _showPinDialog(BuildContext context) async {
+    String currentPin = "";
+
+    return showDialog<String>(
+      context: context,
+      barrierDismissible: true, // Cho phép bấm ra ngoài để hủy
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return Dialog(
+              elevation: 0,
+              backgroundColor: Colors.transparent, // Nền trong suốt
+              child: Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(
+                        0xFF2260FF,
+                      ).withOpacity(0.2), // Bóng xanh
+                      blurRadius: 20,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // 1. Icon Ổ khóa xanh
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2260FF).withOpacity(0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        PhosphorIconsFill.lockKey,
+                        size: 32,
+                        color: Color(0xFF2260FF),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // 2. Tiêu đề
+                    const Text(
+                      "Enter PIN Code",
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      "Enter 6 digits to unlock note",
+                      style: TextStyle(fontSize: 14, color: Colors.grey),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 24),
+
+                    // 3. Khu vực nhập PIN
+                    Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        // Lớp dưới: 6 chấm tròn
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: List.generate(6, (index) {
+                            bool isFilled = index < currentPin.length;
+                            return Container(
+                              margin: const EdgeInsets.symmetric(horizontal: 6),
+                              width: 16,
+                              height: 16,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: isFilled
+                                    ? const Color(0xFF2260FF) // Đã nhập: Xanh
+                                    : const Color(0xFFE3E3E8), // Chưa nhập: Xám
+                                border: isFilled
+                                    ? null
+                                    : Border.all(color: Colors.grey.shade300),
+                              ),
+                            );
+                          }),
+                        ),
+
+                        // Lớp trên: TextField tàng hình
+                        Opacity(
+                          opacity: 0.0,
+                          child: TextField(
+                            autofocus: true,
+                            keyboardType: TextInputType.number,
+                            maxLength: 6,
+                            onChanged: (value) {
+                              setStateDialog(() {
+                                currentPin = value;
+                              });
+                              // Đủ 6 số tự động đóng và trả về kết quả
+                              if (value.length == 6) {
+                                Future.delayed(
+                                  const Duration(milliseconds: 100),
+                                  () {
+                                    Navigator.pop(ctx, value);
+                                  },
+                                );
+                              }
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+
+                    // 4. Nút Hủy
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 32,
+                          vertical: 12,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text(
+                        "Cancel",
+                        style: TextStyle(
+                          color: Colors.grey,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 }

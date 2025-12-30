@@ -7,6 +7,7 @@ class CustomSnackBar {
     required String title,
     required String message,
     bool isError = false,
+    double? marginBottom, // [MỚI] Thêm tham số tùy chỉnh khoảng cách đáy
   }) {
     ScaffoldMessenger.of(context).clearSnackBars();
 
@@ -18,7 +19,15 @@ class CustomSnackBar {
         backgroundColor: Colors.transparent,
         elevation: 0,
         behavior: SnackBarBehavior.floating,
-        margin: const EdgeInsets.all(20),
+
+        // [SỬA ĐỔI QUAN TRỌNG] Thay margin cố định bằng margin linh hoạt
+        margin: EdgeInsets.only(
+          left: 20,
+          right: 20,
+          top: 20,
+          // Nếu có truyền marginBottom thì dùng, không thì mặc định là 20
+          bottom: marginBottom ?? 20,
+        ),
 
         duration: Duration(milliseconds: autoDuration),
 

@@ -6,8 +6,13 @@ import '../../../../core/config/app_colors.dart'; // Import màu của dự án
 
 class CreatePostScreen extends StatefulWidget {
   final Function(String content, File? image) onPost;
+  final String myAvatarUrl;
 
-  const CreatePostScreen({super.key, required this.onPost});
+  const CreatePostScreen({
+    super.key,
+    required this.onPost,
+    this.myAvatarUrl = "",
+  });
 
   @override
   State<CreatePostScreen> createState() => _CreatePostScreenState();
@@ -74,17 +79,22 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
             child: Row(
               children: [
                 // Avatar giả định (sau này lấy từ User thật)
-                const CircleAvatar(
+                CircleAvatar(
                   radius: 24,
-                  backgroundColor: Color(0xFFE2E8F0),
-                  child: Icon(Icons.person, color: Colors.grey),
+                  backgroundColor: const Color(0xFFE2E8F0),
+                  backgroundImage: widget.myAvatarUrl.isNotEmpty
+                      ? NetworkImage(widget.myAvatarUrl)
+                      : null,
+                  child: widget.myAvatarUrl.isEmpty
+                      ? const Icon(Icons.person, color: Colors.grey)
+                      : null,
                 ),
                 const SizedBox(width: 12),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      "Company Admin", // Tên user
+                      "Me", // Tên user
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 16,

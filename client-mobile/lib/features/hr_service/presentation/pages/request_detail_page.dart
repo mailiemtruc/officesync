@@ -1,28 +1,261 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:video_player/video_player.dart';
+import 'package:chewie/chewie.dart';
+
+// [MỚI] WebSocket Import
+import 'package:stomp_dart_client/stomp.dart';
+import 'package:stomp_dart_client/stomp_config.dart';
+import 'package:stomp_dart_client/stomp_frame.dart';
+
 import '../../../../core/config/app_colors.dart';
 import '../../data/models/request_model.dart';
 import '../../widgets/confirm_bottom_sheet.dart';
+import '../../domain/repositories/request_repository_impl.dart';
+import '../../data/datasources/request_remote_data_source.dart';
 
-class RequestDetailPage extends StatelessWidget {
+class RequestDetailPage extends StatefulWidget {
   final RequestModel request;
 
   const RequestDetailPage({super.key, required this.request});
 
-  // --- LOGIC WORKFLOW CHUẨN ---
+  @override
+  State<RequestDetailPage> createState() => _RequestDetailPageState();
+}
+
+class _RequestDetailPageState extends State<RequestDetailPage> {
+  late final RequestRepositoryImpl _repository;
+  final _storage = const FlutterSecureStorage();
+  bool _isCancelling = false;
+
+  // [LOGIC REALTIME]
+  late RequestModel _currentRequest;
+  StompClient? stompClient;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentRequest = widget.request; // Khởi tạo dữ liệu
+    _repository = RequestRepositoryImpl(
+      remoteDataSource: RequestRemoteDataSource(),
+    );
+    _connectWebSocket(); // [MỚI]
+  }
+
+  // [MỚI] KẾT NỐI WEBSOCKET
+  // [SỬA LỖI QUAN TRỌNG]: Bỏ check userId null ở đây
+  void _connectWebSocket() {
+    final socketUrl = 'ws://10.0.2.2:8081/ws-hr/websocket';
+
+    stompClient = StompClient(
+      config: StompConfig(
+        url: socketUrl,
+        onConnect: (StompFrame frame) {
+          print("--> [RequestDetail] Connected WS");
+          final topic = '/topic/request/${widget.request.id}';
+
+          stompClient!.subscribe(
+            destination: topic,
+            callback: (StompFrame frame) {
+              if (frame.body != null) {
+                print("--> [RequestDetail] Received: ${frame.body}");
+                final Map<String, dynamic> data = jsonDecode(frame.body!);
+                final updatedReq = RequestModel.fromJson(data);
+
+                if (mounted) {
+                  setState(() {
+                    _currentRequest = updatedReq;
+                  });
+
+                  // Nếu bị hủy -> Back ra list
+                  if (updatedReq.status == RequestStatus.CANCELLED) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("Request has been cancelled."),
+                      ),
+                    );
+                    Navigator.pop(context, true);
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Status updated: ${_currentRequest.status.name}',
+                        ),
+                        backgroundColor: Colors.blueAccent,
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                }
+              }
+            },
+          );
+        },
+      ),
+    );
+    stompClient!.activate();
+  }
+
+  @override
+  void dispose() {
+    stompClient?.deactivate(); // Ngắt kết nối khi thoát trang
+    super.dispose();
+  }
+
+  // --- LOGIC BACKEND: HỦY ĐƠN ---
+  Future<void> _handleCancelRequest() async {
+    String? userId;
+    String? userInfo = await _storage.read(key: 'user_info');
+    if (userInfo != null) {
+      userId = jsonDecode(userInfo)['id'].toString();
+    } else {
+      userId = await _storage.read(key: 'userId');
+    }
+
+    if (userId == null) return;
+
+    setState(() => _isCancelling = true);
+    try {
+      await _repository.cancelRequest(widget.request.id.toString(), userId);
+      // Không cần pop thủ công ở đây nếu WebSocket hoạt động tốt,
+      // nhưng giữ lại để UX nhanh hơn.
+      if (mounted) {
+        Navigator.pop(context, true);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Error: $e")));
+      }
+    } finally {
+      if (mounted) setState(() => _isCancelling = false);
+    }
+  }
+
+  void _showCancelDialog(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => ConfirmBottomSheet(
+        title: 'Delete Request?',
+        message:
+            'Are you sure you want to delete this request? This action cannot be undone.',
+        confirmText: 'Yes, Delete',
+        confirmColor: const Color(0xFFDC2626),
+        onConfirm: () {
+          Navigator.pop(context);
+          _handleCancelRequest();
+        },
+      ),
+    );
+  }
+
+  // --- LOGIC XỬ LÝ URL & MỞ FILE ---
+  String _fixUrl(String url) {
+    if (Platform.isAndroid && url.contains('localhost')) {
+      return url.replaceFirst('localhost', '10.0.2.2');
+    }
+    return url;
+  }
+
+  void _openFile(String url) {
+    final String fixedUrl = _fixUrl(url);
+    final String lowerUrl = fixedUrl.toLowerCase();
+
+    if (lowerUrl.endsWith('.jpg') ||
+        lowerUrl.endsWith('.jpeg') ||
+        lowerUrl.endsWith('.png') ||
+        lowerUrl.endsWith('.webp')) {
+      final List<String> allImages = _getEvidenceUrls()
+          .map((e) => _fixUrl(e))
+          .where((e) {
+            final l = e.toLowerCase();
+            return l.endsWith('.jpg') ||
+                l.endsWith('.jpeg') ||
+                l.endsWith('.png') ||
+                l.endsWith('.webp');
+          })
+          .toList();
+
+      int initialIndex = allImages.indexOf(fixedUrl);
+      if (initialIndex == -1) initialIndex = 0;
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => _FullScreenImageViewer(
+            imageUrls: allImages,
+            initialIndex: initialIndex,
+          ),
+        ),
+      );
+    } else if (lowerUrl.endsWith('.mp4') ||
+        lowerUrl.endsWith('.mov') ||
+        lowerUrl.endsWith('.avi')) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => _FullScreenVideoPlayer(videoUrl: fixedUrl),
+        ),
+      );
+    } else {
+      _launchExternalUrl(fixedUrl);
+    }
+  }
+
+  Future<void> _launchExternalUrl(String url) async {
+    final uri = Uri.parse(url);
+    try {
+      if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+        throw 'Could not launch $url';
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Cannot open file: $e")));
+      }
+    }
+  }
+
+  List<String> _getEvidenceUrls() {
+    // Sử dụng _currentRequest
+    if (_currentRequest.evidenceUrl != null &&
+        _currentRequest.evidenceUrl!.isNotEmpty) {
+      return _currentRequest.evidenceUrl!.split(';');
+    }
+    return [];
+  }
+
+  // [LOGIC WORKFLOW] Cập nhật timeline
   List<Map<String, dynamic>> _getWorkflowSteps() {
-    // Định nghĩa các màu chuẩn (Solid - Không trong suốt)
     const colorGreen = Color(0xFF10B981);
     const colorRed = Color(0xFFDC2626);
     const colorBlue = Color(0xFF2563EB);
-    // Màu xám thống nhất cho đường kẻ
     const colorGrey = Color(0xFFCBD5E1);
+
+    // Dùng _currentRequest để update UI
+    final status = _currentRequest.status;
+
+    String submittedTime = 'Submitted';
+    if (_currentRequest.createdAt != null) {
+      submittedTime = DateFormat(
+        'HH:mm, dd/MM/yyyy',
+      ).format(_currentRequest.createdAt!);
+    }
 
     final steps = [
       {
         'title': 'Request Submitted',
-        'time': 'Oct 10, 2025 • 09:30 AM',
-        'actor': 'By: Nguyen Van A',
+        'time': submittedTime,
+        'actor': 'You',
         'dotColor': colorGreen,
         'lineColor': colorGrey,
         'isLast': false,
@@ -30,20 +263,16 @@ class RequestDetailPage extends StatelessWidget {
       },
       {
         'title': 'Manager Review',
-        'time': request.status == RequestStatus.pending
-            ? 'Processing...'
-            : 'Reviewed',
-        'actor': 'Assignee: Tran Thi B',
-        'dotColor': request.status == RequestStatus.pending
-            ? colorBlue
-            : colorGreen,
+        'time': status == RequestStatus.PENDING ? 'Processing...' : 'Reviewed',
+        'actor': 'Manager',
+        'dotColor': status == RequestStatus.PENDING ? colorBlue : colorGreen,
         'lineColor': colorGrey,
         'isLast': false,
-        'status': request.status == RequestStatus.pending ? 'current' : 'done',
+        'status': status == RequestStatus.PENDING ? 'current' : 'done',
       },
     ];
 
-    if (request.status == RequestStatus.pending) {
+    if (status == RequestStatus.PENDING) {
       steps.add({
         'title': 'Final Decision',
         'time': 'Waiting for approval',
@@ -53,31 +282,40 @@ class RequestDetailPage extends StatelessWidget {
         'isLast': true,
         'status': 'waiting',
       });
-    } else if (request.status == RequestStatus.approved) {
+    } else if (status == RequestStatus.APPROVED) {
       steps.add({
         'title': 'Request Approved',
-        'time': 'Oct 20 • 09:20 AM',
+        'time': 'Approved',
         'actor': 'System updated successfully.',
         'dotColor': const Color(0xFF10B981),
         'lineColor': Colors.transparent,
         'isLast': true,
         'status': 'approved_done',
       });
-    } else if (request.status == RequestStatus.rejected) {
+    } else if (status == RequestStatus.REJECTED) {
       steps.add({
         'title': 'Request Rejected',
-        'time': 'Oct 20 • 09:20 AM',
+        'time': 'Rejected',
         'actor': 'Tap \'See reason\' for details',
         'dotColor': colorRed,
         'lineColor': Colors.transparent,
         'isLast': true,
         'status': 'rejected_done',
       });
+    } else if (status == RequestStatus.CANCELLED) {
+      steps.add({
+        'title': 'Request Cancelled',
+        'time': 'Cancelled by you',
+        'actor': '',
+        'dotColor': Colors.grey,
+        'lineColor': Colors.transparent,
+        'isLast': true,
+        'status': 'cancelled_done',
+      });
     }
     return steps;
   }
 
-  // --- DIALOG LÝ DO TỪ CHỐI ---
   void _showRejectionDialog(BuildContext context) {
     showDialog(
       context: context,
@@ -97,8 +335,6 @@ class RequestDetailPage extends StatelessWidget {
                   child: InkWell(
                     onTap: () => Navigator.pop(context),
                     borderRadius: BorderRadius.circular(20),
-                    splashColor: Colors.transparent,
-                    highlightColor: Colors.grey.withOpacity(0.2),
                     child: Container(
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
@@ -154,40 +390,15 @@ class RequestDetailPage extends StatelessWidget {
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
+                  children: [
                     Text(
-                      '"Please plan your commute better. We have a strict client meeting at 8:30 AM every Monday that cannot be missed."',
-                      style: TextStyle(
+                      '"${_currentRequest.rejectReason ?? "No reason provided."}"',
+                      style: const TextStyle(
                         fontStyle: FontStyle.italic,
                         color: Color(0xFF334155),
                         height: 1.5,
                         fontFamily: 'Inter',
                       ),
-                    ),
-                    SizedBox(height: 12),
-                    Divider(height: 1, color: Color(0xFFE2E8F0)),
-                    SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'From: Tran Thi B',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF64748B),
-                            fontFamily: 'Inter',
-                          ),
-                        ),
-                        Text(
-                          'Oct 20, 09:15',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Color(0xFF94A3B8),
-                            fontFamily: 'Inter',
-                          ),
-                        ),
-                      ],
                     ),
                   ],
                 ),
@@ -198,18 +409,12 @@ class RequestDetailPage extends StatelessWidget {
                 height: 45,
                 child: ElevatedButton(
                   onPressed: () => Navigator.pop(context),
-                  style:
-                      ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF1E293B),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        splashFactory: NoSplash.splashFactory,
-                      ).copyWith(
-                        overlayColor: MaterialStateProperty.all(
-                          Colors.white.withOpacity(0.25),
-                        ),
-                      ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1E293B),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
                   child: const Text(
                     'Close',
                     style: TextStyle(
@@ -227,29 +432,13 @@ class RequestDetailPage extends StatelessWidget {
     );
   }
 
-  void _showCancelDialog(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) => ConfirmBottomSheet(
-        title: 'Cancel Request?',
-        message:
-            'Are you sure you want to cancel this request? This action cannot be undone.',
-        confirmText: 'Yes, Cancel',
-        confirmColor: const Color(0xFFDC2626),
-        onConfirm: () {
-          Navigator.pop(context);
-          Navigator.pop(context);
-        },
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    final isPending = request.status == RequestStatus.pending;
-    final isRejected = request.status == RequestStatus.rejected;
+    // [QUAN TRỌNG] Sử dụng _currentRequest thay vì widget.request để UI tự update
+    final req = _currentRequest;
+    final isPending = req.status == RequestStatus.PENDING;
+    final isRejected = req.status == RequestStatus.REJECTED;
+    final evidenceList = _getEvidenceUrls();
 
     return Scaffold(
       backgroundColor: const Color(0xFFF9F9F9),
@@ -268,14 +457,18 @@ class RequestDetailPage extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _buildMainStatusCard(context, isRejected),
+                        _buildMainStatusCard(
+                          context,
+                          isRejected,
+                          req,
+                        ), // Truyền req
                         const SizedBox(height: 24),
-                        _buildInfoGrid(),
+                        _buildInfoGrid(req), // Truyền req
                         const SizedBox(height: 24),
                         _buildSectionTitle('REASON'),
                         const SizedBox(height: 8),
                         Text(
-                          '"${request.description}"',
+                          '"${req.reason}"',
                           style: const TextStyle(
                             color: Color(0xFF334155),
                             fontSize: 16,
@@ -284,20 +477,32 @@ class RequestDetailPage extends StatelessWidget {
                             fontFamily: 'Inter',
                           ),
                         ),
-                        const SizedBox(height: 24),
-                        _buildSectionTitle('ATTACHMENT'),
-                        const SizedBox(height: 12),
-                        _buildAttachmentCard(),
+
+                        if (evidenceList.isNotEmpty) ...[
+                          const SizedBox(height: 24),
+                          _buildSectionTitle('ATTACHMENT'),
+                          const SizedBox(height: 12),
+                          ...evidenceList
+                              .map(
+                                (url) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 8.0),
+                                  child: _buildAttachmentCard(url),
+                                ),
+                              )
+                              .toList(),
+                        ],
+
                         const SizedBox(height: 24),
                         _buildSectionTitle('APPROVAL WORKFLOW'),
                         const SizedBox(height: 16),
+                        // [ĐÂY LÀ HÀM BẠN BỊ THIẾU Ở CÂU TRẢ LỜI TRƯỚC]
                         _buildWorkflowList(context),
                         const SizedBox(height: 80),
                       ],
                     ),
                   ),
                 ),
-                // NÚT CANCEL REQUEST
+
                 if (isPending)
                   Padding(
                     padding: const EdgeInsets.only(
@@ -308,52 +513,50 @@ class RequestDetailPage extends StatelessWidget {
                     child: SizedBox(
                       width: double.infinity,
                       height: 50,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFFDC2626).withOpacity(0.15),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
+                      child: ElevatedButton(
+                        onPressed: _isCancelling
+                            ? null
+                            : () => _showCancelDialog(context),
+                        style:
+                            ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFFEF2F2),
+                              foregroundColor: const Color(0xFFDC2626),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                side: const BorderSide(
+                                  color: Color(0xFFFCA5A5),
+                                ),
+                              ),
+                              elevation: 0,
+                            ).copyWith(
+                              overlayColor: MaterialStateProperty.all(
+                                const Color(0xFFDC2626).withOpacity(0.1),
+                              ),
                             ),
-                          ],
-                        ),
-                        child: ElevatedButton(
-                          onPressed: () => _showCancelDialog(context),
-                          style:
-                              ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFFFEF2F2),
-                                foregroundColor: const Color(0xFFDC2626),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  side: const BorderSide(
-                                    color: Color(0xFFFCA5A5),
+                        child: _isCancelling
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  color: Color(0xFFDC2626),
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: const [
+                                  Icon(PhosphorIconsRegular.x, size: 18),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    'Cancel Request',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w700,
+                                      fontFamily: 'Inter',
+                                    ),
                                   ),
-                                ),
-                                elevation: 0,
-                                splashFactory: NoSplash.splashFactory,
-                              ).copyWith(
-                                overlayColor: MaterialStateProperty.all(
-                                  const Color(0xFFDC2626).withOpacity(0.1),
-                                ),
+                                ],
                               ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: const [
-                              Icon(PhosphorIconsRegular.x, size: 18),
-                              SizedBox(width: 8),
-                              Text(
-                                'Cancel Request',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w700,
-                                  fontFamily: 'Inter',
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
                       ),
                     ),
                   ),
@@ -365,9 +568,17 @@ class RequestDetailPage extends StatelessWidget {
     );
   }
 
-  // --- WIDGETS CON ---
+  // --- CÁC WIDGET CON ---
 
-  Widget _buildMainStatusCard(BuildContext context, bool isRejected) {
+  Widget _buildMainStatusCard(
+    BuildContext context,
+    bool isRejected,
+    RequestModel req,
+  ) {
+    String displayCode = req.requestCode != null && req.requestCode!.isNotEmpty
+        ? req.requestCode!
+        : (req.id?.toString().padLeft(4, '0') ?? "N/A");
+
     return Container(
       width: double.infinity,
       clipBehavior: Clip.hardEdge,
@@ -384,17 +595,13 @@ class RequestDetailPage extends StatelessWidget {
       ),
       child: Column(
         children: [
-          Container(
-            height: 6,
-            width: double.infinity,
-            color: request.statusColor,
-          ),
+          Container(height: 6, width: double.infinity, color: req.statusColor),
           Padding(
             padding: const EdgeInsets.all(20),
             child: Column(
               children: [
                 Text(
-                  request.title,
+                  req.type.name, // Dùng req.type.name
                   style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w700,
@@ -403,7 +610,7 @@ class RequestDetailPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '#REQ-${request.id.padLeft(4, '0')}',
+                  '#$displayCode',
                   style: const TextStyle(
                     color: Color(0xFF94A3B8),
                     fontSize: 14,
@@ -417,13 +624,13 @@ class RequestDetailPage extends StatelessWidget {
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: request.statusBgColor,
+                    color: req.statusBgColor,
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    request.statusText.toUpperCase(),
+                    req.status.name,
                     style: TextStyle(
-                      color: request.statusColor,
+                      color: req.statusColor,
                       fontWeight: FontWeight.w700,
                       fontSize: 12,
                       fontFamily: 'Inter',
@@ -437,8 +644,6 @@ class RequestDetailPage extends StatelessWidget {
                     child: InkWell(
                       onTap: () => _showRejectionDialog(context),
                       borderRadius: BorderRadius.circular(20),
-                      splashColor: Colors.transparent,
-                      highlightColor: Colors.grey.withOpacity(0.2),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 8,
@@ -476,8 +681,143 @@ class RequestDetailPage extends StatelessWidget {
     );
   }
 
-  Widget _buildInfoGrid() {
-    if (request.type == RequestType.leave) {
+  Widget _buildAttachmentCard(String fileUrl) {
+    final String fixedUrl = _fixUrl(fileUrl);
+    final String lowerUrl = fixedUrl.toLowerCase();
+
+    final bool isImage =
+        lowerUrl.endsWith('.jpg') ||
+        lowerUrl.endsWith('.jpeg') ||
+        lowerUrl.endsWith('.png') ||
+        lowerUrl.endsWith('.webp');
+
+    final bool isVideo =
+        lowerUrl.endsWith('.mp4') ||
+        lowerUrl.endsWith('.mov') ||
+        lowerUrl.endsWith('.avi');
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFECF1FF)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => _openFile(fileUrl),
+          child: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: SizedBox(
+                    width: 60,
+                    height: 60,
+                    child: isImage
+                        ? Image.network(
+                            fixedUrl,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Container(
+                                color: Colors.grey[200],
+                                child: const Icon(
+                                  Icons.broken_image,
+                                  color: Colors.grey,
+                                ),
+                              );
+                            },
+                            loadingBuilder: (context, child, loadingProgress) {
+                              if (loadingProgress == null) return child;
+                              return Container(
+                                color: Colors.grey[100],
+                                child: const Center(
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                              );
+                            },
+                          )
+                        : Container(
+                            color: isVideo
+                                ? Colors.orange.withOpacity(0.1)
+                                : const Color(0xFFEFF1F5),
+                            child: Icon(
+                              isVideo
+                                  ? PhosphorIcons.playCircle(
+                                      PhosphorIconsStyle.fill,
+                                    )
+                                  : PhosphorIcons.fileText(
+                                      PhosphorIconsStyle.fill,
+                                    ),
+                              color: isVideo
+                                  ? Colors.orange
+                                  : AppColors.primary,
+                              size: 32,
+                            ),
+                          ),
+                  ),
+                ),
+
+                const SizedBox(width: 16),
+
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        isImage
+                            ? "Evidence Image"
+                            : isVideo
+                            ? "Evidence Video"
+                            : "Attached Document",
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                          fontFamily: 'Inter',
+                          color: Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        "Tap to view details",
+                        style: TextStyle(
+                          color: Colors.grey[500],
+                          fontSize: 12,
+                          fontFamily: 'Inter',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 16,
+                  color: Color(0xFFBDC6DE),
+                ),
+                const SizedBox(width: 8),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoGrid(RequestModel req) {
+    if (req.type == RequestType.ANNUAL_LEAVE) {
       return Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
@@ -493,9 +833,7 @@ class RequestDetailPage extends StatelessWidget {
         ),
         child: Column(
           children: [
-            _buildInfoRow('From Date', 'Oct 24, 2025', '08:00 AM'),
-            const Divider(height: 24, color: Color(0xFFF1F5F9)),
-            _buildInfoRow('To Date', 'Oct 26, 2025', '05:30 PM'),
+            _buildInfoRow('Date Range', req.dateRange, ''),
             const Divider(height: 24, color: Color(0xFFF1F5F9)),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -510,9 +848,9 @@ class RequestDetailPage extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '3 Days',
-                  style: TextStyle(
-                    color: const Color(0xFF2563EB),
+                  req.duration,
+                  style: const TextStyle(
+                    color: Color(0xFF2563EB),
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
                     fontFamily: 'Inter',
@@ -539,11 +877,16 @@ class RequestDetailPage extends StatelessWidget {
         ),
         child: Column(
           children: [
-            _buildSimpleInfoRow('Date', 'Oct 24, 2025'),
+            _buildSimpleInfoRow('Date', req.dateRange.split('•')[0].trim()),
             const Divider(height: 24, color: Color(0xFFF1F5F9)),
-            _buildSimpleInfoRow('Duration', request.duration),
+            _buildSimpleInfoRow('Duration', req.duration),
             const Divider(height: 24, color: Color(0xFFF1F5F9)),
-            _buildSimpleInfoRow('Time', '08:00 - 11:00 AM'),
+            _buildSimpleInfoRow(
+              'Time',
+              req.dateRange.contains('•')
+                  ? req.dateRange.split('•')[1].trim()
+                  : "N/A",
+            ),
           ],
         ),
       );
@@ -576,14 +919,15 @@ class RequestDetailPage extends StatelessWidget {
                 fontFamily: 'Inter',
               ),
             ),
-            Text(
-              time,
-              style: const TextStyle(
-                color: Color(0xFF94A3B8),
-                fontSize: 13,
-                fontFamily: 'Inter',
+            if (time.isNotEmpty)
+              Text(
+                time,
+                style: const TextStyle(
+                  color: Color(0xFF94A3B8),
+                  fontSize: 13,
+                  fontFamily: 'Inter',
+                ),
               ),
-            ),
           ],
         ),
       ],
@@ -616,77 +960,7 @@ class RequestDetailPage extends StatelessWidget {
     );
   }
 
-  Widget _buildAttachmentCard() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFECF1FF)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: const Color(0xFFEFF6FF),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(
-              PhosphorIcons.fileImage(PhosphorIconsStyle.fill),
-              color: AppColors.primary,
-            ),
-          ),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'ticket_booking.jpg',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                    fontFamily: 'Inter',
-                  ),
-                ),
-                Text(
-                  '2.4 MB',
-                  style: TextStyle(
-                    color: Colors.grey,
-                    fontSize: 12,
-                    fontFamily: 'Inter',
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(8),
-              splashColor: Colors.transparent,
-              highlightColor: Colors.grey.withOpacity(0.2),
-              onTap: () {},
-              child: const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                child: Text(
-                  'View',
-                  style: TextStyle(
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.w600,
-                    fontFamily: 'Inter',
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
+  // [HÀM BỊ THIẾU ĐÃ ĐƯỢC BỔ SUNG]
   Widget _buildWorkflowList(BuildContext context) {
     final steps = _getWorkflowSteps();
     return ListView.builder(
@@ -704,16 +978,18 @@ class RequestDetailPage extends StatelessWidget {
 
         Color titleColor = Colors.black;
         Color actorColor = const Color(0xFF64748B);
-        FontWeight titleWeight = FontWeight.bold; // Mặc định là Bold
+        FontWeight titleWeight = FontWeight.bold;
 
         if (status == 'approved_done') {
-          titleColor = const Color(0xFF10B981); // Solid Green
+          titleColor = const Color(0xFF10B981);
           actorColor = const Color(0xFF10B981);
-          // SỬA: Tăng độ đậm lên mức cao nhất (Black - w900)
           titleWeight = FontWeight.w900;
         } else if (status == 'rejected_done') {
           titleColor = const Color(0xFFDC2626);
           actorColor = const Color(0xFFF87171);
+        } else if (status == 'cancelled_done') {
+          titleColor = Colors.grey;
+          actorColor = Colors.grey;
         }
 
         return IntrinsicHeight(
@@ -755,7 +1031,7 @@ class RequestDetailPage extends StatelessWidget {
                         title,
                         style: TextStyle(
                           color: titleColor,
-                          fontWeight: titleWeight, // Dùng biến này
+                          fontWeight: titleWeight,
                           fontSize: 16,
                           fontFamily: 'Inter',
                         ),
@@ -790,9 +1066,7 @@ class RequestDetailPage extends StatelessWidget {
                                 style: TextStyle(
                                   color: actorColor,
                                   fontSize: 13,
-                                  // SỬA: Trả lại in nghiêng (italic)
                                   fontStyle: FontStyle.italic,
-                                  // SỬA: Bỏ độ đậm w500 để trông thanh thoát hơn
                                   fontWeight: FontWeight.normal,
                                   fontFamily: 'Inter',
                                 ),
@@ -851,4 +1125,159 @@ class RequestDetailPage extends StatelessWidget {
       fontFamily: 'Inter',
     ),
   );
+}
+
+// --- Class xem Ảnh Full ---
+class _FullScreenImageViewer extends StatelessWidget {
+  final List<String> imageUrls;
+  final int initialIndex;
+
+  const _FullScreenImageViewer({
+    super.key,
+    required this.imageUrls,
+    this.initialIndex = 0,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final PageController controller = PageController(initialPage: initialIndex);
+
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black.withOpacity(0.5),
+        iconTheme: const IconThemeData(color: Colors.white),
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.close),
+          onPressed: () => Navigator.pop(context),
+        ),
+      ),
+      body: PageView.builder(
+        controller: controller,
+        itemCount: imageUrls.length,
+        itemBuilder: (context, index) {
+          return InteractiveViewer(
+            panEnabled: true,
+            minScale: 0.5,
+            maxScale: 4.0,
+            child: Center(
+              child: Image.network(
+                imageUrls[index],
+                fit: BoxFit.contain,
+                loadingBuilder: (context, child, loadingProgress) {
+                  if (loadingProgress == null) return child;
+                  return const Center(
+                    child: CircularProgressIndicator(color: Colors.white),
+                  );
+                },
+                errorBuilder: (context, error, stackTrace) => const Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.broken_image, color: Colors.white, size: 40),
+                      SizedBox(height: 8),
+                      Text(
+                        'Failed to load image',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+// --- Class xem Video Full ---
+class _FullScreenVideoPlayer extends StatefulWidget {
+  final String videoUrl;
+  const _FullScreenVideoPlayer({required this.videoUrl});
+
+  @override
+  State<_FullScreenVideoPlayer> createState() => _FullScreenVideoPlayerState();
+}
+
+class _FullScreenVideoPlayerState extends State<_FullScreenVideoPlayer> {
+  late VideoPlayerController _videoPlayerController;
+  ChewieController? _chewieController;
+  bool _isError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializePlayer();
+  }
+
+  Future<void> _initializePlayer() async {
+    try {
+      _videoPlayerController = VideoPlayerController.networkUrl(
+        Uri.parse(widget.videoUrl),
+      );
+      await _videoPlayerController.initialize();
+
+      setState(() {
+        _chewieController = ChewieController(
+          videoPlayerController: _videoPlayerController,
+          autoPlay: true,
+          looping: false,
+          aspectRatio: _videoPlayerController.value.aspectRatio,
+          errorBuilder: (context, errorMessage) {
+            return const Center(
+              child: Text(
+                'Video loading error',
+                style: TextStyle(color: Colors.white),
+              ),
+            );
+          },
+        );
+      });
+    } catch (e) {
+      setState(() => _isError = true);
+      debugPrint("Video Error: $e");
+    }
+  }
+
+  @override
+  void dispose() {
+    _videoPlayerController.dispose();
+    _chewieController?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        iconTheme: const IconThemeData(color: Colors.white),
+        elevation: 0,
+      ),
+      body: SafeArea(
+        child: Center(
+          child: _isError
+              ? const Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.error_outline, color: Colors.red, size: 40),
+                    SizedBox(height: 10),
+                    Text(
+                      "This video cannot be played.",
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ],
+                )
+              : _chewieController != null &&
+                    _chewieController!.videoPlayerController.value.isInitialized
+              ? Chewie(controller: _chewieController!)
+              : const CircularProgressIndicator(color: Colors.white),
+        ),
+      ),
+    );
+  }
 }

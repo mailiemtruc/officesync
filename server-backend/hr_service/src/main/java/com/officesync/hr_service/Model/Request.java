@@ -15,6 +15,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties; // [IMPORT QUAN TRỌNG]
 @Entity
 @Table(name = "requests")
 @Data
@@ -24,13 +25,15 @@ public class Request extends BaseEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-@Column(name = "request_code", length = 20, unique = true, updatable = false)
+  @Column(name = "request_code", length = 20, unique = true, updatable = false)
     private String requestCode;
-    @ManyToOne(fetch = FetchType.LAZY)
+   @ManyToOne(fetch = FetchType.LAZY)
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "password", "requests"}) 
     @JoinColumn(name = "user_id", nullable = false)
     private Employee requester;
 
     @ManyToOne(fetch = FetchType.LAZY)
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "manager", "members", "employees"})
     @JoinColumn(name = "department_id")
     private Department department;
 

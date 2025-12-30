@@ -6,4 +6,5 @@ import lombok.Data;
 public class CommentRequestDTO {
     private String content;
     private Long parentId;
+    private String userAvatar;
 }

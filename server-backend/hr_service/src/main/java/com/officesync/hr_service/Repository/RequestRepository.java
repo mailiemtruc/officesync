@@ -10,11 +10,12 @@ import com.officesync.hr_service.Model.RequestStatus;
 
 @Repository
 public interface RequestRepository extends JpaRepository<Request, Long> {
-    // 1. Lấy lịch sử đơn từ của chính mình
-    List<Request> findByRequesterId(Long requesterId);
+List<Request> findByRequesterIdOrderByCreatedAtDesc(Long requesterId);
 
     // 2. Lấy danh sách đơn cần duyệt theo phòng ban (Dành cho Manager)
     List<Request> findByDepartmentIdAndStatus(Long departmentId, RequestStatus status);
-
-   
+    // 2. [CŨ - KHÔNG DÙNG NỮA] Lấy theo phòng ban
+    List<Request> findByDepartmentIdOrderByCreatedAtDesc(Long departmentId);
+// 3. [CŨ - DÙNG LẠI] Lấy tất cả đơn của công ty (cho Admin xem History)
+    List<Request> findByCompanyIdOrderByCreatedAtDesc(Long companyId);
 }

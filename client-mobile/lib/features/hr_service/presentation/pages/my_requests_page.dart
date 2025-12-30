@@ -1,7 +1,18 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
+// [MỚI] Thêm thư viện Socket
+import 'package:stomp_dart_client/stomp.dart';
+import 'package:stomp_dart_client/stomp_config.dart';
+import 'package:stomp_dart_client/stomp_frame.dart';
+
 import '../../../../core/config/app_colors.dart';
 import '../../data/models/request_model.dart';
+import '../../data/datasources/request_remote_data_source.dart';
+import '../../domain/repositories/request_repository_impl.dart';
+
 import 'create_request_page.dart';
 import 'request_detail_page.dart';
 
@@ -14,128 +25,141 @@ class MyRequestsPage extends StatefulWidget {
 
 class _MyRequestsPageState extends State<MyRequestsPage> {
   String _selectedFilter = 'All';
+  List<RequestModel> _requests = [];
+  bool _isLoading = true;
 
-  // Dữ liệu mẫu
-  final List<RequestModel> _requests = [
-    RequestModel(
-      id: '1',
-      type: RequestType.leave,
-      title: 'Annual Leave',
-      description: 'Taking a few days off for family trip to Da Nang city.',
-      dateRange: 'Oct 24 - Oct 26',
-      duration: '3 days',
-      status: RequestStatus.pending,
-    ),
-    RequestModel(
-      id: '2',
-      type: RequestType.overtime,
-      title: 'Overtime',
-      description: 'Urgent release deployment for Project X.',
-      dateRange: 'Oct 20 • 18:00 - 21:00',
-      duration: '3 hours',
-      status: RequestStatus.approved,
-    ),
-    RequestModel(
-      id: '3',
-      type: RequestType.lateEarly,
-      title: 'Late Arrival',
-      description: 'Heavy rain caused traffic jam.',
-      dateRange: 'Sep 15 • 08:30 - 09:30',
-      duration: '1 hour',
-      status: RequestStatus.rejected,
-    ),
-  ];
+  final _storage = const FlutterSecureStorage();
+  late final RequestRepositoryImpl _repository;
+
+  // [MỚI] Biến Socket
+  StompClient? _stompClient;
+
+  @override
+  void initState() {
+    super.initState();
+    _repository = RequestRepositoryImpl(
+      remoteDataSource: RequestRemoteDataSource(),
+    );
+    _fetchRequests();
+  }
+
+  // [MỚI] Ngắt kết nối khi thoát
+  @override
+  void dispose() {
+    _stompClient?.deactivate();
+    super.dispose();
+  }
+
+  Future<String?> _getUserIdFromStorage() async {
+    try {
+      String? userInfoStr = await _storage.read(key: 'user_info');
+      if (userInfoStr != null) {
+        Map<String, dynamic> userMap = jsonDecode(userInfoStr);
+        return userMap['id']?.toString();
+      }
+      return await _storage.read(key: 'userId');
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // [MỚI] Hàm khởi tạo WebSocket
+  void _initWebSocket(String userId) {
+    // Nếu đã connect rồi thì thôi
+    if (_stompClient != null && _stompClient!.isActive) return;
+
+    final socketUrl = 'ws://10.0.2.2:8081/ws-hr/websocket';
+
+    _stompClient = StompClient(
+      config: StompConfig(
+        url: socketUrl,
+        onConnect: (StompFrame frame) {
+          print("--> [MyRequests] Connected to WS");
+          // Subscribe kênh riêng của User để nhận tin: Tạo mới, Duyệt, Từ chối
+          _stompClient!.subscribe(
+            destination: '/topic/user/$userId/requests',
+            callback: (StompFrame frame) {
+              if (frame.body != null) {
+                print("--> [MyRequests] Update received: ${frame.body}");
+                final dynamic data = jsonDecode(frame.body!);
+                final updatedReq = RequestModel.fromJson(data);
+
+                if (mounted) {
+                  setState(() {
+                    final index = _requests.indexWhere(
+                      (r) => r.id == updatedReq.id,
+                    );
+                    if (index != -1) {
+                      // Cập nhật đơn đã có
+                      _requests[index] = updatedReq;
+                    } else {
+                      // Thêm đơn mới vào đầu list
+                      _requests.insert(0, updatedReq);
+                    }
+                  });
+                }
+              }
+            },
+          );
+        },
+        onWebSocketError: (dynamic error) => print("--> [WS Error]: $error"),
+      ),
+    );
+    _stompClient!.activate();
+  }
+
+  Future<void> _fetchRequests() async {
+    setState(() => _isLoading = true);
+    try {
+      final userId = await _getUserIdFromStorage();
+      if (userId != null) {
+        // [MỚI] Kích hoạt Socket ngay khi có ID
+        _initWebSocket(userId);
+
+        final data = await _repository.getMyRequests(userId);
+        setState(() {
+          _requests = data;
+          _requests.sort((a, b) => b.startTime.compareTo(a.startTime));
+        });
+      } else {
+        print("User ID not found!");
+      }
+    } catch (e) {
+      print("Error fetching requests: $e");
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
 
   List<RequestModel> get _filteredRequests {
     if (_selectedFilter == 'All') return _requests;
-    return _requests.where((r) => r.statusText == _selectedFilter).toList();
-  }
-
-  // --- HÀM XỬ LÝ ĐIỀU HƯỚNG ---
-  void _onBottomNavTap(int index) {
-    switch (index) {
-      case 0: // Home -> Về Dashboard
-        Navigator.pushNamedAndRemoveUntil(
-          context,
-          '/dashboard',
-          (route) => false,
-        );
-        break;
-      case 1: // Menu -> Quay lại Menu (Pop)
-        Navigator.pop(context);
-        break;
-      case 2: // Profile
-        Navigator.pushNamed(context, '/user_profile');
-        break;
-    }
+    return _requests
+        .where(
+          (r) => r.statusText.toUpperCase() == _selectedFilter.toUpperCase(),
+        )
+        .toList();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF9F9F9),
-
-      // --- THANH ĐIỀU HƯỚNG ---
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, -5),
-            ),
-          ],
-        ),
-        child: BottomNavigationBar(
-          backgroundColor: Colors.white,
-          currentIndex: 1, // Đang ở nhánh Menu
-          onTap: _onBottomNavTap,
-          selectedItemColor: AppColors.primary,
-          unselectedItemColor: Colors.grey,
-          showUnselectedLabels: true,
-          type: BottomNavigationBarType.fixed,
-          selectedLabelStyle: const TextStyle(
-            fontFamily: 'Inter',
-            fontWeight: FontWeight.w600,
-            fontSize: 12,
-          ),
-          unselectedLabelStyle: const TextStyle(
-            fontFamily: 'Inter',
-            fontWeight: FontWeight.w500,
-            fontSize: 12,
-          ),
-          items: [
-            BottomNavigationBarItem(
-              icon: Icon(PhosphorIconsRegular.house),
-              activeIcon: Icon(PhosphorIconsFill.house),
-              label: 'Home',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(PhosphorIconsFill.squaresFour),
-              activeIcon: Icon(PhosphorIconsFill.squaresFour),
-              label: 'Menu',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(PhosphorIconsRegular.user),
-              activeIcon: Icon(PhosphorIconsFill.user),
-              label: 'Profile',
-            ),
-          ],
-        ),
-      ),
-
       floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.push(
+        onPressed: () async {
+          final result = await Navigator.push(
             context,
             MaterialPageRoute(builder: (context) => const CreateRequestPage()),
           );
+          if (result == true) {
+            _fetchRequests();
+          }
         },
         backgroundColor: AppColors.primary,
         shape: const CircleBorder(),
         elevation: 4,
         child: const Icon(Icons.add, color: Colors.white, size: 28),
       ),
+
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
@@ -176,7 +200,6 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
                 ),
 
                 const SizedBox(height: 24),
-
                 // Search & Filter
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -190,7 +213,6 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
                 ),
 
                 const SizedBox(height: 20),
-
                 // Filter Tabs
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
@@ -240,13 +262,12 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
                 ),
 
                 const SizedBox(height: 24),
-
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 24),
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
-                      'THIS MONTH',
+                      'HISTORY',
                       style: TextStyle(
                         color: Color(0xFF655F5F),
                         fontSize: 14,
@@ -256,21 +277,29 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
                     ),
                   ),
                 ),
-
                 const SizedBox(height: 12),
 
                 // List Requests
                 Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 8,
-                    ),
-                    itemCount: _filteredRequests.length,
-                    itemBuilder: (context, index) {
-                      return _buildRequestCard(_filteredRequests[index]);
-                    },
-                  ),
+                  child: _isLoading
+                      ? const Center(child: CircularProgressIndicator())
+                      : _filteredRequests.isEmpty
+                      ? Center(
+                          child: Text(
+                            "No requests found",
+                            style: TextStyle(color: Colors.grey[400]),
+                          ),
+                        )
+                      : ListView.builder(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 8,
+                          ),
+                          itemCount: _filteredRequests.length,
+                          itemBuilder: (context, index) {
+                            return _buildRequestCard(_filteredRequests[index]);
+                          },
+                        ),
                 ),
               ],
             ),
@@ -299,16 +328,17 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
         borderRadius: BorderRadius.circular(10),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-          onTap: () {
-            Navigator.push(
+          onTap: () async {
+            final result = await Navigator.push(
               context,
               MaterialPageRoute(
                 builder: (context) => RequestDetailPage(request: request),
               ),
             );
+            if (result == true) {
+              _fetchRequests();
+            }
           },
-          splashColor: Colors.grey.withOpacity(0.1),
-          highlightColor: Colors.grey.withOpacity(0.05),
           child: IntrinsicHeight(
             child: Row(
               children: [
@@ -427,7 +457,6 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
       ),
     ),
   );
-
   Widget _buildFilterButton() => Container(
     width: 45,
     height: 45,

@@ -21,6 +21,13 @@ public class NewsfeedService {
     @Autowired private PostViewRepository viewRepository;
     // 1. Tạo bài viết
     public Post createPost(PostRequestDTO request, User currentUser) {
+        // 1. Logic Lazy Sync: Cập nhật User nếu Avatar thay đổi
+        if (request.getUserAvatar() != null && !request.getUserAvatar().isEmpty()) {
+            if (!request.getUserAvatar().equals(currentUser.getAvatarUrl())) {
+                currentUser.setAvatarUrl(request.getUserAvatar());
+                userRepository.save(currentUser); // Lưu avatar mới vào DB
+            }
+        }
         Post post = new Post();
         post.setContent(request.getContent());
         post.setImageUrl(request.getImageUrl());
@@ -31,12 +38,12 @@ public class NewsfeedService {
         post.setCompanyId(1L); 
         
         post.setAuthorName(currentUser.getEmail()); 
-        post.setAuthorAvatar("https://i.pravatar.cc/150"); 
+        post.setAuthorAvatar(currentUser.getAvatarUrl());
         
         return postRepository.save(post);
     }
 
-    // 2. Lấy danh sách bài viết
+    // 2. Lấy danh sách bài viết (Đã sửa để luôn hiện Avatar mới nhất)
     public List<PostResponseDTO> getPosts(Long companyId, Long currentUserId) {
         List<Post> posts = postRepository.findByCompanyIdOrderByCreatedAtDesc(companyId);
 
@@ -44,13 +51,18 @@ public class NewsfeedService {
             Optional<PostReaction> reaction = reactionRepository.findByPostIdAndUserId(post.getId(), currentUserId);
             ReactionType myReaction = reaction.map(PostReaction::getReactionType).orElse(null);
 
+            // ✅ SỬA ĐOẠN NÀY: Tìm thông tin tác giả mới nhất từ bảng Users
+            User author = userRepository.findById(post.getAuthorId()).orElse(null);
+            String latestAvatar = (author != null) ? author.getAvatarUrl() : post.getAuthorAvatar();
+            String latestName = (author != null) ? author.getFullName() : post.getAuthorName();
+
             return PostResponseDTO.builder()
                     .id(post.getId())
                     .content(post.getContent())
                     .imageUrl(post.getImageUrl())
                     .authorId(post.getAuthorId())
-                    .authorName(post.getAuthorName())
-                    .authorAvatar(post.getAuthorAvatar())
+                    .authorName(latestName)   // Dùng tên mới nhất
+                    .authorAvatar(latestAvatar) // Dùng avatar mới nhất
                     .createdAt(post.getCreatedAt())
                     .reactionCount(reactionRepository.countByPostId(post.getId()))
                     .commentCount(commentRepository.countByPostId(post.getId()))
@@ -81,11 +93,12 @@ public class NewsfeedService {
     }
 
 
-// 1. HÀM MỚI: LẤY DANH SÁCH COMMENT
+// 1. Lấy danh sách comment (Đã sửa để luôn hiện Avatar mới nhất)
     public List<CommentResponseDTO> getComments(Long postId) {
         List<PostComment> comments = commentRepository.findByPostIdOrderByCreatedAtAsc(postId);
 
         return comments.stream().map(comment -> {
+            // ✅ Luôn query User để lấy avatar mới nhất
             User user = userRepository.findById(comment.getUserId()).orElse(null);
             
             return CommentResponseDTO.builder()
@@ -94,6 +107,7 @@ public class NewsfeedService {
                     .parentId(comment.getParentComment() != null ? comment.getParentComment().getId() : null)
                     .userId(comment.getUserId())
                     .authorName(user != null ? user.getFullName() : "Unknown User")
+                    // ✅ Lấy avatar từ bảng User (đã được đồng bộ) thay vì fix cứng
                     .authorAvatar(user != null ? user.getAvatarUrl() : "https://ui-avatars.com/api/?name=U")
                     .createdAt(comment.getCreatedAt())
                     .build();
@@ -102,6 +116,15 @@ public class NewsfeedService {
 
     // 2. CẬP NHẬT HÀM: THÊM BÌNH LUẬN (Trả về DTO)
     public CommentResponseDTO addComment(Long postId, Long userId, CommentRequestDTO request) {
+        User user = userRepository.findById(userId).orElse(null);
+
+        // 1. Logic Lazy Sync
+        if (user != null && request.getUserAvatar() != null && !request.getUserAvatar().isEmpty()) {
+            if (!request.getUserAvatar().equals(user.getAvatarUrl())) {
+                user.setAvatarUrl(request.getUserAvatar());
+                userRepository.save(user);
+            }
+        }
         PostComment comment = new PostComment();
         comment.setPostId(postId);
         comment.setUserId(userId);
@@ -114,7 +137,7 @@ public class NewsfeedService {
         }
 
         PostComment savedComment = commentRepository.save(comment);
-        User user = userRepository.findById(userId).orElse(null);
+      
 
         return CommentResponseDTO.builder()
                 .id(savedComment.getId())
@@ -143,6 +166,25 @@ public class NewsfeedService {
                 post.setViewCount(post.getViewCount() + 1);
                 postRepository.save(post);
             }
+        }
+    }
+    // ✅ [MỚI] Hàm cập nhật nhanh Avatar (Sync)
+    public void syncUserAvatar(Long userId, String newAvatarUrl) {
+        User user = userRepository.findById(userId).orElse(null);
+        
+        if (user != null) {
+            // Chỉ update nếu khác nhau
+            if (newAvatarUrl != null && !newAvatarUrl.equals(user.getAvatarUrl())) {
+                user.setAvatarUrl(newAvatarUrl);
+                userRepository.save(user);
+            }
+        } else {
+            // Trường hợp user chưa từng tương tác, tạo mới luôn để giữ chỗ
+            User newUser = new User();
+            newUser.setId(userId);
+            newUser.setAvatarUrl(newAvatarUrl);
+            // Các trường khác có thể để null hoặc default
+            userRepository.save(newUser);
         }
     }
 }

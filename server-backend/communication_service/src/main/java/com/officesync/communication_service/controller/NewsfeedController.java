@@ -3,6 +3,9 @@ package com.officesync.communication_service.controller;
 import com.officesync.communication_service.dto.*;
 import com.officesync.communication_service.service.NewsfeedService;
 import com.officesync.communication_service.model.User;
+
+import java.util.Map;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -54,5 +57,15 @@ public class NewsfeedController {
                                       @AuthenticationPrincipal User currentUser) {
         newsfeedService.viewPost(postId, currentUser.getId());
         return ResponseEntity.ok("View counted");
+    }
+    
+    @PostMapping("/sync-user")
+    public ResponseEntity<?> syncUser(
+            @AuthenticationPrincipal User currentUser, 
+            @RequestBody Map<String, String> payload // Nhận JSON: {"avatarUrl": "..."}
+    ) {
+        String newAvatar = payload.get("avatarUrl");
+        newsfeedService.syncUserAvatar(currentUser.getId(), newAvatar);
+        return ResponseEntity.ok("Synced successfully");
     }
 }
