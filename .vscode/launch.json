@@ -3,6 +3,13 @@
   "configurations": [
     {
       "type": "java",
+      "name": "NotificationServiceApplication",
+      "request": "launch",
+      "mainClass": "com.officesync.notification_service.NotificationServiceApplication",
+      "projectName": "notification_service"
+    },
+    {
+      "type": "java",
       "name": "HrServiceApplication",
       "request": "launch",
       "mainClass": "com.officesync.hr_service.HrServiceApplication",

@@ -32,6 +32,10 @@ dependencies:
 
   # --- Editor (Cố định version) ---
   flutter_quill: 10.8.4
+  firebase_core: ^4.3.0
+  firebase_messaging: ^16.1.0
+  flutter_local_notifications: ^19.5.0
+  http: ^1.6.0
 
 dev_dependencies:
   flutter_test:
@@ -55,3 +59,8 @@ flutter_launcher_icons:
   adaptive_icon_background: "#FFFFFF"
   image_path: "assets/images/logo.png"
   min_sdk_android: 21
+
+  # ✅ THÊM 3 CÁI NÀY:
+  firebase_core: ^2.24.2
+  firebase_messaging: ^14.7.9
+  flutter_local_notifications: ^16.3.0 # Để hiện thông báo khi đang mở app

@@ -3,39 +3,46 @@ package com.officesync.notification_service.config;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.FirebaseOptions;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.ClassPathResource;
 
-import javax.annotation.PostConstruct;
-import java.io.IOException;
+import jakarta.annotation.PostConstruct;
 import java.io.InputStream;
 
 @Configuration
 public class FirebaseConfig {
 
-    // Đọc đường dẫn file từ application.properties
-    @Value("${app.firebase.config-path}")
-    private String firebaseConfigPath;
-
     @PostConstruct
     public void initialize() {
-        try {
-            // Kiểm tra xem đã khởi tạo chưa để tránh lỗi
-            if (FirebaseApp.getApps().isEmpty()) {
-                // Đọc file service-account.json từ resources
-                InputStream serviceAccount = new ClassPathResource("service-account.json").getInputStream();
+        System.out.println("=============================================================");
+        System.out.println("🔥🔥🔥 BẮT ĐẦU KHỞI TẠO FIREBASE... 🔥🔥🔥");
+        System.out.println("=============================================================");
 
+        try {
+            if (FirebaseApp.getApps().isEmpty()) {
+                // 1. Cố gắng đọc file
+                ClassPathResource resource = new ClassPathResource("service-account.json");
+                
+                // Kiểm tra xem file có tồn tại thật không
+                if (!resource.exists()) {
+                    throw new RuntimeException("❌ TÌM KHÔNG THẤY FILE 'service-account.json' TRONG RESOURCES!");
+                }
+                
+                InputStream serviceAccount = resource.getInputStream();
+
+                // 2. Nạp vào Firebase
                 FirebaseOptions options = FirebaseOptions.builder()
                         .setCredentials(GoogleCredentials.fromStream(serviceAccount))
                         .build();
 
                 FirebaseApp.initializeApp(options);
-                System.out.println("✅ Firebase Application has been initialized");
+                System.out.println("✅✅✅ KẾT NỐI FIREBASE THÀNH CÔNG RỰC RỠ! ✅✅✅");
             }
-        } catch (IOException e) {
-            System.err.println("❌ Lỗi khởi tạo Firebase: " + e.getMessage());
+        } catch (Exception e) {
+            System.err.println("❌❌❌ LỖI NGHIÊM TRỌNG KHI KHỞI TẠO FIREBASE ❌❌❌");
+            e.printStackTrace();
+            // Lệnh này sẽ làm sập Server ngay lập tức để bạn biết có lỗi
+            throw new RuntimeException("Không thể khởi động Server vì lỗi Firebase: " + e.getMessage());
         }
     }
 }

@@ -23,7 +23,29 @@ import 'features/task_service/presentation/pages/staff_task_screen.dart';
 import 'features/task_service/presentation/pages/management_task_screen.dart';
 // ======================= TASK_SERVICE ==============================
 
-void main() {
+// ======================= notification_SERVICE ==============================
+import 'package:firebase_core/firebase_core.dart';
+import 'features/notification_service/notification_service.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+// ======================= notification_SERVICE ==============================
+
+// 👇 1. THÊM HÀM NÀY Ở NGOÀI CÙNG (Trước hàm main)
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  // Cần khởi tạo Firebase để xử lý ngầm
+  await Firebase.initializeApp();
+  print(
+    "🌙 Nhận thông báo ngầm (Background/Terminated): ${message.notification?.title}",
+  );
+}
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
+
+  // 👇 2. ĐĂNG KÝ HÀM BACKGROUND
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
   runApp(const OfficeSyncApp());
 }
 
@@ -48,7 +70,7 @@ class OfficeSyncApp extends StatelessWidget {
         fontFamily: 'Inter',
       ),
 
-      // home: const SplashScreen(),
+      home: const SplashScreen(),
 
       // ======================= TASK_SERVICE ==============================
 
@@ -80,15 +102,15 @@ class OfficeSyncApp extends StatelessWidget {
       //     );
       //   },
       // ),
-      home: Builder(
-        builder: (context) {
-          if (currentTestRole == 'STAFF') {
-            return const StaffTaskScreen();
-          } else {
-            return const ManagementTaskScreen(userRole: currentTestRole);
-          }
-        },
-      ),
+      // home: Builder(
+      //   builder: (context) {
+      //     if (currentTestRole == 'STAFF') {
+      //       return const StaffTaskScreen();
+      //     } else {
+      //       return const ManagementTaskScreen(userRole: currentTestRole);
+      //     }
+      //   },
+      // ),
       // home: const DashboardScreen(
       //   userInfo: {
       //     'id': 'user_001',
