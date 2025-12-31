@@ -2,11 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-
-// [MỚI] Thêm thư viện Socket
-import 'package:stomp_dart_client/stomp.dart';
-import 'package:stomp_dart_client/stomp_config.dart';
-import 'package:stomp_dart_client/stomp_frame.dart';
+import '../../../../core/services/websocket_service.dart';
 
 import '../../../../core/config/app_colors.dart';
 import '../../data/models/request_model.dart';
@@ -31,8 +27,7 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
   final _storage = const FlutterSecureStorage();
   late final RequestRepositoryImpl _repository;
 
-  // [MỚI] Biến Socket
-  StompClient? _stompClient;
+  dynamic _unsubscribeFn;
 
   @override
   void initState() {
@@ -43,10 +38,12 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
     _fetchRequests();
   }
 
-  // [MỚI] Ngắt kết nối khi thoát
   @override
   void dispose() {
-    _stompClient?.deactivate();
+    // Hủy đăng ký listener của trang này
+    if (_unsubscribeFn != null) {
+      _unsubscribeFn(unsubscribeHeaders: {});
+    }
     super.dispose();
   }
 
@@ -63,49 +60,25 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
     }
   }
 
-  // [MỚI] Hàm khởi tạo WebSocket
-  void _initWebSocket(String userId) {
-    // Nếu đã connect rồi thì thôi
-    if (_stompClient != null && _stompClient!.isActive) return;
+  void _initListener(String userId) {
+    final topic = '/topic/user/$userId/requests';
 
-    final socketUrl = 'ws://10.0.2.2:8081/ws-hr/websocket';
+    // Gọi Service global
+    _unsubscribeFn = WebSocketService().subscribe(topic, (data) {
+      if (!mounted) return;
 
-    _stompClient = StompClient(
-      config: StompConfig(
-        url: socketUrl,
-        onConnect: (StompFrame frame) {
-          print("--> [MyRequests] Connected to WS");
-          // Subscribe kênh riêng của User để nhận tin: Tạo mới, Duyệt, Từ chối
-          _stompClient!.subscribe(
-            destination: '/topic/user/$userId/requests',
-            callback: (StompFrame frame) {
-              if (frame.body != null) {
-                print("--> [MyRequests] Update received: ${frame.body}");
-                final dynamic data = jsonDecode(frame.body!);
-                final updatedReq = RequestModel.fromJson(data);
-
-                if (mounted) {
-                  setState(() {
-                    final index = _requests.indexWhere(
-                      (r) => r.id == updatedReq.id,
-                    );
-                    if (index != -1) {
-                      // Cập nhật đơn đã có
-                      _requests[index] = updatedReq;
-                    } else {
-                      // Thêm đơn mới vào đầu list
-                      _requests.insert(0, updatedReq);
-                    }
-                  });
-                }
-              }
-            },
-          );
-        },
-        onWebSocketError: (dynamic error) => print("--> [WS Error]: $error"),
-      ),
-    );
-    _stompClient!.activate();
+      if (data is Map<String, dynamic>) {
+        final updatedReq = RequestModel.fromJson(data);
+        setState(() {
+          final index = _requests.indexWhere((r) => r.id == updatedReq.id);
+          if (index != -1) {
+            _requests[index] = updatedReq;
+          } else {
+            _requests.insert(0, updatedReq);
+          }
+        });
+      }
+    });
   }
 
   Future<void> _fetchRequests() async {
@@ -113,8 +86,8 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
     try {
       final userId = await _getUserIdFromStorage();
       if (userId != null) {
-        // [MỚI] Kích hoạt Socket ngay khi có ID
-        _initWebSocket(userId);
+        // [QUAN TRỌNG] Lắng nghe sự kiện
+        _initListener(userId);
 
         final data = await _repository.getMyRequests(userId);
         setState(() {

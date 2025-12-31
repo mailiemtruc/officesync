@@ -1,12 +1,14 @@
 import 'dart:convert';
+import 'dart:io'; // Thêm thư viện IO
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'dart:ui';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:stomp_dart_client/stomp.dart';
-import 'package:stomp_dart_client/stomp_config.dart';
-import 'package:stomp_dart_client/stomp_frame.dart';
-import '../../../../core/config/app_colors.dart';
+import 'package:url_launcher/url_launcher.dart'; // Thêm để mở link ngoài
+import 'package:video_player/video_player.dart'; // Thêm video player
+import 'package:chewie/chewie.dart'; // Thêm chewie
+import 'package:intl/intl.dart';
+import '../../../../core/services/websocket_service.dart';
 import '../../data/models/request_model.dart';
 import '../../widgets/confirm_bottom_sheet.dart';
 import '../../domain/repositories/request_repository_impl.dart';
@@ -27,69 +29,128 @@ class _ManagerRequestReviewPageState extends State<ManagerRequestReviewPage> {
   final _storage = const FlutterSecureStorage();
   bool _isProcessing = false;
   late RequestModel _currentRequest;
-  StompClient? stompClient;
+  // Biến lưu hàm hủy đăng ký
+  dynamic _unsubscribeFn;
 
   @override
   void initState() {
     super.initState();
-    _currentRequest = widget.request; // Khởi tạo
+    _currentRequest = widget.request;
     _repository = RequestRepositoryImpl(
       remoteDataSource: RequestRemoteDataSource(),
     );
-    _connectWebSocket(); // [MỚI] Lắng nghe
+    _initListener();
   }
 
-  // [SỬA LỖI QUAN TRỌNG]: Bỏ check userId để đảm bảo socket luôn kết nối
-  void _connectWebSocket() {
-    // Thay IP phù hợp (10.0.2.2 cho Android Emulator)
-    final socketUrl = 'ws://10.0.2.2:8081/ws-hr/websocket';
+  void _initListener() {
+    final topic = '/topic/request/${widget.request.id}';
 
-    stompClient = StompClient(
-      config: StompConfig(
-        url: socketUrl,
-        onConnect: (StompFrame frame) {
-          print("--> [ManagerReview] Connected WS");
-          final topic = '/topic/request/${widget.request.id}';
+    // Gọi Service global
+    _unsubscribeFn = WebSocketService().subscribe(topic, (data) {
+      if (!mounted) return;
 
-          stompClient!.subscribe(
-            destination: topic,
-            callback: (StompFrame frame) {
-              if (frame.body != null) {
-                final Map<String, dynamic> data = jsonDecode(frame.body!);
-                final updatedReq = RequestModel.fromJson(data);
+      if (data is Map<String, dynamic>) {
+        final updatedReq = RequestModel.fromJson(data);
+        setState(() {
+          _currentRequest = updatedReq;
+        });
 
-                if (mounted) {
-                  setState(() {
-                    _currentRequest = updatedReq;
-                  });
-
-                  // Hiển thị thông báo nếu trạng thái thay đổi
-                  if (updatedReq.status != RequestStatus.PENDING) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          "Request updated to: ${updatedReq.status.name}",
-                        ),
-                        backgroundColor: _getStatusColor(updatedReq.status),
-                        duration: const Duration(seconds: 2),
-                      ),
-                    );
-                  }
-                }
-              }
-            },
+        if (updatedReq.status != RequestStatus.PENDING) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Updated to: ${updatedReq.status.name}"),
+              backgroundColor: _getStatusColor(updatedReq.status),
+            ),
           );
-        },
-      ),
-    );
-    stompClient!.activate();
+        }
+      }
+    });
   }
 
   @override
   void dispose() {
-    stompClient?.deactivate();
-    _rejectReasonController.dispose();
+    // Hủy đăng ký topic này (các topic khác vẫn chạy)
+    if (_unsubscribeFn != null) {
+      _unsubscribeFn(unsubscribeHeaders: {});
+    }
+    _rejectReasonController.dispose(); // Dispose Controller
     super.dispose();
+  }
+
+  // --- LOGIC XỬ LÝ URL & MỞ FILE (GIỐNG REQUEST DETAIL) ---
+  String _fixUrl(String url) {
+    if (Platform.isAndroid && url.contains('localhost')) {
+      return url.replaceFirst('localhost', '10.0.2.2');
+    }
+    return url;
+  }
+
+  List<String> _getEvidenceUrls() {
+    if (_currentRequest.evidenceUrl != null &&
+        _currentRequest.evidenceUrl!.isNotEmpty) {
+      return _currentRequest.evidenceUrl!.split(';');
+    }
+    return [];
+  }
+
+  void _openFile(String url) {
+    final String fixedUrl = _fixUrl(url);
+    final String lowerUrl = fixedUrl.toLowerCase();
+
+    if (lowerUrl.endsWith('.jpg') ||
+        lowerUrl.endsWith('.jpeg') ||
+        lowerUrl.endsWith('.png') ||
+        lowerUrl.endsWith('.webp')) {
+      final List<String> allImages = _getEvidenceUrls()
+          .map((e) => _fixUrl(e))
+          .where((e) {
+            final l = e.toLowerCase();
+            return l.endsWith('.jpg') ||
+                l.endsWith('.jpeg') ||
+                l.endsWith('.png') ||
+                l.endsWith('.webp');
+          })
+          .toList();
+
+      int initialIndex = allImages.indexOf(fixedUrl);
+      if (initialIndex == -1) initialIndex = 0;
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => _FullScreenImageViewer(
+            imageUrls: allImages,
+            initialIndex: initialIndex,
+          ),
+        ),
+      );
+    } else if (lowerUrl.endsWith('.mp4') ||
+        lowerUrl.endsWith('.mov') ||
+        lowerUrl.endsWith('.avi')) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => _FullScreenVideoPlayer(videoUrl: fixedUrl),
+        ),
+      );
+    } else {
+      _launchExternalUrl(fixedUrl);
+    }
+  }
+
+  Future<void> _launchExternalUrl(String url) async {
+    final uri = Uri.parse(url);
+    try {
+      if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+        throw 'Could not launch $url';
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Cannot open file: $e")));
+      }
+    }
   }
 
   Future<void> _processRequest(String status, String comment) async {
@@ -530,7 +591,6 @@ class _ManagerRequestReviewPageState extends State<ManagerRequestReviewPage> {
     );
   }
 
-  // [ĐÃ SỬA LỖI TẠI ĐÂY] Dùng biến req để hiển thị, xóa hardcode 'Pending'
   Widget _buildEmployeeInfoCard(RequestModel req) {
     // Check tạm ID để hiển thị badge Manager
     final bool isManager = ['001', '004'].contains(req.requesterId);
@@ -558,22 +618,43 @@ class _ManagerRequestReviewPageState extends State<ManagerRequestReviewPage> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          ClipOval(
-            child: Image.network(
-              req.requesterAvatar.isNotEmpty
-                  ? req.requesterAvatar
-                  : "https://ui-avatars.com/api/?name=${req.requesterName}",
-              width: 46,
-              height: 46,
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => Container(
-                width: 46,
-                height: 46,
-                color: Colors.grey[200],
-                child: const Icon(Icons.person),
-              ),
+          // --- BẮT ĐẦU ĐOẠN SỬA ---
+          Container(
+            width: 46,
+            height: 46,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: Color(0xFFF3F4F6), // Màu nền xám nhạt
             ),
+            child: req.requesterAvatar.isNotEmpty
+                ? ClipOval(
+                    child: Image.network(
+                      req.requesterAvatar,
+                      width: 46,
+                      height: 46,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        // Nếu link ảnh lỗi -> Hiện icon mặc định
+                        return const Center(
+                          child: Icon(
+                            Icons.person,
+                            color: Color(0xFF9CA3AF),
+                            size: 24,
+                          ),
+                        );
+                      },
+                    ),
+                  )
+                : const Center(
+                    // Nếu không có link ảnh -> Hiện icon mặc định ngay
+                    child: Icon(
+                      Icons.person,
+                      color: Color(0xFF9CA3AF), // Màu icon xám đậm hơn nền
+                      size: 24,
+                    ),
+                  ),
           ),
+          // --- KẾT THÚC ĐOẠN SỬA ---
           const SizedBox(width: 14),
           Expanded(
             child: Column(
@@ -657,6 +738,14 @@ class _ManagerRequestReviewPageState extends State<ManagerRequestReviewPage> {
   }
 
   Widget _buildRequestDetailCard(RequestModel request) {
+    final evidenceList = _getEvidenceUrls();
+
+    // [LOGIC ĐÃ SỬA] Ưu tiên lấy requestCode, nếu không có mới lấy ID và thêm số 0
+    String displayCode =
+        request.requestCode != null && request.requestCode!.isNotEmpty
+        ? request.requestCode!
+        : (request.id?.toString().padLeft(4, '0') ?? "N/A");
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
@@ -693,8 +782,10 @@ class _ManagerRequestReviewPageState extends State<ManagerRequestReviewPage> {
             ),
           ),
           const SizedBox(height: 8),
+
+          // [HIỂN THỊ] Sử dụng displayCode đã xử lý ở trên
           Text(
-            '#REQ-${request.id}',
+            '#$displayCode',
             style: const TextStyle(
               color: Color(0xFF94A3B8),
               fontSize: 14,
@@ -702,12 +793,10 @@ class _ManagerRequestReviewPageState extends State<ManagerRequestReviewPage> {
               fontWeight: FontWeight.w400,
             ),
           ),
-          const SizedBox(height: 24),
 
+          const SizedBox(height: 24),
           _buildDynamicDetails(request),
-
           const SizedBox(height: 24),
-
           const Text(
             'REASON',
             style: TextStyle(
@@ -738,32 +827,28 @@ class _ManagerRequestReviewPageState extends State<ManagerRequestReviewPage> {
               ),
             ),
           ),
-
-          const SizedBox(height: 24),
-
-          // Hiển thị phần đính kèm nếu có
-          if (request.evidenceUrl != null &&
-              request.evidenceUrl!.isNotEmpty) ...[
-            Row(
-              children: [
-                Icon(
-                  PhosphorIcons.paperclip(),
-                  size: 20,
-                  color: const Color(0xFF2563EB),
-                ),
-                const SizedBox(width: 8),
-                const Text(
-                  'View Attachment (PDF/Image)',
-                  style: TextStyle(
-                    color: Color(0xFF2563EB),
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    fontFamily: 'Inter',
-                  ),
-                ),
-              ],
+          if (evidenceList.isNotEmpty) ...[
+            const SizedBox(height: 24),
+            const Text(
+              'ATTACHMENT',
+              style: TextStyle(
+                color: Color(0xFF94A3B8),
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                fontFamily: 'Inter',
+              ),
             ),
+            const SizedBox(height: 12),
+            ...evidenceList
+                .map(
+                  (url) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8.0),
+                    child: _buildAttachmentCard(url),
+                  ),
+                )
+                .toList(),
           ] else ...[
+            const SizedBox(height: 24),
             const Text("No Attachment", style: TextStyle(color: Colors.grey)),
           ],
         ],
@@ -771,27 +856,287 @@ class _ManagerRequestReviewPageState extends State<ManagerRequestReviewPage> {
     );
   }
 
-  Widget _buildDynamicDetails(RequestModel request) {
-    return Column(
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(child: _buildInfoItem('DATE', request.dateRange)),
-            Expanded(
-              child: _buildInfoItem('DURATION', request.duration, isBlue: true),
+  // Widget thẻ đính kèm (Copy từ RequestDetail)
+  Widget _buildAttachmentCard(String fileUrl) {
+    final String fixedUrl = _fixUrl(fileUrl);
+    final String lowerUrl = fixedUrl.toLowerCase();
+
+    final bool isImage =
+        lowerUrl.endsWith('.jpg') ||
+        lowerUrl.endsWith('.jpeg') ||
+        lowerUrl.endsWith('.png') ||
+        lowerUrl.endsWith('.webp');
+
+    final bool isVideo =
+        lowerUrl.endsWith('.mp4') ||
+        lowerUrl.endsWith('.mov') ||
+        lowerUrl.endsWith('.avi');
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFECF1FF)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => _openFile(fileUrl),
+          child: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: SizedBox(
+                    width: 60,
+                    height: 60,
+                    child: isImage
+                        ? Image.network(
+                            fixedUrl,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Container(
+                                color: Colors.grey[200],
+                                child: const Icon(
+                                  Icons.broken_image,
+                                  color: Colors.grey,
+                                ),
+                              );
+                            },
+                            loadingBuilder: (context, child, loadingProgress) {
+                              if (loadingProgress == null) return child;
+                              return Container(
+                                color: Colors.grey[100],
+                                child: const Center(
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                              );
+                            },
+                          )
+                        : Container(
+                            color: isVideo
+                                ? Colors.orange.withOpacity(0.1)
+                                : const Color(0xFFEFF1F5),
+                            child: Icon(
+                              isVideo
+                                  ? PhosphorIcons.playCircle(
+                                      PhosphorIconsStyle.fill,
+                                    )
+                                  : PhosphorIcons.fileText(
+                                      PhosphorIconsStyle.fill,
+                                    ),
+                              color: isVideo
+                                  ? Colors.orange
+                                  : const Color(0xFF2260FF),
+                              size: 32,
+                            ),
+                          ),
+                  ),
+                ),
+
+                const SizedBox(width: 16),
+
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        isImage
+                            ? "Evidence Image"
+                            : isVideo
+                            ? "Evidence Video"
+                            : "Attached Document",
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                          fontFamily: 'Inter',
+                          color: Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        "Tap to view details",
+                        style: TextStyle(
+                          color: Colors.grey[500],
+                          fontSize: 12,
+                          fontFamily: 'Inter',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 16,
+                  color: Color(0xFFBDC6DE),
+                ),
+                const SizedBox(width: 8),
+              ],
             ),
-          ],
+          ),
         ),
-        const SizedBox(height: 24),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(child: _buildInfoItem('END OF SHIFT', '05:30 PM')),
-            Expanded(child: _buildInfoItem('ACTUAL LEAVE', '04:30 PM')),
-          ],
-        ),
-      ],
+      ),
+    );
+  }
+
+  Widget _buildDynamicDetails(RequestModel request) {
+    // Format riêng cho Annual Leave: "Dec 31, 2025" (Không hiện giờ)
+    final annualLeaveFormat = DateFormat('MMM dd, yyyy');
+
+    // Format cho các loại đơn khác (nếu cần giờ)
+    final timeFormat = DateFormat('HH:mm');
+    final dateFormat = DateFormat('MMM dd, yyyy');
+
+    // TRƯỜNG HỢP 1: Đơn nghỉ phép (Annual Leave) -> Chỉ hiện Ngày Tháng Năm
+    if (request.type == RequestType.ANNUAL_LEAVE) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Cột FROM
+              Expanded(
+                child: _buildInfoItem(
+                  'FROM',
+                  annualLeaveFormat.format(
+                    request.startTime,
+                  ), // Ví dụ: Dec 31, 2025
+                ),
+              ),
+              // Cột TO
+              Expanded(
+                child: _buildInfoItem(
+                  'TO',
+                  annualLeaveFormat.format(
+                    request.endTime,
+                  ), // Ví dụ: Jan 02, 2026
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+
+          // Dòng DURATION
+          _buildInfoItem('DURATION', request.duration, isBlue: true),
+        ],
+      );
+    }
+    // TRƯỜNG HỢP 2: Các loại đơn khác (Đi trễ/Về sớm) -> Giữ nguyên logic cũ
+    else {
+      String dateLabel = 'DATE';
+      String dateValue = dateFormat.format(request.startTime);
+
+      String row2Label1 = 'START TIME';
+      String row2Value1 = timeFormat.format(request.startTime);
+
+      String row2Label2 = 'END TIME';
+      String row2Value2 = timeFormat.format(request.endTime);
+
+      if (request.type == RequestType.LATE_ARRIVAL) {
+        row2Label1 = 'EXPECTED';
+        row2Label2 = 'ACTUAL ARRIVAL';
+      } else if (request.type == RequestType.EARLY_DEPARTURE) {
+        row2Label1 = 'END OF SHIFT';
+        row2Label2 = 'ACTUAL LEAVE';
+      }
+
+      return Column(
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: _buildInfoItem(dateLabel, dateValue)),
+              Expanded(
+                child: _buildInfoItem(
+                  'DURATION',
+                  request.duration,
+                  isBlue: true,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: _buildInfoItem(row2Label1, row2Value1)),
+              Expanded(child: _buildInfoItem(row2Label2, row2Value2)),
+            ],
+          ),
+        ],
+      );
+    }
+  }
+
+  // Widget hiển thị dòng chi tiết (cho Annual Leave)
+  Widget _buildDetailRow(String label, String value, {bool isBlue = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              color: Color(0xFF64748B),
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              fontFamily: 'Inter',
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              color: isBlue ? const Color(0xFF2563EB) : Colors.black,
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              fontFamily: 'Inter',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Widget vẽ đường kẻ nét đứt
+  Widget _buildDottedLine() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) {
+          final boxWidth = constraints.constrainWidth();
+          const dashWidth = 6.0;
+          const dashSpace = 4.0;
+          final dashCount = (boxWidth / (dashWidth + dashSpace)).floor();
+          return Flex(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            direction: Axis.horizontal,
+            children: List.generate(dashCount, (_) {
+              return SizedBox(
+                width: dashWidth,
+                height: 1,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(color: Colors.grey[300]),
+                ),
+              );
+            }),
+          );
+        },
+      ),
     );
   }
 
@@ -847,5 +1192,161 @@ class _ManagerRequestReviewPageState extends State<ManagerRequestReviewPage> {
       default:
         return const Color(0xFF374151);
     }
+  }
+}
+
+// --- Class xem Ảnh Full (Copy từ RequestDetail) ---
+class _FullScreenImageViewer extends StatelessWidget {
+  final List<String> imageUrls;
+  final int initialIndex;
+
+  const _FullScreenImageViewer({
+    super.key,
+    required this.imageUrls,
+    this.initialIndex = 0,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final PageController controller = PageController(initialPage: initialIndex);
+
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black.withOpacity(0.5),
+        iconTheme: const IconThemeData(color: Colors.white),
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.close),
+          onPressed: () => Navigator.pop(context),
+        ),
+      ),
+      body: PageView.builder(
+        controller: controller,
+        itemCount: imageUrls.length,
+        itemBuilder: (context, index) {
+          return InteractiveViewer(
+            panEnabled: true,
+            minScale: 0.5,
+            maxScale: 4.0,
+            child: Center(
+              child: Image.network(
+                imageUrls[index],
+                fit: BoxFit.contain,
+                loadingBuilder: (context, child, loadingProgress) {
+                  if (loadingProgress == null) return child;
+                  return const Center(
+                    child: CircularProgressIndicator(color: Colors.white),
+                  );
+                },
+                errorBuilder: (context, error, stackTrace) => const Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.broken_image, color: Colors.white, size: 40),
+                      SizedBox(height: 8),
+                      Text(
+                        'Failed to load image',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+// --- Class xem Video Full (Copy từ RequestDetail) ---
+class _FullScreenVideoPlayer extends StatefulWidget {
+  final String videoUrl;
+  const _FullScreenVideoPlayer({required this.videoUrl});
+
+  @override
+  State<_FullScreenVideoPlayer> createState() => _FullScreenVideoPlayerState();
+}
+
+class _FullScreenVideoPlayerState extends State<_FullScreenVideoPlayer> {
+  late VideoPlayerController _videoPlayerController;
+  ChewieController? _chewieController;
+  bool _isError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializePlayer();
+  }
+
+  Future<void> _initializePlayer() async {
+    try {
+      _videoPlayerController = VideoPlayerController.networkUrl(
+        Uri.parse(widget.videoUrl),
+      );
+      await _videoPlayerController.initialize();
+
+      setState(() {
+        _chewieController = ChewieController(
+          videoPlayerController: _videoPlayerController,
+          autoPlay: true,
+          looping: false,
+          aspectRatio: _videoPlayerController.value.aspectRatio,
+          errorBuilder: (context, errorMessage) {
+            return const Center(
+              child: Text(
+                'Video loading error',
+                style: TextStyle(color: Colors.white),
+              ),
+            );
+          },
+        );
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isError = true);
+      debugPrint("Video Error: $e");
+    }
+  }
+
+  @override
+  void dispose() {
+    _videoPlayerController.dispose();
+    _chewieController?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        iconTheme: const IconThemeData(color: Colors.white),
+        elevation: 0,
+      ),
+      body: SafeArea(
+        child: Center(
+          child: _isError
+              ? const Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.error_outline, color: Colors.red, size: 40),
+                    SizedBox(height: 10),
+                    Text(
+                      "This video cannot be played.",
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ],
+                )
+              : _chewieController != null &&
+                    _chewieController!.videoPlayerController.value.isInitialized
+              ? Chewie(controller: _chewieController!)
+              : const CircularProgressIndicator(color: Colors.white),
+        ),
+      ),
+    );
   }
 }

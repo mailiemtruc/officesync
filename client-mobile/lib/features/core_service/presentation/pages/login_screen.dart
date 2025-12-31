@@ -8,6 +8,8 @@ import '../../../../core/widgets/custom_text_field.dart';
 import '../../../../core/api/api_client.dart';
 import '../../../../dashboard_screen.dart';
 import '../../../../core/utils/custom_snackbar.dart';
+// [MỚI] Import WebSocketService
+import '../../../../../core/services/websocket_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -474,6 +476,9 @@ class _LoginScreenState extends State<LoginScreen> {
         final storage = const FlutterSecureStorage();
         await storage.write(key: 'auth_token', value: token);
         await storage.write(key: 'user_info', value: jsonEncode(user));
+
+        // [QUAN TRỌNG] KẾT NỐI SOCKET TẠI ĐÂY
+        WebSocketService().connect();
 
         if (mounted) {
           Navigator.pushAndRemoveUntil(

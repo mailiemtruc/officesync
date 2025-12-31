@@ -13,6 +13,8 @@ import 'edit_profile_page.dart';
 import '../../domain/repositories/employee_repository_impl.dart';
 import '../../data/datasources/employee_remote_data_source.dart';
 import '../../data/models/employee_model.dart';
+// [MỚI] Import WebSocketService để ngắt kết nối
+import '../../../../core/services/websocket_service.dart';
 
 class UserProfilePage extends StatefulWidget {
   final Map<String, dynamic> userInfo;
@@ -242,9 +244,16 @@ class _UserProfilePageState extends State<UserProfilePage> {
   }
 
   // --- UI & DIALOGS ---
+  // [QUAN TRỌNG] HÀM ĐĂNG XUẤT ĐÃ SỬA
   Future<void> _handleLogout() async {
     try {
+      // 1. Xóa dữ liệu local
       await _storage.deleteAll();
+
+      // 2. Ngắt kết nối WebSocket
+      WebSocketService().disconnect();
+
+      // 3. Chuyển về màn hình đăng nhập
       if (mounted) {
         Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
       }

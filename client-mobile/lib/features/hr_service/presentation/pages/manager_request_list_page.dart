@@ -3,11 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-// [MỚI] Import thư viện WebSocket
-import 'package:stomp_dart_client/stomp.dart';
-import 'package:stomp_dart_client/stomp_config.dart';
-import 'package:stomp_dart_client/stomp_frame.dart';
-
+// Import Service mới
+import '../../../../core/services/websocket_service.dart';
 import '../../../../core/config/app_colors.dart';
 import '../../data/models/request_model.dart';
 import 'manager_request_review_page.dart';
@@ -26,169 +23,143 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
   final _storage = const FlutterSecureStorage();
   final _dataSource = RequestRemoteDataSource();
 
-  // [MỚI] Biến Client WebSocket
-  StompClient? client;
+  // Biến lưu hàm hủy đăng ký
+  dynamic _unsubscribeFn;
   String? _currentCompanyId;
 
-  // Dữ liệu lấy từ API
   List<Map<String, dynamic>> _requestList = [];
 
   @override
   void initState() {
     super.initState();
     _fetchRequests();
-    _initWebSocket(); // [MỚI] Bắt đầu kết nối Socket
+    _setupSocketListener();
   }
 
   @override
   void dispose() {
-    client?.deactivate(); // [MỚI] Ngắt kết nối khi thoát màn hình
+    // [QUAN TRỌNG] Hủy đăng ký khi thoát màn hình để tránh leak
+    if (_unsubscribeFn != null) {
+      _unsubscribeFn(unsubscribeHeaders: {});
+    }
     super.dispose();
   }
 
-  // [HÀM MỚI] Cấu hình WebSocket Realtime
-  Future<void> _initWebSocket() async {
-    try {
-      // 1. Lấy CompanyID
-      String? userInfoStr = await _storage.read(key: 'user_info');
-      if (userInfoStr != null) {
-        final userMap = jsonDecode(userInfoStr);
-        _currentCompanyId = userMap['companyId']?.toString();
-      }
+  // Đăng ký lắng nghe từ Service chung
+  Future<void> _setupSocketListener() async {
+    String? userInfoStr = await _storage.read(key: 'user_info');
+    if (userInfoStr != null) {
+      final userMap = jsonDecode(userInfoStr);
+      _currentCompanyId = userMap['companyId']?.toString();
+    }
 
-      if (_currentCompanyId == null) return;
+    if (_currentCompanyId != null) {
+      final topic = '/topic/company/$_currentCompanyId/requests';
 
-      final socketUrl = 'ws://10.0.2.2:8081/ws-hr/websocket';
+      // Gọi service global
+      _unsubscribeFn = WebSocketService().subscribe(topic, (data) {
+        if (!mounted) return;
 
-      client = StompClient(
-        config: StompConfig(
-          url: socketUrl,
-          onConnect: (StompFrame frame) {
-            print("--> [WebSocket] Connected!");
+        // 1. Nếu nhận được chuỗi "NEW_REQUEST" -> Reload API
+        if (data is String && data == "NEW_REQUEST") {
+          _fetchRequests(isBackgroundRefresh: true);
+        }
+        // 2. Nếu nhận được JSON Object -> Update UI trực tiếp
+        else if (data is Map<String, dynamic>) {
+          try {
+            final updatedReq = RequestModel.fromJson(data);
+            setState(() {
+              final index = _requestList.indexWhere(
+                (item) => (item['request'] as RequestModel).id == updatedReq.id,
+              );
 
-            // Topic: /topic/company/{id}/requests
-            final topic = '/topic/company/$_currentCompanyId/requests';
-
-            client?.subscribe(
-              destination: topic,
-              callback: (StompFrame frame) {
-                if (frame.body != null) {
-                  print("--> [WebSocket] Msg: ${frame.body}");
-
-                  // [LOGIC THÔNG MINH HƠN]
-                  // Nếu là chuỗi thông báo "NEW_REQUEST" -> Load lại cả list
-                  if (frame.body == "NEW_REQUEST") {
-                    if (mounted) _fetchRequests(isBackgroundRefresh: true);
-                  }
-                  // Nếu là JSON object -> Update item cụ thể
-                  else {
-                    try {
-                      final dynamic data = jsonDecode(frame.body!);
-                      final updatedReq = RequestModel.fromJson(data);
-
-                      if (mounted) {
-                        setState(() {
-                          // Tìm request trong list hiện tại
-                          final index = _requestList.indexWhere(
-                            (item) =>
-                                (item['request'] as RequestModel).id ==
-                                updatedReq.id,
-                          );
-
-                          if (index != -1) {
-                            // Cập nhật object request mới vào map cũ
-                            _requestList[index]['request'] = updatedReq;
-
-                            // Nếu muốn update cả timeInfo/processedDate nếu cần
-                            // _requestList[index]['timeInfo'] = updatedReq.duration;
-                          } else {
-                            // Trường hợp hiếm: Socket báo về đơn mới mà không gửi chuỗi "NEW_REQUEST"
-                            // Ta thêm vào đầu list luôn
-                            // (Cần cấu trúc Map giống hệt _fetchRequests)
-                            _fetchRequests(isBackgroundRefresh: true);
-                          }
-                        });
-                      }
-                    } catch (e) {
-                      // Fallback: Nếu parse lỗi thì cứ load lại API cho chắc
-                      if (mounted) _fetchRequests(isBackgroundRefresh: true);
-                    }
-                  }
-                }
-              },
-            );
-          },
-          onWebSocketError: (dynamic error) =>
-              print("--> [WebSocket] Error: $error"),
-        ),
-      );
-
-      client?.activate();
-    } catch (e) {
-      print("--> [WebSocket] Init Error: $e");
+              if (index != -1) {
+                // Update item có sẵn
+                _requestList[index]['request'] = updatedReq;
+                // Cập nhật lại status text/color nếu cần thiết
+                _requestList[index]['status'] = updatedReq.status.name;
+              } else {
+                // Nếu không tìm thấy (trường hợp hiếm), reload lại cho chắc
+                _fetchRequests(isBackgroundRefresh: true);
+              }
+            });
+          } catch (e) {
+            print("Socket Parse Error: $e");
+          }
+        }
+      });
     }
   }
 
-  // [SỬA] Thêm tham số isBackgroundRefresh
   Future<void> _fetchRequests({bool isBackgroundRefresh = false}) async {
-    if (!isBackgroundRefresh) {
-      setState(() => _isLoading = true);
-    }
+    if (!isBackgroundRefresh) setState(() => _isLoading = true);
 
     try {
       String? userId;
       String? userInfoStr = await _storage.read(key: 'user_info');
-
       if (userInfoStr != null) {
         try {
           final userMap = jsonDecode(userInfoStr);
           userId = userMap['id']?.toString();
         } catch (_) {}
       }
-
       if (userId == null) userId = await _storage.read(key: 'user_id');
 
-      if (userId == null) {
-        setState(() => _isLoading = false);
-        return;
-      }
-
-      List<RequestModel> requests = await _dataSource.getManagerRequests(
-        userId,
-      );
-
-      if (mounted) {
-        setState(() {
-          _requestList = requests.map((req) {
-            return {
-              'request': req, // Object chính
-              'id': req.id,
-              'employeeName': req.requesterName.isNotEmpty
-                  ? req.requesterName
-                  : 'Unknown',
-              'employeeId': req.requesterId,
-              'dept': req.requesterDept.isNotEmpty ? req.requesterDept : 'N/A',
-              'avatar': req.requesterAvatar,
-              'timeInfo': req.duration,
-              'processedDate': '', // Có thể format createdAt nếu cần
-            };
-          }).toList();
-
-          _isLoading = false;
-        });
+      if (userId != null) {
+        List<RequestModel> requests = await _dataSource.getManagerRequests(
+          userId,
+        );
+        if (mounted) {
+          setState(() {
+            _requestList = requests.map((req) {
+              return {
+                'request': req,
+                'id': req.id,
+                'employeeName': req.requesterName.isNotEmpty
+                    ? req.requesterName
+                    : 'Unknown',
+                'employeeId': req.requesterId,
+                'dept': req.requesterDept.isNotEmpty
+                    ? req.requesterDept
+                    : 'N/A',
+                'avatar': req.requesterAvatar,
+                'timeInfo': req.duration,
+                'processedDate': '',
+              };
+            }).toList();
+            _isLoading = false;
+          });
+        }
       }
     } catch (e) {
-      print("--> [LỖI] Fetch requests: $e");
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  // ... (Phần UI và BottomNav giữ nguyên) ...
-  // Chỉ lưu ý phần gọi ManagerRequestReviewPage bên dưới:
+  // ... (Giữ nguyên phần UI build, _onBottomNavTap, _buildTabs...)
+  // Lưu ý: Không thay đổi phần UI code phía dưới
+
+  void _onBottomNavTap(int index) {
+    // ... Code cũ giữ nguyên
+    switch (index) {
+      case 0:
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          '/dashboard',
+          (route) => false,
+        );
+        break;
+      case 1:
+        break;
+      case 2:
+        Navigator.pushNamed(context, '/user_profile');
+        break;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    // Filter client-side
+    // 1. Filter danh sách hiển thị theo Tab hiện tại (Logic cũ giữ nguyên)
     final displayList = _requestList.where((item) {
       final req = item['request'] as RequestModel;
       if (_isToReviewTab) {
@@ -198,9 +169,52 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
       }
     }).toList();
 
+    // 2. [SỬA LỖI] Tính riêng số lượng đơn PENDING từ danh sách gốc
+    // Để con số này không bị đổi khi chuyển Tab
+    final int pendingCount = _requestList.where((item) {
+      final req = item['request'] as RequestModel;
+      return req.status == RequestStatus.PENDING;
+    }).length;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF9F9F9),
-      // ... (BottomNavigationBar giữ nguyên)
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, -5),
+            ),
+          ],
+        ),
+        child: BottomNavigationBar(
+          backgroundColor: Colors.white,
+          currentIndex: 1,
+          onTap: _onBottomNavTap,
+          selectedItemColor: AppColors.primary,
+          unselectedItemColor: Colors.grey,
+          showUnselectedLabels: true,
+          type: BottomNavigationBarType.fixed,
+          items: [
+            BottomNavigationBarItem(
+              icon: Icon(PhosphorIconsRegular.house),
+              activeIcon: Icon(PhosphorIconsFill.house),
+              label: 'Home',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(PhosphorIconsFill.squaresFour),
+              activeIcon: Icon(PhosphorIconsFill.squaresFour),
+              label: 'Menu',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(PhosphorIconsRegular.user),
+              activeIcon: Icon(PhosphorIconsFill.user),
+              label: 'Profile',
+            ),
+          ],
+        ),
+      ),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
@@ -212,9 +226,9 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
                 const SizedBox(height: 24),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: _buildTabs(displayList.length),
+                  // 3. [SỬA LỖI] Truyền pendingCount tính riêng ở trên vào đây
+                  child: _buildTabs(pendingCount),
                 ),
-                // ... (Phần Search & Filter giữ nguyên) ...
                 const SizedBox(height: 24),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -243,8 +257,6 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
                   ),
                 ),
                 const SizedBox(height: 12),
-
-                // LIST VIEW
                 Expanded(
                   child: _isLoading
                       ? const Center(child: CircularProgressIndicator())
@@ -260,21 +272,16 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
                             final item = displayList[index];
                             return _ManagerRequestCard(
                               data: item,
-                              onTap: () async {
-                                final result = await Navigator.push(
+                              onTap: () {
+                                Navigator.push(
                                   context,
                                   MaterialPageRoute(
                                     builder: (context) =>
                                         ManagerRequestReviewPage(
-                                          // [QUAN TRỌNG] Chỉ truyền request model
                                           request: item['request'],
                                         ),
                                   ),
                                 );
-
-                                if (result == true) {
-                                  _fetchRequests();
-                                }
                               },
                             );
                           },
@@ -288,7 +295,6 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
     );
   }
 
-  // ... (Các Widget con _buildHeader, _buildTabs... giữ nguyên)
   Widget _buildHeader(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -322,7 +328,7 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
     );
   }
 
-  Widget _buildTabs(int count) {
+  Widget _buildTabs(int pendingCount) {
     return Container(
       height: 52,
       padding: const EdgeInsets.all(4),
@@ -334,16 +340,18 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
         children: [
           Expanded(
             child: _buildTabItem(
-              'To review ($count)',
-              _isToReviewTab,
-              () => setState(() => _isToReviewTab = true),
+              label: 'To review', // Chỉ để label text
+              count: pendingCount, // Truyền count vào để hiển thị badge
+              isActive: _isToReviewTab,
+              onTap: () => setState(() => _isToReviewTab = true),
             ),
           ),
           Expanded(
             child: _buildTabItem(
-              'History',
-              !_isToReviewTab,
-              () => setState(() => _isToReviewTab = false),
+              label: 'History',
+              count: null, // History không hiện badge
+              isActive: !_isToReviewTab,
+              onTap: () => setState(() => _isToReviewTab = false),
             ),
           ),
         ],
@@ -351,7 +359,23 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
     );
   }
 
-  Widget _buildTabItem(String title, bool isActive, VoidCallback onTap) {
+  Widget _buildTabItem({
+    required String label,
+    int? count,
+    required bool isActive,
+    required VoidCallback onTap,
+  }) {
+    // Màu văn bản chính
+    final baseColor = isActive
+        ? const Color(0xE52260FF)
+        : const Color(0xFFB2AEAE);
+
+    // Xử lý logic hiển thị số: Nếu > 100 thì hiện "99+"
+    String? badgeText;
+    if (count != null && count > 0) {
+      badgeText = count > 100 ? '99+' : count.toString();
+    }
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -368,14 +392,53 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
                 ]
               : [],
         ),
-        child: Text(
-          title,
-          style: TextStyle(
-            color: isActive ? const Color(0xE52260FF) : const Color(0xFFB2AEAE),
-            fontSize: 20,
-            fontWeight: FontWeight.w600,
-            fontFamily: 'Inter',
-          ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                color: baseColor,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                fontFamily: 'Inter',
+              ),
+            ),
+            // Nếu có badgeText (tức là count > 0) thì hiển thị Badge đỏ
+            if (badgeText != null) ...[
+              const SizedBox(width: 6),
+              Container(
+                // [FIX LỖI] Ép chiều cao cố định để không bị méo thành hình bầu dục dọc
+                height: 20,
+                constraints: const BoxConstraints(
+                  minWidth:
+                      20, // Chiều rộng tối thiểu bằng chiều cao -> Hình tròn
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 6,
+                ), // Chỉ padding ngang
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEF4444), // Nền đỏ
+                  borderRadius: BorderRadius.circular(
+                    10,
+                  ), // Bo tròn = height / 2
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  badgeText,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    fontFamily: 'Inter',
+                    height: 1.1, // Căn chỉnh dòng để chữ nằm giữa
+                  ),
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );
@@ -438,7 +501,6 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
   }
 }
 
-// Widget Card (Giữ nguyên, chỉ cần đảm bảo dùng data['request'].status để lấy màu)
 class _ManagerRequestCard extends StatelessWidget {
   final Map<String, dynamic> data;
   final VoidCallback onTap;
@@ -447,8 +509,7 @@ class _ManagerRequestCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final RequestModel request =
-        data['request']; // [QUAN TRỌNG] Lấy request mới nhất
+    final RequestModel request = data['request'];
     final String timeInfo = data['timeInfo'] ?? request.duration;
     final bool isManager = ['001', '004'].contains(data['employeeId']);
     final String processedDate = data['processedDate'] ?? '';
@@ -479,22 +540,44 @@ class _ManagerRequestCard extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                ClipOval(
-                  child: Image.network(
-                    data['avatar'],
-                    width: 46,
-                    height: 46,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(
-                      width: 46,
-                      height: 46,
-                      color: Colors.grey[200],
-                      child: const Icon(Icons.person, color: Colors.grey),
-                    ),
+                // --- BẮT ĐẦU ĐOẠN SỬA ---
+                Container(
+                  width: 46,
+                  height: 46,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Color(0xFFF3F4F6), // Nền xám nhạt
                   ),
+                  child:
+                      (data['avatar'] != null &&
+                          data['avatar'].toString().isNotEmpty)
+                      ? ClipOval(
+                          child: Image.network(
+                            data['avatar'],
+                            width: 46,
+                            height: 46,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return const Center(
+                                child: Icon(
+                                  Icons.person,
+                                  color: Color(0xFF9CA3AF),
+                                  size: 24,
+                                ),
+                              );
+                            },
+                          ),
+                        )
+                      : const Center(
+                          child: Icon(
+                            Icons.person,
+                            color: Color(0xFF9CA3AF),
+                            size: 24,
+                          ),
+                        ),
                 ),
+                // --- KẾT THÚC ĐOẠN SỬA ---
                 const SizedBox(width: 14),
-
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -550,8 +633,6 @@ class _ManagerRequestCard extends StatelessWidget {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-
-                          // [QUAN TRỌNG] Badge hiển thị trạng thái realtime từ request.status
                           Container(
                             margin: const EdgeInsets.only(left: 8),
                             padding: const EdgeInsets.symmetric(
@@ -574,9 +655,7 @@ class _ManagerRequestCard extends StatelessWidget {
                           ),
                         ],
                       ),
-
                       const SizedBox(height: 6),
-
                       Text(
                         'Employee ID: ${data['employeeId']} | ${data['dept']}',
                         style: const TextStyle(
@@ -588,9 +667,7 @@ class _ManagerRequestCard extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-
                       const SizedBox(height: 6),
-
                       RichText(
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -621,7 +698,6 @@ class _ManagerRequestCard extends StatelessWidget {
                           ],
                         ),
                       ),
-
                       if (processedDate.isNotEmpty) ...[
                         const SizedBox(height: 4),
                         Text(
@@ -637,7 +713,6 @@ class _ManagerRequestCard extends StatelessWidget {
                     ],
                   ),
                 ),
-
                 const SizedBox(width: 8),
                 Icon(
                   PhosphorIcons.caretRight(),

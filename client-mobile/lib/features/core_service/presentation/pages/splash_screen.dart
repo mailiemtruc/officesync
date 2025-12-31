@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../../../core/config/app_colors.dart';
 import '../../../../dashboard_screen.dart';
+import '../../../../../core/services/websocket_service.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -39,7 +40,7 @@ class _SplashScreenState extends State<SplashScreen> {
     if (token != null && userInfoStr != null) {
       try {
         final Map<String, dynamic> userData = jsonDecode(userInfoStr);
-
+        WebSocketService().connect();
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(

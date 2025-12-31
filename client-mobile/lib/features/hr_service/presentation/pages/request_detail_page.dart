@@ -234,16 +234,15 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
     return [];
   }
 
-  // [LOGIC WORKFLOW] Cập nhật timeline
   List<Map<String, dynamic>> _getWorkflowSteps() {
     const colorGreen = Color(0xFF10B981);
     const colorRed = Color(0xFFDC2626);
     const colorBlue = Color(0xFF2563EB);
     const colorGrey = Color(0xFFCBD5E1);
 
-    // Dùng _currentRequest để update UI
     final status = _currentRequest.status;
 
+    // Format thời gian gửi đơn
     String submittedTime = 'Submitted';
     if (_currentRequest.createdAt != null) {
       submittedTime = DateFormat(
@@ -251,11 +250,22 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
       ).format(_currentRequest.createdAt!);
     }
 
+    // Format thời gian duyệt/xử lý
+    String processedTime = 'Waiting...';
+    if (_currentRequest.updatedAt != null && status != RequestStatus.PENDING) {
+      processedTime = DateFormat(
+        'HH:mm, dd/MM/yyyy',
+      ).format(_currentRequest.updatedAt!);
+    }
+
+    // Tên người duyệt
+    String actorName = _currentRequest.approverName ?? 'Manager';
+
     final steps = [
       {
         'title': 'Request Submitted',
         'time': submittedTime,
-        'actor': 'You',
+        'actor': 'By You',
         'dotColor': colorGreen,
         'lineColor': colorGrey,
         'isLast': false,
@@ -263,8 +273,12 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
       },
       {
         'title': 'Manager Review',
-        'time': status == RequestStatus.PENDING ? 'Processing...' : 'Reviewed',
-        'actor': 'Manager',
+        'time': status == RequestStatus.PENDING
+            ? 'Processing...'
+            : processedTime,
+        'actor': status == RequestStatus.PENDING
+            ? 'Waiting for Manager'
+            : 'Reviewed',
         'dotColor': status == RequestStatus.PENDING ? colorBlue : colorGreen,
         'lineColor': colorGrey,
         'isLast': false,
@@ -275,7 +289,7 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
     if (status == RequestStatus.PENDING) {
       steps.add({
         'title': 'Final Decision',
-        'time': 'Waiting for approval',
+        'time': 'Pending',
         'actor': '',
         'dotColor': colorGrey,
         'lineColor': Colors.transparent,
@@ -285,8 +299,8 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
     } else if (status == RequestStatus.APPROVED) {
       steps.add({
         'title': 'Request Approved',
-        'time': 'Approved',
-        'actor': 'System updated successfully.',
+        'time': processedTime,
+        'actor': 'By $actorName', // [HIỆN TÊN NGƯỜI DUYỆT]
         'dotColor': const Color(0xFF10B981),
         'lineColor': Colors.transparent,
         'isLast': true,
@@ -295,8 +309,9 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
     } else if (status == RequestStatus.REJECTED) {
       steps.add({
         'title': 'Request Rejected',
-        'time': 'Rejected',
-        'actor': 'Tap \'See reason\' for details',
+        'time': processedTime,
+        'actor':
+            'By $actorName • Tap to see reason', // [HIỆN TÊN NGƯỜI TỪ CHỐI]
         'dotColor': colorRed,
         'lineColor': Colors.transparent,
         'isLast': true,
@@ -305,8 +320,8 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
     } else if (status == RequestStatus.CANCELLED) {
       steps.add({
         'title': 'Request Cancelled',
-        'time': 'Cancelled by you',
-        'actor': '',
+        'time': processedTime,
+        'actor': 'By You',
         'dotColor': Colors.grey,
         'lineColor': Colors.transparent,
         'isLast': true,
@@ -317,6 +332,17 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
   }
 
   void _showRejectionDialog(BuildContext context) {
+    // Format ngày giờ duyệt
+    String approvedTime = '';
+    if (_currentRequest.updatedAt != null) {
+      approvedTime = DateFormat(
+        'MMM dd, HH:mm',
+      ).format(_currentRequest.updatedAt!);
+    }
+
+    // Tên người duyệt (hoặc mặc định Manager)
+    String managerName = _currentRequest.approverName ?? "Manager";
+
     showDialog(
       context: context,
       builder: (context) => Dialog(
@@ -381,6 +407,8 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
                 ),
               ),
               const SizedBox(height: 16),
+
+              // Box nội dung lý do
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -397,8 +425,37 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
                         fontStyle: FontStyle.italic,
                         color: Color(0xFF334155),
                         height: 1.5,
+                        fontSize: 14,
                         fontFamily: 'Inter',
+                        fontWeight: FontWeight.w500,
+                        // [ĐÃ XÓA] decoration: TextDecoration.underline,
+                        // [ĐÃ XÓA] decorationColor: Color(0xFF334155),
                       ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Dòng hiển thị Người duyệt và Thời gian
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'From: $managerName',
+                          style: const TextStyle(
+                            color: Color(0xFF94A3B8),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            fontFamily: 'Inter',
+                          ),
+                        ),
+                        Text(
+                          approvedTime,
+                          style: const TextStyle(
+                            color: Color(0xFF94A3B8),
+                            fontSize: 12,
+                            fontFamily: 'Inter',
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -817,9 +874,12 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
   }
 
   Widget _buildInfoGrid(RequestModel req) {
+    // TRƯỜNG HỢP 1: Đơn nghỉ phép (ANNUAL_LEAVE) -> Giao diện MỚI (Nét đứt)
     if (req.type == RequestType.ANNUAL_LEAVE) {
+      final dateFormat = DateFormat('MMM dd, yyyy');
+
       return Container(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
@@ -833,35 +893,22 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
         ),
         child: Column(
           children: [
-            _buildInfoRow('Date Range', req.dateRange, ''),
-            const Divider(height: 24, color: Color(0xFFF1F5F9)),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Total Duration',
-                  style: TextStyle(
-                    color: Color(0xFF64748B),
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    fontFamily: 'Inter',
-                  ),
-                ),
-                Text(
-                  req.duration,
-                  style: const TextStyle(
-                    color: Color(0xFF2563EB),
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    fontFamily: 'Inter',
-                  ),
-                ),
-              ],
-            ),
+            // From Date
+            _buildDetailRow('From Date', dateFormat.format(req.startTime)),
+            _buildDottedLine(),
+
+            // To Date
+            _buildDetailRow('To Date', dateFormat.format(req.endTime)),
+            _buildDottedLine(),
+
+            // Total Duration
+            _buildDetailRow('Total Duration', req.duration, isBlue: true),
           ],
         ),
       );
-    } else {
+    }
+    // TRƯỜNG HỢP 2: Các loại đơn khác (Overtime, Late...) -> Giao diện CŨ (Kẻ liền)
+    else {
       return Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
@@ -879,8 +926,10 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
           children: [
             _buildSimpleInfoRow('Date', req.dateRange.split('•')[0].trim()),
             const Divider(height: 24, color: Color(0xFFF1F5F9)),
+
             _buildSimpleInfoRow('Duration', req.duration),
             const Divider(height: 24, color: Color(0xFFF1F5F9)),
+
             _buildSimpleInfoRow(
               'Time',
               req.dateRange.contains('•')
@@ -893,47 +942,65 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
     }
   }
 
-  Widget _buildInfoRow(String label, String date, String time) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            color: Color(0xFF64748B),
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            fontFamily: 'Inter',
-          ),
-        ),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Text(
-              date,
-              style: const TextStyle(
-                color: Colors.black,
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                fontFamily: 'Inter',
-              ),
+  // Widget hiển thị dòng chi tiết cho giao diện MỚI
+  Widget _buildDetailRow(String label, String value, {bool isBlue = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              color: Color(0xFF64748B),
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              fontFamily: 'Inter',
             ),
-            if (time.isNotEmpty)
-              Text(
-                time,
-                style: const TextStyle(
-                  color: Color(0xFF94A3B8),
-                  fontSize: 13,
-                  fontFamily: 'Inter',
-                ),
-              ),
-          ],
-        ),
-      ],
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              color: isBlue ? const Color(0xFF2563EB) : Colors.black,
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              fontFamily: 'Inter',
+            ),
+          ),
+        ],
+      ),
     );
   }
 
+  // Widget vẽ đường kẻ nét đứt cho giao diện MỚI
+  Widget _buildDottedLine() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) {
+          final boxWidth = constraints.constrainWidth();
+          const dashWidth = 6.0;
+          const dashSpace = 4.0;
+          final dashCount = (boxWidth / (dashWidth + dashSpace)).floor();
+          return Flex(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            direction: Axis.horizontal,
+            children: List.generate(dashCount, (_) {
+              return SizedBox(
+                width: dashWidth,
+                height: 1,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(color: Colors.grey[300]),
+                ),
+              );
+            }),
+          );
+        },
+      ),
+    );
+  }
+
+  // Widget hiển thị dòng chi tiết cho giao diện CŨ
   Widget _buildSimpleInfoRow(String label, String value) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1237,6 +1304,7 @@ class _FullScreenVideoPlayerState extends State<_FullScreenVideoPlayer> {
         );
       });
     } catch (e) {
+      if (!mounted) return; // Thêm dòng này
       setState(() => _isError = true);
       debugPrint("Video Error: $e");
     }

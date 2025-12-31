@@ -27,6 +27,9 @@ class RequestModel {
   final String requesterId; // ID nhân viên
   final String requesterAvatar;
   final String requesterDept;
+  // [MỚI] Thêm các trường này
+  final String? approverName;
+  final DateTime? updatedAt;
   RequestModel({
     this.id,
     this.requestCode,
@@ -38,13 +41,14 @@ class RequestModel {
     this.durationUnit,
     required this.reason,
     this.rejectReason,
-    this.evidenceUrl, // [MỚI]
-    this.createdAt, // [MỚI]
-    // [MỚI]
+    this.evidenceUrl,
+    this.createdAt,
     this.requesterName = 'Unknown',
     this.requesterId = '',
     this.requesterAvatar = '',
     this.requesterDept = '',
+    this.approverName,
+    this.updatedAt,
   });
 
   factory RequestModel.fromJson(Map<String, dynamic> json) {
@@ -64,6 +68,11 @@ class RequestModel {
       if (r['department'] != null) {
         rDept = r['department']['name'] ?? '';
       }
+    }
+    // [MỚI] Bóc tách thông tin người duyệt (approver)
+    String? appName;
+    if (json['approver'] != null) {
+      appName = json['approver']['fullName'];
     }
 
     return RequestModel(
@@ -87,6 +96,11 @@ class RequestModel {
       requesterId: rId,
       requesterAvatar: rAvatar,
       requesterDept: rDept,
+      // [MỚI] Map dữ liệu vào
+      approverName: appName,
+      updatedAt: json['updatedAt'] != null
+          ? DateTime.parse(json['updatedAt'])
+          : null,
     );
   }
 
