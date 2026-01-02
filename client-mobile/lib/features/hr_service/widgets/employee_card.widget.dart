@@ -133,7 +133,7 @@ class EmployeeCard extends StatelessWidget {
 
                         // Employee Code
                         Text(
-                          'Employee Code: $displayCode',
+                          'Employee ID: $displayCode',
                           style: const TextStyle(
                             color: Color(0xFF555252),
                             fontSize: 13,
@@ -166,19 +166,24 @@ class EmployeeCard extends StatelessWidget {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      InkWell(
-                        onTap: onMenuTap,
-                        borderRadius: BorderRadius.circular(20),
-                        child: Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: Icon(
-                            PhosphorIcons.dotsThree(PhosphorIconsStyle.bold),
-                            color: Colors.grey[400],
-                            size: 24,
+                      // [ĐÃ SỬA] Chỉ hiện nút 3 chấm nếu có hàm callback onMenuTap
+                      if (onMenuTap != null)
+                        InkWell(
+                          onTap: onMenuTap,
+                          borderRadius: BorderRadius.circular(20),
+                          child: Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: Icon(
+                              PhosphorIcons.dotsThree(PhosphorIconsStyle.bold),
+                              color: Colors.grey[400],
+                              size: 24,
+                            ),
                           ),
                         ),
-                      ),
+
                       const SizedBox(width: 4),
+
+                      // Widget selection (Checkbox/Radio) luôn hiện nếu có
                       if (selectionWidget != null) selectionWidget!,
                     ],
                   ),

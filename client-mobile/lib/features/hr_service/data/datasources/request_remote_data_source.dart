@@ -6,7 +6,6 @@ import '../models/request_model.dart'; // Giả sử bạn có model này hoặc
 
 class RequestRemoteDataSource {
   static const String baseUrl = 'http://10.0.2.2:8081/api/requests';
-  // Service lưu trữ (Storage) - Port 8090
   static const String storageUrl = 'http://10.0.2.2:8090/api/files/upload';
 
   // 1. TẠO ĐƠN (Giữ nguyên, thêm evidenceUrl nếu cần)
@@ -74,15 +73,30 @@ class RequestRemoteDataSource {
     }
   }
 
-  // 2. [MỚI] LẤY DANH SÁCH ĐƠN CỦA TÔI
-  Future<List<RequestModel>> getMyRequests(String userId) async {
+  // [CẬP NHẬT] LẤY DANH SÁCH ĐƠN CỦA TÔI (Có lọc)
+  Future<List<RequestModel>> getMyRequests(
+    String userId, {
+    String? search,
+    int? day, // <-- Thêm tham số day
+    int? month,
+    int? year,
+  }) async {
     try {
-      // Backend thường có endpoint lấy list theo user ID từ header hoặc query param
-      // Giả sử Backend trả về list tại GET /api/requests (filter theo X-User-Id)
-      final url = Uri.parse(baseUrl);
+      // Tạo map chứa tham số
+      final queryParams = <String, String>{};
+      if (search != null && search.trim().isNotEmpty) {
+        queryParams['search'] = search.trim();
+      }
+      if (day != null) queryParams['day'] = day.toString();
+      if (month != null) queryParams['month'] = month.toString();
+      if (year != null) queryParams['year'] = year.toString();
+
+      // Ghép tham số vào URL: /api/requests?search=abc&month=10...
+      // Lưu ý: baseUrl là '.../api/requests'
+      final uri = Uri.parse(baseUrl).replace(queryParameters: queryParams);
 
       final response = await http.get(
-        url,
+        uri,
         headers: {"Content-Type": "application/json", "X-User-Id": userId},
       );
 
@@ -94,7 +108,7 @@ class RequestRemoteDataSource {
       }
     } catch (e) {
       print("Error fetching requests: $e");
-      return []; // Trả về rỗng nếu lỗi để không crash app
+      return [];
     }
   }
 
@@ -155,34 +169,40 @@ class RequestRemoteDataSource {
     }
   }
 
-  // [QUAN TRỌNG] Hàm này phải tồn tại và đúng Endpoint
-  Future<List<RequestModel>> getManagerRequests(String managerId) async {
+  // [CẬP NHẬT] LẤY DANH SÁCH DUYỆT (Manager) (Có lọc)
+  Future<List<RequestModel>> getManagerRequests(
+    String managerId, {
+    String? search,
+    int? day, // [MỚI]
+    int? month,
+    int? year,
+  }) async {
     try {
-      // Endpoint dành cho Manager/Admin duyệt đơn
-      final url = Uri.parse('$baseUrl/manager');
+      final queryParams = <String, String>{};
+      if (search != null && search.trim().isNotEmpty) {
+        queryParams['search'] = search.trim();
+      }
+      if (day != null) queryParams['day'] = day.toString();
+      if (month != null) queryParams['month'] = month.toString();
+      if (year != null) queryParams['year'] = year.toString();
 
-      print(
-        "--> [API CALL] GET $url with User-Id: $managerId",
-      ); // Dòng này sẽ hiện trong log
+      // URL: .../api/requests/manager?search=...
+      final uri = Uri.parse(
+        '$baseUrl/manager',
+      ).replace(queryParameters: queryParams);
+
+      print("--> [API CALL] GET $uri with User-Id: $managerId");
 
       final response = await http.get(
-        url,
-        headers: {
-          "Content-Type": "application/json",
-          "X-User-Id": managerId, // Backend cần cái này để biết ai đang hỏi
-        },
+        uri,
+        headers: {"Content-Type": "application/json", "X-User-Id": managerId},
       );
 
       if (response.statusCode == 200) {
-        print(
-          "--> [API SUCCESS] Body: ${response.body}",
-        ); // In ra để xem Backend trả gì
         final List<dynamic> data = jsonDecode(response.body);
         return data.map((json) => RequestModel.fromJson(json)).toList();
       } else {
-        print(
-          "--> [API ERROR] Code: ${response.statusCode} - Body: ${response.body}",
-        );
+        print("--> [API ERROR] ${response.statusCode} - ${response.body}");
         return [];
       }
     } catch (e) {

@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.officesync.hr_service.Model.Request;
@@ -53,17 +54,18 @@ public class RequestController {
         Request processed = requestService.approveRequest(requestId, approverId, status, comment);
         return ResponseEntity.ok(processed);
     }
-
-    // [MỚI] API Lấy danh sách đơn từ
-    // URL: GET /api/requests
-    // Header: X-User-Id: <id>
-    @GetMapping
-    public ResponseEntity<List<Request>> getMyRequests(
-            @RequestHeader("X-User-Id") Long userId) {
-        
-        List<Request> requests = requestService.getMyRequests(userId);
-        return ResponseEntity.ok(requests);
-    }
+// 2. API cho Cá nhân (My Requests)
+@GetMapping
+public ResponseEntity<List<Request>> getMyRequests(
+        @RequestHeader("X-User-Id") Long userId,
+        @RequestParam(required = false) String search, // Thêm
+        @RequestParam(required = false) Integer day,   // [MỚI]
+        @RequestParam(required = false) Integer month, // Thêm
+        @RequestParam(required = false) Integer year   // Thêm
+) {
+    List<Request> requests = requestService.getMyRequests(userId, search,day, month, year);
+    return ResponseEntity.ok(requests);
+}
 
    // [SỬA] Đổi thành DeleteMapping
     @DeleteMapping("/{requestId}")
@@ -75,13 +77,16 @@ public class RequestController {
         return ResponseEntity.ok(Map.of("message", "Request deleted successfully"));
     }
 
-    // 4. [MỚI - QUAN TRỌNG] Lấy danh sách đơn cần duyệt (Dành cho Manager)
-    // Frontend gọi: GET /api/requests/manager
-    @GetMapping("/manager")
-    public ResponseEntity<List<Request>> getManagerRequests(
-            @RequestHeader("X-User-Id") Long managerId) {
-        
-        List<Request> requests = requestService.getRequestsForManager(managerId);
-        return ResponseEntity.ok(requests);
-    }
+    // 1. API cho Manager/Admin
+@GetMapping("/manager")
+public ResponseEntity<List<Request>> getManagerRequests(
+        @RequestHeader("X-User-Id") Long managerId,
+        @RequestParam(required = false) String search,
+        @RequestParam(required = false) Integer day,   // [MỚI]
+        @RequestParam(required = false) Integer month,
+        @RequestParam(required = false) Integer year
+) {
+    List<Request> requests = requestService.getRequestsForManager(managerId, search, day, month, year);
+    return ResponseEntity.ok(requests);
+}
 }

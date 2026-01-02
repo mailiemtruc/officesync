@@ -15,7 +15,6 @@ import '../../data/models/request_model.dart';
 
 class CreateRequestPage extends StatefulWidget {
   const CreateRequestPage({super.key});
-
   @override
   State<CreateRequestPage> createState() => _CreateRequestPageState();
 }
@@ -269,7 +268,6 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
     }
   }
 
-  // --- HÀM SUBMIT ---
   Future<void> _onSubmit() async {
     if (_reasonController.text.trim().isEmpty) {
       _showErrorSnackBar("Please enter a reason");
@@ -287,9 +285,10 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
       DateTime endDateTime;
 
       if (_selectedTypeIndex == 0) {
-        // LEAVE
-        if (_fromDate == null || _toDate == null)
+        // --- LEAVE (Nghỉ phép) ---
+        if (_fromDate == null || _toDate == null) {
           throw Exception("Please select From & To Date");
+        }
         startDateTime = DateTime(
           _fromDate!.year,
           _fromDate!.month,
@@ -305,9 +304,10 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
           0,
         );
       } else if (_selectedTypeIndex == 1) {
-        // OVERTIME
-        if (_fromDate == null || _startTime == null || _endTime == null)
+        // --- OVERTIME (Tăng ca) ---
+        if (_fromDate == null || _startTime == null || _endTime == null) {
           throw Exception("Please select Date & Time");
+        }
         startDateTime = DateTime(
           _fromDate!.year,
           _fromDate!.month,
@@ -323,9 +323,15 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
           _endTime!.minute,
         );
       } else {
-        // LATE/EARLY
-        if (_fromDate == null || _startTime == null)
-          throw Exception("Please select Date & Time");
+        // --- LATE/EARLY (Đi trễ / Về sớm) ---
+        // [ĐÃ SỬA] Logic tính toán dựa trên input thực tế
+        if (_fromDate == null) throw Exception("Please select Date");
+        if (_startTime == null)
+          throw Exception("Please select First Time field"); // Time 1
+        if (_endTime == null)
+          throw Exception("Please select Second Time field"); // Time 2
+
+        // Gán Time 1 vào Start, Time 2 vào End
         startDateTime = DateTime(
           _fromDate!.year,
           _fromDate!.month,
@@ -333,18 +339,39 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
           _startTime!.hour,
           _startTime!.minute,
         );
-        endDateTime = startDateTime.add(const Duration(hours: 1));
+
+        endDateTime = DateTime(
+          _fromDate!.year,
+          _fromDate!.month,
+          _fromDate!.day,
+          _endTime!.hour,
+          _endTime!.minute,
+        );
       }
 
-      if (endDateTime.isBefore(startDateTime))
-        throw Exception("End time cannot be before Start time");
+      // Validate chung: End phải sau Start
+      if (endDateTime.isBefore(startDateTime)) {
+        throw Exception(
+          "End time cannot be before Start time. Please check your AM/PM selection.",
+        );
+      }
+
+      // Validate thêm cho Late/Early (Thời lượng phải dương)
+      if (_selectedTypeIndex == 2 &&
+          endDateTime.difference(startDateTime).inMinutes <= 0) {
+        throw Exception(
+          "Invalid duration. Check your Shift Standard Time vs Actual Time.",
+        );
+      }
 
       // Tính Duration
       final durationDiff = endDateTime.difference(startDateTime);
       double durationVal = durationDiff.inMinutes / 60.0;
+
       String durationUnit = "HOURS";
       if (_selectedTypeIndex == 0 && durationVal >= 24) {
-        durationVal = durationDiff.inDays.toDouble() + 1;
+        durationVal =
+            durationDiff.inDays.toDouble() + 1; // Logic ngày nghỉ (inclusive)
         durationUnit = "DAYS";
       }
 
@@ -357,7 +384,6 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
             : RequestType.EARLY_DEPARTURE;
       }
 
-      // Nối URL ảnh thành chuỗi
       String? evidenceString = _uploadedUrls.isNotEmpty
           ? _uploadedUrls.join(';')
           : null;
@@ -368,15 +394,16 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
         startTime: startDateTime,
         endTime: endDateTime,
         reason: _reasonController.text,
-        durationVal: double.parse(durationVal.toStringAsFixed(1)),
+        durationVal: double.parse(
+          durationVal.toStringAsFixed(2),
+        ), // Lấy 2 số thập phân
         durationUnit: durationUnit,
       );
 
-      // Gọi Repository
       await _repository.createRequest(
         userId: userId,
         request: requestModel,
-        evidenceUrl: evidenceString, // [MỚI] Truyền evidence
+        evidenceUrl: evidenceString,
       );
 
       if (mounted) {
@@ -728,6 +755,18 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
   }
 
   Widget _buildLateEarlyBody() {
+    // Xác định nhãn hiển thị dựa trên tab đang chọn
+    bool isLate = _lateEarlyTypeIndex == 0;
+
+    // Late: Time 1 = Giờ vào ca (Chuẩn), Time 2 = Giờ đến (Thực tế)
+    // Early: Time 1 = Giờ về (Thực tế), Time 2 = Giờ tan ca (Chuẩn)
+    String label1 = isLate
+        ? 'Shift Start Time (Standard)'
+        : 'Actual Departure Time';
+    String label2 = isLate
+        ? 'Actual Arrival Time'
+        : 'Shift End Time (Standard)';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -747,12 +786,54 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
           ),
         ),
         const SizedBox(height: 24),
+
+        // Chọn Ngày
+        _buildDateSelector('Date', true),
+        const SizedBox(height: 12),
+
+        // [MỚI] Chọn 2 mốc thời gian để tính toán chính xác
         Row(
           children: [
-            Expanded(child: _buildDateSelector('Date', true)),
+            // Time 1: Start Time (Của khoảng vắng mặt)
+            Expanded(child: _buildTimeSelector(label1, true)),
             const SizedBox(width: 12),
-            Expanded(child: _buildTimeSelector('Actual Time', true)),
+            // Time 2: End Time (Của khoảng vắng mặt)
+            Expanded(child: _buildTimeSelector(label2, false)),
           ],
+        ),
+
+        const SizedBox(height: 16),
+        // [MỚI] Ghi chú nhắc nhở người dùng (Chuẩn Doanh Nghiệp)
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFF7ED), // Màu cam nhạt cảnh báo nhẹ
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: const Color(0xFFFFEDD5)),
+          ),
+          child: Row(
+            children: [
+              const Icon(
+                PhosphorIconsRegular.info,
+                color: Color(0xFFF97316),
+                size: 20,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  isLate
+                      ? "Please enter your Standard Shift Start (e.g., 08:00) and when you actually arrived."
+                      : "Please enter when you actually left and your Standard Shift End (e.g., 17:00).",
+                  style: const TextStyle(
+                    color: Color(0xFF9A3412),
+                    fontSize: 12,
+                    fontFamily: 'Inter',
+                    height: 1.4,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );

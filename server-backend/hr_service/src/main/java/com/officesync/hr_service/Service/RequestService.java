@@ -1,13 +1,16 @@
 package com.officesync.hr_service.Service;
 import java.time.LocalDateTime;
-import java.util.List;
-import com.officesync.hr_service.Model.EmployeeRole; // Import Role
+import java.util.Collections;
+import java.util.List; // Import Role
+
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import java.util.Collections; // Import thêm
+import org.springframework.transaction.annotation.Transactional; // Import thêm
+
 import com.officesync.hr_service.Model.Department;
 import com.officesync.hr_service.Model.Employee;
+import com.officesync.hr_service.Model.EmployeeRole;
 import com.officesync.hr_service.Model.Request;
 import com.officesync.hr_service.Model.RequestAuditLog;
 import com.officesync.hr_service.Model.RequestStatus;
@@ -16,7 +19,7 @@ import com.officesync.hr_service.Repository.DepartmentRepository;
 import com.officesync.hr_service.Repository.EmployeeRepository;
 import com.officesync.hr_service.Repository.RequestAuditLogRepository;
 import com.officesync.hr_service.Repository.RequestRepository;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 @Service
@@ -139,40 +142,36 @@ public class RequestService {
         return savedRequest;
     }
 
-    @Transactional(readOnly = true)
-    public List<Request> getRequestsForManager(Long requesterId) {
-        log.info("--> [Service] Đang lấy danh sách duyệt cho User ID: {}", requesterId);
+    // 1. Sửa hàm getRequestsForManager (Dùng cho Manager/Admin/HR)
+public List<Request> getRequestsForManager(Long requesterId, String keyword, Integer day, Integer month, Integer year) {
+    Employee requester = employeeRepository.findById(requesterId)
+            .orElseThrow(() -> new RuntimeException("User not found"));
+    
+    // Xử lý keyword: Nếu rỗng thì gửi null để Query bỏ qua
+    String searchKey = (keyword != null && !keyword.trim().isEmpty()) ? keyword.trim() : null;
 
-        Employee requester = employeeRepository.findById(requesterId)
+    boolean isAdmin = requester.getRole() == EmployeeRole.COMPANY_ADMIN;
+    boolean isManager = requester.getRole() == EmployeeRole.MANAGER;
+    boolean isHrStaff = isHrEmployee(requester);
 
-                .orElseThrow(() -> new RuntimeException("User not found"));
-        Long companyId = requester.getCompanyId();
-        boolean isAdmin = requester.getRole() == EmployeeRole.COMPANY_ADMIN;
-        boolean isHrStaff = isHrEmployee(requester); // Nếu bạn có hàm check HR
-        boolean isManager = requester.getRole() == EmployeeRole.MANAGER;
-
-        // [SỬA LẠI] Admin/HR: Lấy TOÀN BỘ đơn (cả Pending và History)
-
-        if (isAdmin || isHrStaff) {
-
-            log.info("--> Admin/HR: Lấy toàn bộ lịch sử đơn của Company ID: {}", companyId);
-
-            return requestRepository.findByCompanyIdOrderByCreatedAtDesc(companyId);
-
-        }
-        // [SỬA LẠI] Manager: Lấy TOÀN BỘ đơn của phòng ban (cả Pending và History)
-        if (isManager) {
-
-            Department dept = requester.getDepartment();
-
-            if (dept != null) {
-                log.info("--> Manager: Lấy toàn bộ lịch sử đơn của Dept ID: {}", dept.getId());
-                return requestRepository.findByDepartmentIdOrderByCreatedAtDesc(dept.getId());
-            }
-        }
-        return Collections.emptyList();
-
+    // ADMIN hoặc HR -> Tìm toàn công ty
+    if (isAdmin || isHrStaff) {
+        return requestRepository.searchRequestsForAdmin(
+            requester.getCompanyId(), searchKey, day , month, year
+        );
     }
+    
+    // MANAGER -> Tìm trong phòng ban
+    if (isManager) {
+        Department dept = requester.getDepartment();
+        if (dept != null) {
+            return requestRepository.searchRequestsForManager(
+                dept.getId(), searchKey, day , month, year
+            );
+        }
+    }
+    return Collections.emptyList();
+}
     // --- Helper Check HR ---
 
     private boolean isHrEmployee(Employee emp) {
@@ -183,58 +182,73 @@ public class RequestService {
     }
    // --- 3. HỦY ĐƠN (SỬA LẠI ĐỂ REALTIME CHI TIẾT) ---
 
-    @Transactional
+  @Transactional
     public void cancelRequest(Long requestId, Long userId) {
         Request request = requestRepository.findById(requestId)
-
                 .orElseThrow(() -> new RuntimeException("Request not found"));
-        // Check quyền (Giữ nguyên)
+
+        // 1. Check quyền chính chủ
         if (!request.getRequester().getId().equals(userId)) {
             throw new RuntimeException("Unauthorized: You do not own this request");
         }
 
-        if (request.getStatus() != RequestStatus.PENDING) {
+        // --- TRƯỜNG HỢP 1: Đơn đang chờ (PENDING) -> XÓA VĨNH VIỄN KHỎI DB ---
+        // (Logic này giống hệt code gốc của bạn)
+        if (request.getStatus() == RequestStatus.PENDING) {
+            
+            Long reqId = request.getId();
+            Long companyId = request.getCompanyId();
 
-            throw new RuntimeException("Cannot delete processed request");
-        }
-        // Lấy thông tin cần thiết trước khi xóa để bắn socket
-        Long reqId = request.getId();
-        Long companyId = request.getCompanyId();
-        // Xóa file (Giữ nguyên)
-        if (request.getEvidenceUrl() != null && !request.getEvidenceUrl().isEmpty()) {
-            String[] urls = request.getEvidenceUrl().split(";");
-            for (String url : urls) {
-                try {
-                    String fileName = url.substring(url.lastIndexOf("/") + 1);
-                    employeeProducer.sendDeleteFileEvent(fileName);
-                } catch (Exception e) {
-                    log.error("Lỗi MQ xóa file: {}", e.getMessage());
+            // A. Xóa file đính kèm trên server (nếu có)
+            if (request.getEvidenceUrl() != null && !request.getEvidenceUrl().isEmpty()) {
+                String[] urls = request.getEvidenceUrl().split(";");
+                for (String url : urls) {
+                    try {
+                        String fileName = url.substring(url.lastIndexOf("/") + 1);
+                        employeeProducer.sendDeleteFileEvent(fileName);
+                    } catch (Exception e) {
+                        log.error("Lỗi MQ xóa file: {}", e.getMessage());
+                    }
                 }
             }
-        }
-        // Xóa Log & Request (Giữ nguyên)
-        List<RequestAuditLog> logs = auditLogRepository.findByRequestIdOrderByTimestampDesc(requestId);
-        if (!logs.isEmpty()) {
-            auditLogRepository.deleteAll(logs);
-        }
-        requestRepository.delete(request);
-        log.info("--> Đã xóa đơn request ID: {}", requestId);
-       // [SỬA LẠI PHẦN SOCKET]
-        try {
-            // Tạo một object giả để báo Client xóa item
-            Request cancelledMock = new Request();
-            cancelledMock.setId(reqId);
-            cancelledMock.setStatus(RequestStatus.CANCELLED);
-            cancelledMock.setCompanyId(companyId);
 
-            // 1. Báo trang chi tiết
-            messagingTemplate.convertAndSend("/topic/request/" + reqId, cancelledMock);
+            // B. Xóa Audit Log (Lịch sử thao tác) liên quan đến đơn này
+            List<RequestAuditLog> logs = auditLogRepository.findByRequestIdOrderByTimestampDesc(requestId);
+            if (!logs.isEmpty()) {
+                auditLogRepository.deleteAll(logs);
+            }
 
-            // 2. [QUAN TRỌNG] Báo danh sách Manager để xóa dòng đó đi
-            messagingTemplate.convertAndSend("/topic/company/" + companyId + "/requests", cancelledMock);
+            // C. Xóa đơn khỏi Database
+            requestRepository.delete(request);
+            log.info("--> Đã xóa vĩnh viễn đơn request ID: {}", reqId);
 
-        } catch (Exception e) {
-             log.error("Lỗi gửi WebSocket Cancel: " + e.getMessage());
+            // D. Bắn Socket báo Frontend xóa dòng này trên giao diện
+            try {
+                // Tạo object rỗng chỉ chứa ID để Frontend biết mà xóa
+                Request deletedPayload = new Request();
+                deletedPayload.setId(reqId);
+                deletedPayload.setCompanyId(companyId);
+                // Lưu ý: Không setStatus(CANCELLED) vì bạn không dùng enum này.
+                // Frontend chỉ cần check ID để removeWhere.
+
+                // 1. Báo trang chi tiết (nếu đang mở)
+                messagingTemplate.convertAndSend("/topic/request/" + reqId, deletedPayload);
+
+                // 2. Báo danh sách Manager (để xóa dòng đó khỏi màn hình Manager)
+                messagingTemplate.convertAndSend("/topic/company/" + companyId + "/requests", deletedPayload);
+
+            } catch (Exception e) {
+                log.error("Lỗi gửi WebSocket Delete: " + e.getMessage());
+            }
+        } 
+        
+        // --- TRƯỜNG HỢP 2: Đơn đã xử lý (APPROVED / REJECTED) -> CHỈ ẨN ĐI (Soft Delete) ---
+        // (Logic mới thêm để tăng trải nghiệm người dùng)
+        else {
+            // Không xóa data để giữ lịch sử chấm công, chỉ bật cờ ẩn
+            request.setIsHidden(true);
+            requestRepository.save(request);
+            log.info("--> Đã ẩn đơn (Soft Delete) khỏi danh sách cá nhân ID: {}", requestId);
         }
     }
     
@@ -262,7 +276,12 @@ public class RequestService {
         return "REQ" + datePart + String.format("%04d", randomNum);
     }
 
-    public List<Request> getMyRequests(Long userId) {
-        return requestRepository.findByRequesterIdOrderByCreatedAtDesc(userId);
-    }
+// 2. Sửa hàm getMyRequests (Dùng cho Nhân viên xem đơn của mình)
+public List<Request> getMyRequests(Long userId, String keyword,Integer day, Integer month, Integer year) {
+    String searchKey = (keyword != null && !keyword.trim().isEmpty()) ? keyword.trim() : null;
+    
+    return requestRepository.searchRequestsForEmployee(
+        userId, searchKey,day, month, year
+    );
+}
 }

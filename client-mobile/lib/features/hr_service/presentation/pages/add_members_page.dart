@@ -13,7 +13,7 @@ import '../../data/datasources/employee_remote_data_source.dart';
 
 class AddMembersPage extends StatefulWidget {
   final List<EmployeeModel> alreadySelectedMembers;
-  final String? excludeManagerId; // [MỚI] Nhận ID Manager để loại trừ khỏi list
+  final String? excludeManagerId;
 
   const AddMembersPage({
     super.key,
@@ -29,17 +29,14 @@ class _AddMembersPageState extends State<AddMembersPage> {
   late final EmployeeRepositoryImpl _repository;
   final _storage = const FlutterSecureStorage();
 
-  List<EmployeeModel> _displayList = []; // Danh sách đang hiển thị từ Search
-  Set<String> _selectedIds = {}; // Set chứa ID các member đã chọn
-
-  // [QUAN TRỌNG] Lưu trữ object Member đã chọn để trả về.
-  // Vì search list thay đổi liên tục, cần biến này để giữ data những người đã tick.
+  List<EmployeeModel> _displayList = [];
+  Set<String> _selectedIds = {};
   Map<String, EmployeeModel> _selectedObjects = {};
 
   bool _isLoading = false;
   Timer? _debounce;
   String? _currentUserId;
-  String _currentFilter = 'All'; // Giữ UI Filter, nhưng logic search là chính
+  String _currentFilter = 'All';
 
   final TextEditingController _searchController = TextEditingController();
 
@@ -50,7 +47,6 @@ class _AddMembersPageState extends State<AddMembersPage> {
       remoteDataSource: EmployeeRemoteDataSource(),
     );
 
-    // Khôi phục trạng thái đã chọn từ trang trước
     for (var emp in widget.alreadySelectedMembers) {
       if (emp.id != null) {
         _selectedIds.add(emp.id!);
@@ -61,20 +57,33 @@ class _AddMembersPageState extends State<AddMembersPage> {
     _initUserAndFetchDefault();
   }
 
+  // [FIX LỖI QUAN TRỌNG] Thêm dispose để tránh Memory Leak
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _debounce?.cancel();
+    super.dispose();
+  }
+
   Future<void> _initUserAndFetchDefault() async {
     String? userInfoStr = await _storage.read(key: 'user_info');
     if (userInfoStr != null) {
-      final userMap = jsonDecode(userInfoStr);
-      _currentUserId = userMap['id'].toString();
-      _performSearch("");
+      try {
+        final userMap = jsonDecode(userInfoStr);
+        _currentUserId = userMap['id']?.toString();
+        _performSearch("");
+      } catch (e) {
+        print("Error parsing user info: $e");
+      }
     }
   }
 
   Future<void> _performSearch(String keyword) async {
     if (_currentUserId == null) return;
+    if (!mounted) return; // Check mounted để an toàn
+
     setState(() => _isLoading = true);
     try {
-      // 1. Lấy dữ liệu thô từ API
       final result = await _repository.getEmployeeSuggestions(
         _currentUserId!,
         keyword,
@@ -82,17 +91,13 @@ class _AddMembersPageState extends State<AddMembersPage> {
 
       if (mounted) {
         setState(() {
-          // 2. Bắt đầu chuỗi lọc
           List<EmployeeModel> filtered = result;
 
-          // [MỚI] BỘ LỌC ROLE: Chỉ hiển thị STAFF
-          // Loại bỏ tất cả những người đang là MANAGER hoặc ADMIN
+          // Lọc chỉ lấy STAFF
           filtered = filtered.where((e) {
-            // Kiểm tra null safety và so sánh chuỗi (không phân biệt hoa thường cho chắc chắn)
             return e.role.toUpperCase() == 'STAFF';
           }).toList();
 
-          // 3. Lọc theo Tab "Unassigned" (nếu đang chọn tab này)
           if (_currentFilter == 'Unassigned') {
             filtered = filtered.where((e) {
               final dept = e.departmentName;
@@ -100,14 +105,12 @@ class _AddMembersPageState extends State<AddMembersPage> {
             }).toList();
           }
 
-          // 4. Lọc bỏ Manager hiện tại của phòng này (Logic cũ giữ nguyên để an toàn)
           if (widget.excludeManagerId != null) {
             filtered = filtered
                 .where((e) => e.id != widget.excludeManagerId)
                 .toList();
           }
 
-          // 5. Gán kết quả
           _displayList = filtered;
           _isLoading = false;
         });
@@ -121,11 +124,12 @@ class _AddMembersPageState extends State<AddMembersPage> {
   void _onSearchChanged(String query) {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
     _debounce = Timer(const Duration(milliseconds: 500), () {
-      _performSearch(query);
+      if (mounted) {
+        _performSearch(query);
+      }
     });
   }
 
-  // Logic Select All áp dụng cho danh sách đang hiển thị
   void _toggleSelectAll() {
     setState(() {
       final availableIds = _displayList
@@ -133,17 +137,18 @@ class _AddMembersPageState extends State<AddMembersPage> {
           .map((e) => e.id!)
           .toList();
 
-      // Kiểm tra xem tất cả người trong list hiện tại đã được chọn chưa
       bool allVisibleSelected = availableIds.every(
         (id) => _selectedIds.contains(id),
       );
 
       if (allVisibleSelected) {
-        // Bỏ chọn tất cả người đang hiển thị
         _selectedIds.removeAll(availableIds);
-        // (Không remove khỏi _selectedObjects để đơn giản, lọc sau khi done)
+        // Lưu ý: Không xóa selectedObjects của những item đang bị ẩn do filter
+        // Chỉ xóa những item đang hiển thị
+        for (var id in availableIds) {
+          _selectedObjects.remove(id);
+        }
       } else {
-        // Chọn tất cả người đang hiển thị
         _selectedIds.addAll(availableIds);
         for (var emp in _displayList) {
           if (emp.status != "LOCKED") {
@@ -156,10 +161,11 @@ class _AddMembersPageState extends State<AddMembersPage> {
 
   @override
   Widget build(BuildContext context) {
-    // Kiểm tra trạng thái Select All cho UI
     final validMembersInView = _displayList
         .where((e) => e.status != "LOCKED")
         .toList();
+
+    // Logic check Select All chỉ dựa trên những gì đang hiển thị
     final isAllSelected =
         validMembersInView.isNotEmpty &&
         validMembersInView.every((e) => _selectedIds.contains(e.id));
@@ -173,7 +179,7 @@ class _AddMembersPageState extends State<AddMembersPage> {
             child: Column(
               children: [
                 const SizedBox(height: 20),
-                // Header (Giữ nguyên)
+                // Header
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: Row(
@@ -203,17 +209,12 @@ class _AddMembersPageState extends State<AddMembersPage> {
                   ),
                 ),
                 const SizedBox(height: 24),
-                // Search & Filter
+
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Row(
-                    children: [
-                      Expanded(child: _buildSearchBar()),
-                      const SizedBox(width: 12),
-                      _buildFilterButton(),
-                    ],
-                  ),
+                  child: _buildSearchBar(),
                 ),
+
                 const SizedBox(height: 16),
                 // Tabs
                 Padding(
@@ -326,7 +327,6 @@ class _AddMembersPageState extends State<AddMembersPage> {
                     height: 50,
                     child: ElevatedButton(
                       onPressed: () {
-                        // [LOGIC] Lấy danh sách object từ Map dựa trên ID đã chọn
                         final result = _selectedObjects.values.toList();
                         Navigator.pop(context, result);
                       },
@@ -387,7 +387,7 @@ class _AddMembersPageState extends State<AddMembersPage> {
     ),
     child: TextField(
       controller: _searchController,
-      onChanged: _onSearchChanged, // Gắn Debounce
+      onChanged: _onSearchChanged,
       decoration: InputDecoration(
         hintText: 'Search name, employee ID...',
         hintStyle: const TextStyle(
@@ -406,29 +406,14 @@ class _AddMembersPageState extends State<AddMembersPage> {
     ),
   );
 
-  Widget _buildFilterButton() {
-    return Container(
-      width: 45,
-      height: 45,
-      decoration: BoxDecoration(
-        color: const Color(0xFFF5F5F5),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE0E0E0)),
-      ),
-      child: const Icon(Icons.filter_list, color: Color(0xFF555252)),
-    );
-  }
-
   Widget _buildTabButton(String label) {
     bool isSelected = _currentFilter == label;
     return GestureDetector(
       onTap: () {
-        // Chỉ reload nếu bấm vào tab khác tab hiện tại
         if (_currentFilter != label) {
           setState(() {
             _currentFilter = label;
           });
-          // [QUAN TRỌNG] Gọi lại hàm search với từ khóa hiện tại để áp dụng bộ lọc mới
           _performSearch(_searchController.text);
         }
       },
@@ -450,7 +435,6 @@ class _AddMembersPageState extends State<AddMembersPage> {
     );
   }
 
-  // [MỚI] Widget hiển thị khi danh sách rỗng (Giống EmployeeListPage)
   Widget _buildEmptyState(String message) {
     return Center(
       child: Column(

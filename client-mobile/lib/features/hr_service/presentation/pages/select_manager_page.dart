@@ -43,14 +43,19 @@ class _SelectManagerPageState extends State<SelectManagerPage> {
   Future<void> _initUserAndFetchDefault() async {
     String? userInfoStr = await _storage.read(key: 'user_info');
     if (userInfoStr != null) {
-      final userMap = jsonDecode(userInfoStr);
-      _currentUserId = userMap['id'].toString();
-      _performSearch("");
+      try {
+        final userMap = jsonDecode(userInfoStr);
+        _currentUserId = userMap['id']?.toString();
+        _performSearch("");
+      } catch (e) {
+        print("Error parsing user info: $e");
+      }
     }
   }
 
   Future<void> _performSearch(String keyword) async {
     if (_currentUserId == null) return;
+    if (!mounted) return;
 
     setState(() => _isLoading = true);
     try {
@@ -61,6 +66,7 @@ class _SelectManagerPageState extends State<SelectManagerPage> {
 
       if (mounted) {
         setState(() {
+          // Lọc không cho hiện chính mình
           _displayList = result.where((e) => e.id != _currentUserId).toList();
           _isLoading = false;
         });
@@ -74,7 +80,9 @@ class _SelectManagerPageState extends State<SelectManagerPage> {
   void _onSearchChanged(String query) {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
     _debounce = Timer(const Duration(milliseconds: 500), () {
-      _performSearch(query);
+      if (mounted) {
+        _performSearch(query);
+      }
     });
   }
 
@@ -102,10 +110,11 @@ class _SelectManagerPageState extends State<SelectManagerPage> {
                   child: Row(
                     children: [
                       IconButton(
-                        icon: const Icon(
-                          Icons.arrow_back_ios,
-                          size: 24,
+                        // [ĐÃ SỬA] Đổi Icon cho đồng bộ với trang AddMember
+                        icon: Icon(
+                          PhosphorIcons.caretLeft(PhosphorIconsStyle.bold),
                           color: AppColors.primary,
+                          size: 24,
                         ),
                         onPressed: () => Navigator.pop(context),
                       ),
@@ -127,16 +136,9 @@ class _SelectManagerPageState extends State<SelectManagerPage> {
                 ),
                 const SizedBox(height: 24),
 
-                // Search Bar
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Row(
-                    children: [
-                      Expanded(child: _buildSearchBar()),
-                      const SizedBox(width: 12),
-                      _buildFilterButton(),
-                    ],
-                  ),
+                  child: _buildSearchBar(),
                 ),
 
                 const SizedBox(height: 12),
@@ -162,7 +164,6 @@ class _SelectManagerPageState extends State<SelectManagerPage> {
                   child: _isLoading
                       ? const Center(child: CircularProgressIndicator())
                       : _displayList.isEmpty
-                      // [HIỂN THỊ TRẠNG THÁI RỖNG ĐẸP]
                       ? _buildEmptyState(
                           _searchController.text.isNotEmpty
                               ? "No employees found matching '${_searchController.text}'"
@@ -173,8 +174,6 @@ class _SelectManagerPageState extends State<SelectManagerPage> {
                           itemCount: _displayList.length,
                           itemBuilder: (context, index) {
                             final emp = _displayList[index];
-                            // [SỬA LỖI LOGIC]
-                            // So sánh ID với ID đã chọn ban đầu (Single Select)
                             final isSelected =
                                 emp.id.toString() == widget.selectedId;
                             final isLocked = emp.status == "LOCKED";
@@ -182,8 +181,7 @@ class _SelectManagerPageState extends State<SelectManagerPage> {
                             return EmployeeCard(
                               employee: emp,
                               isSelected: isSelected,
-                              // [SỬA LỖI ONTAP]
-                              // Chọn xong thì trả về luôn (Navigator.pop)
+                              // KHÔNG TRUYỀN onMenuTap ĐỂ ẨN NÚT 3 CHẤM
                               onTap: isLocked
                                   ? null
                                   : () => Navigator.pop(context, emp),
@@ -216,7 +214,12 @@ class _SelectManagerPageState extends State<SelectManagerPage> {
         onChanged: _onSearchChanged,
         decoration: InputDecoration(
           hintText: 'Search name, employee ID...',
-          hintStyle: const TextStyle(color: Color(0xFF9E9E9E), fontSize: 14),
+          // [ĐÃ SỬA] Thêm w300 cho đồng bộ
+          hintStyle: const TextStyle(
+            color: Color(0xFF9E9E9E),
+            fontSize: 14,
+            fontWeight: FontWeight.w300,
+          ),
           prefixIcon: Icon(
             PhosphorIcons.magnifyingGlass(),
             color: const Color(0xFF757575),
@@ -244,30 +247,6 @@ class _SelectManagerPageState extends State<SelectManagerPage> {
       child: isSelected && !isLocked
           ? const Icon(Icons.check, size: 16, color: Colors.white)
           : null,
-    );
-  }
-
-  Widget _buildFilterButton() {
-    return Container(
-      width: 45,
-      height: 45,
-      decoration: BoxDecoration(
-        color: const Color(0xFFF5F5F5),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE0E0E0), width: 1),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: () {},
-          child: Icon(
-            PhosphorIcons.funnel(PhosphorIconsStyle.regular),
-            color: const Color(0xFF555252),
-            size: 20,
-          ),
-        ),
-      ),
     );
   }
 

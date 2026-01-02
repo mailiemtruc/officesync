@@ -9,7 +9,13 @@ abstract class RequestRepository {
     String? evidenceUrl, // [MỚI]
   });
 
-  Future<List<RequestModel>> getMyRequests(String userId);
+  Future<List<RequestModel>> getMyRequests(
+    String userId, {
+    String? search,
+    int? day, // <-- Thêm dòng này
+    int? month,
+    int? year,
+  });
 
   // [MỚI] Hàm upload file
   Future<String> uploadFile(File file);

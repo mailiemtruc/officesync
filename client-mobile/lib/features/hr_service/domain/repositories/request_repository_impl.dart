@@ -32,10 +32,22 @@ class RequestRepositoryImpl implements RequestRepository {
     );
   }
 
-  // [SỬA] Kết nối Data Source
+  // [CẬP NHẬT]
   @override
-  Future<List<RequestModel>> getMyRequests(String userId) async {
-    return await remoteDataSource.getMyRequests(userId);
+  Future<List<RequestModel>> getMyRequests(
+    String userId, {
+    String? search,
+    int? day, // <-- Thêm dòng này
+    int? month,
+    int? year,
+  }) async {
+    // Truyền tiếp tham số xuống Remote Data Source
+    return await remoteDataSource.getMyRequests(
+      userId,
+      search: search,
+      month: month,
+      year: year,
+    );
   }
 
   // [MỚI] Implement hàm upload
