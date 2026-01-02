@@ -40,13 +40,21 @@ class EmployeeRemoteDataSource {
     }
   }
 
-  // 2. LẤY DANH SÁCH PHÒNG BAN
-  Future<List<DepartmentModel>> getDepartments() async {
+  // 2. LẤY DANH SÁCH PHÒNG BAN (Đã sửa bảo mật)
+  Future<List<DepartmentModel>> getDepartments(String currentUserId) async {
+    // [MỚI] Thêm tham số
     try {
       final url = Uri.parse('$baseUrl/departments');
       print("--> Fetching Departments from: $url");
 
-      final response = await http.get(url);
+      final response = await http.get(
+        url,
+        headers: {
+          "Content-Type": "application/json",
+          "X-User-Id":
+              currentUserId, // [QUAN TRỌNG] Gửi ID để Backend lọc công ty
+        },
+      );
 
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
@@ -88,11 +96,12 @@ class EmployeeRemoteDataSource {
   }
 
   Future<bool> updateEmployee(
+    String updaterId, // [MỚI] Thêm tham số này để biết ai là người sửa
     String id,
     String fullName,
     String phone,
     String dob, {
-    String? email, // [MỚI] Thêm tham số email
+    String? email,
     String? avatarUrl,
     String? status,
     String? role,
@@ -105,7 +114,6 @@ class EmployeeRemoteDataSource {
         "fullName": fullName,
         "phone": phone,
         "dateOfBirth": dob,
-        // [MỚI] Gửi email nếu có dữ liệu
         if (email != null && email.isNotEmpty) "email": email,
         "avatarUrl": avatarUrl,
         if (status != null) "status": status,
@@ -115,15 +123,17 @@ class EmployeeRemoteDataSource {
 
       final response = await http.put(
         url,
-        headers: {"Content-Type": "application/json"},
+        headers: {
+          "Content-Type": "application/json",
+          "X-User-Id":
+              updaterId, // [QUAN TRỌNG] Gửi ID người thực hiện lên Header
+        },
         body: jsonEncode(body),
       );
 
-      // Nếu backend trả về lỗi (ví dụ 400 Bad Request do trùng email)
       if (response.statusCode == 200) {
         return true;
       } else {
-        // [QUAN TRỌNG] Ném lỗi để UI bắt được thông báo "Email đã tồn tại"
         final errorBody = jsonDecode(response.body);
         throw Exception(errorBody['message'] ?? 'Update failed');
       }

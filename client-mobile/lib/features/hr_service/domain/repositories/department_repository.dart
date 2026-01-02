@@ -13,22 +13,28 @@ class DepartmentRepository {
     return await remoteDataSource.createDepartment(department, creatorId);
   }
 
+  // [SỬA] Thêm tham số userId
   Future<bool> updateDepartment(
+    String userId, // [MỚI]
     int id,
     String name,
     String description,
     String? managerId,
+    bool isHr, // [MỚI]
   ) async {
     return await remoteDataSource.updateDepartment(
+      userId, // [MỚI]
       id,
       name,
       description,
       managerId,
+      isHr, // [MỚI]
     );
   }
 
-  Future<bool> deleteDepartment(int id) async {
-    return await remoteDataSource.deleteDepartment(id);
+  // [SỬA] Thêm tham số userId
+  Future<bool> deleteDepartment(String userId, int id) async {
+    return await remoteDataSource.deleteDepartment(userId, id);
   }
 
   // Thêm hàm này vào class DepartmentRepository
@@ -37,5 +43,10 @@ class DepartmentRepository {
     String keyword,
   ) async {
     return await remoteDataSource.searchDepartments(userId, keyword);
+  }
+
+  // [MỚI]
+  Future<DepartmentModel?> getHrDepartment(String userId) async {
+    return await remoteDataSource.getHrDepartment(userId);
   }
 }

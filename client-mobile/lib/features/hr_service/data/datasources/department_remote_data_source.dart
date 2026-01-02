@@ -34,12 +34,14 @@ class DepartmentRemoteDataSource {
     }
   }
 
-  // [MỚI] Cập nhật phòng ban
+  // [SỬA] Thêm tham số userId để gửi Header
   Future<bool> updateDepartment(
+    String userId, // [MỚI]
     int id,
     String name,
     String description,
     String? managerId,
+    bool isHr, // [MỚI] Thêm tham số
   ) async {
     try {
       final url = Uri.parse('$baseUrl/$id');
@@ -47,11 +49,15 @@ class DepartmentRemoteDataSource {
         "name": name,
         "description": description,
         "managerId": managerId != null ? int.tryParse(managerId) : null,
+        "isHr": isHr, // [MỚI] Gửi lên
       };
 
       final response = await http.put(
         url,
-        headers: {"Content-Type": "application/json"},
+        headers: {
+          "Content-Type": "application/json",
+          "X-User-Id": userId, // [MỚI]
+        },
         body: jsonEncode(body),
       );
 
@@ -61,11 +67,14 @@ class DepartmentRemoteDataSource {
     }
   }
 
-  // [MỚI] Xóa phòng ban
-  Future<bool> deleteDepartment(int id) async {
+  // [SỬA] Thêm tham số userId
+  Future<bool> deleteDepartment(String userId, int id) async {
     try {
       final url = Uri.parse('$baseUrl/$id');
-      final response = await http.delete(url);
+      final response = await http.delete(
+        url,
+        headers: {"X-User-Id": userId}, // [MỚI]
+      );
       return response.statusCode == 200;
     } catch (e) {
       rethrow;
@@ -100,6 +109,30 @@ class DepartmentRemoteDataSource {
     } catch (e) {
       print("Error searching departments: $e");
       return [];
+    }
+  }
+
+  // [MỚI] Lấy thông tin phòng HR từ Server
+  Future<DepartmentModel?> getHrDepartment(String userId) async {
+    try {
+      // Gọi vào endpoint /hr vừa tạo ở Backend
+      final url = Uri.parse('$baseUrl/hr');
+      print("--> Fetching HR Department info...");
+
+      final response = await http.get(
+        url,
+        headers: {"Content-Type": "application/json", "X-User-Id": userId},
+      );
+
+      if (response.statusCode == 200) {
+        return DepartmentModel.fromJson(jsonDecode(response.body));
+      } else {
+        print("Failed to fetch HR Dept: ${response.body}");
+        return null;
+      }
+    } catch (e) {
+      print("Error fetching HR Dept: $e");
+      return null;
     }
   }
 }

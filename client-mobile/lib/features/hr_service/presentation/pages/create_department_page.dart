@@ -28,7 +28,7 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
   EmployeeModel? _selectedManager;
   List<EmployeeModel> _selectedMembers = [];
   bool _isLoading = false;
-
+  bool _isHr = false; // [MỚI]
   late final DepartmentRepository _departmentRepository;
   final _storage = const FlutterSecureStorage();
 
@@ -80,6 +80,7 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
         name: _nameController.text.trim(),
         manager: _selectedManager,
         memberIds: memberIds,
+        isHr: _isHr, // [MỚI] Gửi trạng thái HR
       );
 
       final success = await _departmentRepository.createDepartment(
@@ -376,7 +377,56 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
                         ),
                       ),
                       const SizedBox(height: 24),
-
+                      // [MỚI] PHẦN UI CẤU HÌNH HR
+                      _buildSectionTitle('DEPARTMENT SETTINGS'),
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                        decoration: _buildBlockDecoration(),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Main HR Department',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.black,
+                                      fontFamily: 'Inter',
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'This department receives all employee requests.',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.grey[600],
+                                      fontFamily: 'Inter',
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Switch.adaptive(
+                              value: _isHr,
+                              activeColor: AppColors.primary,
+                              onChanged: (value) {
+                                setState(() {
+                                  _isHr = value;
+                                });
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 24),
                       _buildSectionTitle('INITIAL MEMBERS'),
                       const SizedBox(height: 12),
                       InkWell(

@@ -6,7 +6,9 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'dart:ui' as ui;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:image_picker/image_picker.dart';
-
+// Thêm 2 dòng này vào phần import
+import '../../domain/repositories/department_repository.dart';
+import '../../data/datasources/department_remote_data_source.dart';
 // Import cấu hình và Data Layer
 import '../../../../core/config/app_colors.dart';
 import '../../data/datasources/request_remote_data_source.dart';
@@ -43,14 +45,23 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
   bool _isSubmitting = false;
   final _storage = const FlutterSecureStorage();
   late final RequestRepositoryImpl _repository;
-
+  late final DepartmentRepository _departmentRepository;
+  String _hrDepartmentName =
+      'Human Resources Dept'; // Tên mặc định khi đang tải
   @override
   void initState() {
     super.initState();
-    // Khởi tạo Repository
     _repository = RequestRepositoryImpl(
       remoteDataSource: RequestRemoteDataSource(),
     );
+
+    // [THÊM MỚI] Khởi tạo repo phòng ban
+    _departmentRepository = DepartmentRepository(
+      remoteDataSource: DepartmentRemoteDataSource(),
+    );
+
+    // [THÊM MỚI] Gọi hàm lấy tên phòng HR
+    _fetchHrDepartmentName();
   }
 
   // --- 1. GỌI REPOSITORY ĐỂ UPLOAD ---
@@ -96,6 +107,29 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
       _showErrorSnackBar(
         "Upload failed: ${e.toString().replaceAll('Exception: ', '')}",
       );
+    }
+  }
+
+  // [HÀM MỚI] Lấy tên phòng HR từ Server
+  Future<void> _fetchHrDepartmentName() async {
+    try {
+      String? userInfoStr = await _storage.read(key: 'user_info');
+      if (userInfoStr != null) {
+        final userMap = jsonDecode(userInfoStr);
+        String userId = userMap['id'].toString();
+
+        // Gọi API
+        final hrDept = await _departmentRepository.getHrDepartment(userId);
+
+        if (hrDept != null && mounted) {
+          setState(() {
+            _hrDepartmentName =
+                hrDept.name; // Cập nhật tên thật (VD: "Phòng Hành Chính")
+          });
+        }
+      }
+    } catch (e) {
+      print("Lỗi tải tên phòng HR: $e");
     }
   }
 
@@ -1043,16 +1077,17 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
+              // [SỬA LỖI TẠI ĐÂY] Xóa từ khóa 'const' trước dấu ngoặc vuông []
+              children: [
                 Text(
-                  'Human Resources Dept',
-                  style: TextStyle(
+                  _hrDepartmentName, // Biến này thay đổi nên không được nằm trong const
+                  style: const TextStyle(
                     fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                    color: Colors.black,
+                    fontSize: 16,
                   ),
                 ),
-                Text(
+                const Text(
+                  // Text tĩnh này thì có thể để const
                   'Approver',
                   style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
                 ),

@@ -10,16 +10,15 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader; // Import header
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.officesync.hr_service.Model.Department;
 import com.officesync.hr_service.Model.Employee;
-import com.officesync.hr_service.Repository.DepartmentRepository; // Import repo
 import com.officesync.hr_service.Repository.EmployeeRepository;
-import com.officesync.hr_service.Service.DepartmentService; // Import repo
+import com.officesync.hr_service.Service.DepartmentService;
 
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
@@ -30,86 +29,117 @@ import lombok.RequiredArgsConstructor;
 public class DepartmentController {
 
     private final DepartmentService departmentService;
-    private final EmployeeRepository employeeRepository; // Inject EmployeeRepo
-     private final DepartmentRepository departmentRepository;
-  // [MỚI] Class DTO để hứng dữ liệu tạo phòng ban phức tạp
+    private final EmployeeRepository employeeRepository;
+
     @Data
     public static class CreateDepartmentRequest {
         private String name;
         private String description;
-        private Long managerId;       // ID của người được chọn làm Manager
-        private List<Long> memberIds; // Danh sách ID nhân viên
+        private Long managerId;
+        private List<Long> memberIds;
+        private Boolean isHr; // [MỚI]
     }
 
+    // 2. Cập nhật API Create
     @PostMapping
-    public ResponseEntity<Department> createDepartment(
+    public ResponseEntity<?> createDepartment(
             @RequestHeader("X-User-Id") Long creatorId,
-            @RequestBody CreateDepartmentRequest request // Sử dụng DTO mới
+            @RequestBody CreateDepartmentRequest request
     ) {
-        Employee creator = employeeRepository.findById(creatorId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-        
-        Long companyId = creator.getCompanyId();
-
-        // Gọi Service xử lý toàn bộ logic
-        Department created = departmentService.createDepartmentFull(
-                request.getName(), 
-                request.getDescription(), 
-                request.getManagerId(), 
-                request.getMemberIds(), 
-                companyId
-        );
-        
-        return ResponseEntity.ok(created);
+        try {
+            Employee creator = employeeRepository.findById(creatorId)
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+            
+            Department created = departmentService.createDepartmentFull(
+                    creator, 
+                    request.getName(), 
+                    request.getDescription(), 
+                    request.getManagerId(), 
+                    request.getMemberIds(),
+                    request.getIsHr() // [MỚI] Truyền tham số này vào
+            );
+            return ResponseEntity.ok(created);
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
     }
 
-    // API: Lấy danh sách phòng ban
-    @GetMapping
-    public ResponseEntity<List<Department>> getAllDepartments() {
-        return ResponseEntity.ok(departmentService.getAllDepartments());
+ @GetMapping
+    public ResponseEntity<List<Department>> getAllDepartments(
+            @RequestHeader("X-User-Id") Long requesterId // [BẮT BUỘC] Thêm header này
+    ) {
+        // Truyền ID vào Service để lọc
+        return ResponseEntity.ok(departmentService.getAllDepartments(requesterId));
     }
-
 
     @Data
     public static class UpdateDepartmentRequest {
         private String name;
         private String description;
         private Long managerId;
+        private Boolean isHr; // [MỚI]
     }
 
-    // [MỚI] API Cập nhật
+    // 3. Cập nhật API Update
     @PutMapping("/{id}")
-    public ResponseEntity<Department> updateDepartment(
+    public ResponseEntity<?> updateDepartment(
+            @RequestHeader("X-User-Id") Long updaterId,
             @PathVariable Long id,
             @RequestBody UpdateDepartmentRequest request
     ) {
-        Department updated = departmentService.updateDepartment(
-            id, 
-            request.getName(), 
-            request.getDescription(), 
-            request.getManagerId()
-        );
-        return ResponseEntity.ok(updated);
+        try {
+            Employee updater = employeeRepository.findById(updaterId)
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+
+            Department updated = departmentService.updateDepartment(
+                updater, 
+                id, 
+                request.getName(), 
+                request.getDescription(), 
+                request.getManagerId(),
+                request.getIsHr() // [MỚI] Truyền tham số này vào
+            );
+            return ResponseEntity.ok(updated);
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
     }
 
-    // [MỚI] API Xóa
     @DeleteMapping("/{id}")
-    public ResponseEntity<?> deleteDepartment(@PathVariable Long id) {
-        departmentService.deleteDepartment(id);
-        return ResponseEntity.ok(Map.of("message", "Department deleted successfully"));
+    public ResponseEntity<?> deleteDepartment(
+            @RequestHeader("X-User-Id") Long deleterId, // [MỚI] Header bắt buộc
+            @PathVariable Long id
+    ) {
+        try {
+            Employee deleter = employeeRepository.findById(deleterId)
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+
+            departmentService.deleteDepartment(deleter, id);
+            return ResponseEntity.ok(Map.of("message", "Department deleted successfully"));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
     }
 
-    // API TÌM KIẾM PHÒNG BAN (Đã sửa chuẩn)
     @GetMapping("/search")
     public ResponseEntity<List<Department>> searchDepartments(
             @RequestHeader("X-User-Id") Long requesterId,
             @RequestParam String keyword
     ) {
-        // Controller chỉ làm nhiệm vụ điều phối: Gọi Service -> Trả kết quả
         List<Department> results = departmentService.searchDepartments(requesterId, keyword);
-        
         return ResponseEntity.ok(results);
     }
 
-   
+    // [MỚI] API lấy thông tin phòng HR
+    @GetMapping("/hr")
+    public ResponseEntity<?> getHrDepartment(
+            @RequestHeader("X-User-Id") Long requesterId
+    ) {
+        try {
+            Department hrDept = departmentService.getHrDepartment(requesterId);
+            return ResponseEntity.ok(hrDept);
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
 }

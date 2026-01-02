@@ -43,28 +43,31 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
   }
 
   @override
-  Future<List<DepartmentModel>> getDepartments() async {
-    return await remoteDataSource.getDepartments();
+  Future<List<DepartmentModel>> getDepartments(String currentUserId) async {
+    // Truyền ID xuống DataSource
+    return await remoteDataSource.getDepartments(currentUserId);
   }
 
   @override
   Future<bool> updateEmployee(
+    String updaterId, // [MỚI]
     String id,
     String fullName,
     String phone,
     String dob, {
-    String? email, // [MỚI]
+    String? email,
     String? avatarUrl,
     String? status,
     String? role,
     int? departmentId,
   }) async {
     return await remoteDataSource.updateEmployee(
+      updaterId, // [MỚI] Truyền xuống data source
       id,
       fullName,
       phone,
       dob,
-      email: email, // [MỚI] Truyền xuống data source
+      email: email,
       avatarUrl: avatarUrl,
       status: status,
       role: role,

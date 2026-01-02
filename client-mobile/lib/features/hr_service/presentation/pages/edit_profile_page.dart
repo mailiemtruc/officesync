@@ -135,12 +135,15 @@ class _EditProfilePageState extends State<EditProfilePage> {
         // Logic parse ngày sinh cũ để gửi đi cho đúng định dạng
         // (Nếu Repository của bạn tự xử lý thì tốt, nếu không thì parse lại cho chắc)
 
+        // Trong _uploadAndAutoSaveAvatar
         await _repository.updateEmployee(
-          widget.user.id ?? "",
-          widget.user.fullName, // Giữ nguyên tên cũ trong DB
-          widget.user.phone, // Giữ nguyên sđt cũ trong DB
-          widget.user.dateOfBirth, // Giữ nguyên ngày sinh cũ
-          avatarUrl: newAvatarUrl, // CHỈ CẬP NHẬT CÁI NÀY
+          widget.user.id ??
+              "", // [MỚI] Tham số 1: Chính là ID của user đang login
+          widget.user.id ?? "", // Tham số 2: ID target (cũng là chính họ)
+          widget.user.fullName, // Tham số 3
+          widget.user.phone, // Tham số 4
+          widget.user.dateOfBirth, // Tham số 5
+          avatarUrl: newAvatarUrl,
         );
 
         if (mounted) {
@@ -184,14 +187,14 @@ class _EditProfilePageState extends State<EditProfilePage> {
         } catch (_) {}
       }
 
-      // Gọi update với thông tin Text mới + Avatar hiện tại
+      // Trong _handleSaveChanges
       final success = await _repository.updateEmployee(
-        widget.user.id ?? "",
-        _fullNameController.text.trim(), // Lấy tên MỚI từ ô nhập
-        _phoneController.text.trim(), // Lấy sđt MỚI từ ô nhập
-        dbDob, // Lấy ngày sinh MỚI
-        avatarUrl:
-            _currentAvatarUrl, // Avatar giữ nguyên (đã update ở bước trên rồi)
+        widget.user.id ?? "", // [MỚI] Tham số 1: Updater ID
+        widget.user.id ?? "", // Tham số 2: Target ID
+        _fullNameController.text.trim(), // Tham số 3
+        _phoneController.text.trim(), // Tham số 4
+        dbDob, // Tham số 5
+        avatarUrl: _currentAvatarUrl,
       );
 
       if (success && mounted) {

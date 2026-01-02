@@ -26,8 +26,8 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
   late TextEditingController _nameController;
   EmployeeModel? _selectedManager;
   bool _isLoading = false;
-
-  // List này chứa TẤT CẢ nhân viên trong công ty (Vẫn giữ để hiển thị face pile ở dưới)
+  bool _isHr = false; // [MỚI]
+  // List này chứa TẤT CẢ nhân viên trong công ty
   List<EmployeeModel> _availableEmployees = [];
   // List này chỉ chứa thành viên thuộc phòng ban này
   List<EmployeeModel> _departmentMembers = [];
@@ -36,9 +36,13 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
   late final EmployeeRepositoryImpl _empRepo;
   final _storage = const FlutterSecureStorage();
 
+  // [MỚI] Biến lưu ID người dùng hiện tại
+  String? _currentUserId;
+
   @override
   void initState() {
     super.initState();
+    _isHr = widget.department.isHr; // [MỚI] Lấy giá trị hiện tại
     _nameController = TextEditingController(text: widget.department.name);
     _selectedManager = widget.department.manager;
 
@@ -67,13 +71,19 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
   Future<void> _fetchData() async {
     try {
       String? userInfoStr = await _storage.read(key: 'user_info');
-      String currentUserId = "0";
+      String currentUserIdForEmp = "0";
+
       if (userInfoStr != null) {
         final userMap = jsonDecode(userInfoStr);
-        currentUserId = userMap['id'].toString();
+        currentUserIdForEmp = userMap['id'].toString();
+
+        // [MỚI] Lưu lại ID vào biến class
+        setState(() {
+          _currentUserId = currentUserIdForEmp;
+        });
       }
 
-      final allEmps = await _empRepo.getEmployees(currentUserId);
+      final allEmps = await _empRepo.getEmployees(currentUserIdForEmp);
 
       if (mounted) {
         setState(() {
@@ -81,7 +91,6 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
           // Lọc thành viên
           _departmentMembers = allEmps.where((e) {
             final deptName = e.departmentName ?? "";
-            // So sánh tên phòng ban
             return deptName.trim().toLowerCase() ==
                     widget.department.name.trim().toLowerCase() &&
                 e.id != _selectedManager?.id;
@@ -95,13 +104,25 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
 
   Future<void> _handleSave() async {
     if (_nameController.text.isEmpty) return;
+
+    // Check ID
+    if (_currentUserId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Session expired. Please login again.')),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
     try {
+      // [MỚI] Truyền _currentUserId vào hàm update
       final success = await _deptRepo.updateDepartment(
+        _currentUserId!,
         widget.department.id!,
         _nameController.text.trim(),
         "Updated Description",
         _selectedManager?.id,
+        _isHr, // [MỚI] Truyền giá trị switch
       );
 
       if (success && mounted) {
@@ -115,8 +136,10 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
       }
     } catch (e) {
       if (mounted) {
+        // Hiển thị lỗi từ backend (ví dụ: Access Denied)
+        String msg = e.toString().replaceAll("Exception: ", "");
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text(msg), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -125,8 +148,13 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
   }
 
   Future<void> _handleDelete() async {
+    if (_currentUserId == null) return;
+
+    setState(() => _isLoading = true);
     try {
-      await _deptRepo.deleteDepartment(widget.department.id!);
+      // [MỚI] Truyền _currentUserId vào hàm delete
+      await _deptRepo.deleteDepartment(_currentUserId!, widget.department.id!);
+
       if (mounted) {
         Navigator.pop(context); // Close dialog
         Navigator.pop(context, true); // Close page
@@ -138,32 +166,34 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
         );
       }
     } catch (e) {
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Delete failed: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        Navigator.pop(context); // Close dialog
+        String msg = e.toString().replaceAll("Exception: ", "");
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Delete failed: $msg'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  // [ĐÃ SỬA] Hàm này được cập nhật để gọi SelectManagerPage mới (Server-side)
   Future<void> _pickManager() async {
-    // Không cần lọc candidates cục bộ nữa, SelectManagerPage tự gọi API
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => SelectManagerPage(
-          selectedId: _selectedManager?.id,
-          // availableEmployees: candidates, // <-- XÓA DÒNG NÀY (Nguyên nhân lỗi)
-        ),
+        builder: (context) =>
+            SelectManagerPage(selectedId: _selectedManager?.id),
       ),
     );
 
     if (result != null && result is EmployeeModel) {
       setState(() {
         _selectedManager = result;
+        // Logic di chuyển thành viên -> manager
         bool removed = false;
         _departmentMembers.removeWhere((m) {
           if (m.id == result.id) {
@@ -230,12 +260,10 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 600),
                 child: SingleChildScrollView(
-                  // [SỬA 1] Padding top = 0
                   padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      // [SỬA 2] Thêm SizedBox chuẩn 20px
                       const SizedBox(height: 20),
                       // Header
                       Row(
@@ -266,7 +294,7 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
                       ),
                       const SizedBox(height: 32),
 
-                      // Icon Department (Đã chỉnh sửa giao diện)
+                      // Icon Department
                       Container(
                         width: 120,
                         height: 120,
@@ -276,7 +304,6 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
                             Colors.white,
                           ),
                           shape: BoxShape.circle,
-                          // [FIX 2] Thêm viền mỏng cùng tông màu để avatar sắc nét hơn
                           border: Border.all(
                             color: deptColor.withOpacity(0.2),
                             width: 1.5,
@@ -381,10 +408,8 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
                               ),
                             ),
 
-                            // Nhấn vào Members -> Chuyển sang Details
                             InkWell(
                               onTap: () {
-                                // Điều hướng sang DepartmentDetailsPage
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
@@ -420,8 +445,57 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
                         ),
                       ),
                       const SizedBox(height: 24),
-
+                      // [MỚI] PHẦN UI CẤU HÌNH HR
+                      _buildSectionTitle('DEPARTMENT SETTINGS'),
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                        decoration: _buildBlockDecoration(),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Main HR Department',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.black,
+                                      fontFamily: 'Inter',
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'This department receives all employee requests.',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.grey[600],
+                                      fontFamily: 'Inter',
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Switch.adaptive(
+                              value: _isHr,
+                              activeColor: AppColors.primary,
+                              onChanged: (value) {
+                                setState(() {
+                                  _isHr = value;
+                                });
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
                       // Settings
+                      const SizedBox(height: 24),
                       _buildSectionTitle('SETTINGS'),
                       const SizedBox(height: 12),
                       Container(
@@ -566,7 +640,6 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   border: Border.all(color: Colors.white, width: 2),
-                  // Placeholder màu xám nhạt
                   color: Colors.grey[200],
                 ),
                 child: ClipOval(

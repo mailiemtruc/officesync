@@ -17,21 +17,21 @@ abstract class EmployeeRepository {
   // [Mới] Hàm lấy danh sách nhân viên
   Future<List<EmployeeModel>> getEmployees(String currentUserId);
 
-  // [Mới] Hàm lấy danh sách phòng ban
-  Future<List<DepartmentModel>> getDepartments();
+  // [SỬA] Thêm tham số currentUserId
+  Future<List<DepartmentModel>> getDepartments(String currentUserId);
 
   Future<bool> updateEmployee(
+    String updaterId, // [MỚI]
     String id,
     String fullName,
     String phone,
     String dob, {
-    String? email, // [MỚI]
+    String? email,
     String? avatarUrl,
     String? status,
     String? role,
     int? departmentId,
   });
-
   // [MỚI]
   Future<bool> deleteEmployee(String id);
 

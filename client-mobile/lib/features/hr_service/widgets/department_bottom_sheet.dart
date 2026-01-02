@@ -1,11 +1,14 @@
+import 'dart:convert'; // [MỚI] Để parse JSON user_info
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart'; // [MỚI] Import storage
+
 import '../data/models/department_model.dart';
 import 'confirm_bottom_sheet.dart';
-import '../presentation/pages/edit_department_page.dart'; // Đường dẫn tới trang edit
-import '../presentation/pages/department_details_page.dart'; // Đường dẫn tới trang details
-import '../domain/repositories/department_repository.dart'; // Import Repo
-import '../data/datasources/department_remote_data_source.dart'; // Import DataSource
+import '../presentation/pages/edit_department_page.dart';
+import '../presentation/pages/department_details_page.dart';
+import '../domain/repositories/department_repository.dart';
+import '../data/datasources/department_remote_data_source.dart';
 
 class DepartmentBottomSheet extends StatelessWidget {
   final DepartmentModel department;
@@ -29,33 +32,70 @@ class DepartmentBottomSheet extends StatelessWidget {
         confirmText: 'Delete',
         confirmColor: const Color(0xFFDC2626),
         onConfirm: () async {
-          // Gọi API Xóa
+          // [SỬA LỖI LOGIC TẠI ĐÂY]
+          // 1. Lấy ID người dùng từ storage
+          const storage = FlutterSecureStorage();
+          String? userId;
+          try {
+            String? userInfoStr = await storage.read(key: 'user_info');
+            if (userInfoStr != null) {
+              final userMap = jsonDecode(userInfoStr);
+              userId = userMap['id'].toString();
+            }
+          } catch (e) {
+            print("Error reading user info: $e");
+          }
+
+          if (userId == null) {
+            if (context.mounted) {
+              Navigator.pop(context); // Đóng dialog confirm
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Session expired. Please login again.'),
+                ),
+              );
+            }
+            return;
+          }
+
+          // 2. Gọi API Xóa
           final repo = DepartmentRepository(
             remoteDataSource: DepartmentRemoteDataSource(),
           );
+
           try {
-            await repo.deleteDepartment(department.id!);
-            Navigator.pop(context); // Đóng Dialog Confirm
-            Navigator.pop(context); // Đóng BottomSheet Menu
-            onDeleteSuccess(); // Refresh list ở trang chủ
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Department deleted successfully'),
-                backgroundColor: Colors.green,
-              ),
-            );
+            // [QUAN TRỌNG] Truyền userId vào hàm deleteDepartment (tham số thứ 1)
+            await repo.deleteDepartment(userId, department.id!);
+
+            if (context.mounted) {
+              Navigator.pop(context); // Đóng Dialog Confirm
+              Navigator.pop(context); // Đóng BottomSheet Menu
+              onDeleteSuccess(); // Refresh list ở trang chủ
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Department deleted successfully'),
+                  backgroundColor: Colors.green,
+                ),
+              );
+            }
           } catch (e) {
-            Navigator.pop(context);
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-            );
+            if (context.mounted) {
+              Navigator.pop(context);
+              String msg = e.toString().replaceAll("Exception: ", "");
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Error: $msg'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
           }
         },
       ),
     );
   }
 
-  // Hàm parse màu
+  // Hàm parse màu (Giữ nguyên logic cũ)
   Color _parseColor(String? hexColor) {
     if (hexColor == null || hexColor.isEmpty) return Colors.blue;
     try {
@@ -94,7 +134,7 @@ class DepartmentBottomSheet extends StatelessWidget {
             ),
             const SizedBox(height: 24),
 
-            // Header
+            // Header (Giữ nguyên UI gốc)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Row(

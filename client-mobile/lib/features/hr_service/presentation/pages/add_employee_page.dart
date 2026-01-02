@@ -10,6 +10,7 @@ import '../../data/datasources/employee_remote_data_source.dart';
 import '../../domain/repositories/employee_repository_impl.dart';
 import '../../domain/repositories/employee_repository.dart';
 import '../../data/models/department_model.dart';
+import '../../data/models/employee_model.dart'; // [MỚI] Import để dùng EmployeeModel
 import '../../../../core/config/app_colors.dart';
 import '../../widgets/selection_bottom_sheet.dart';
 
@@ -33,6 +34,10 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
   String? _selectedRole;
   bool _isLoading = false;
 
+  // [MỚI] Biến kiểm tra quyền hạn
+  bool _isManager = false;
+  String? _currentUserId;
+
   // Danh sách phòng ban lấy từ API
   List<DepartmentModel> _departments = [];
 
@@ -49,33 +54,67 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
       remoteDataSource: EmployeeRemoteDataSource(),
     );
 
-    _fetchDepartments();
+    // [SỬA] Gọi hàm khởi tạo tích hợp kiểm tra quyền
+    _initDataAndCheckPermissions();
   }
 
-  Future<void> _fetchDepartments() async {
+  // [LOGIC MỚI] Hàm khởi tạo và kiểm tra quyền
+  // File: lib/features/hr_service/presentation/pages/add_employee_page.dart
+
+  Future<void> _initDataAndCheckPermissions() async {
     try {
-      final depts = await _employeeRepository.getDepartments();
+      // 1. Lấy thông tin user từ Storage
+      String? userInfoStr = await _storage.read(key: 'user_info');
+      if (userInfoStr != null) {
+        Map<String, dynamic> userMap = jsonDecode(userInfoStr);
+        _currentUserId = userMap['id'].toString(); // Lấy ID
+
+        // Xác định Role
+        String role = userMap['role'] ?? "STAFF";
+        if (role.toUpperCase() == 'MANAGER') {
+          setState(() {
+            _isManager = true;
+            _selectedRole = 'Staff';
+          });
+        }
+      }
+
+      // [QUAN TRỌNG] Kiểm tra null trước khi gọi API
+      if (_currentUserId == null) {
+        print("User ID not found, cannot fetch departments.");
+        return;
+      }
+
+      // 2. Tải danh sách phòng ban (ĐÃ SỬA: Truyền _currentUserId vào)
+      final depts = await _employeeRepository.getDepartments(_currentUserId!);
+
       if (mounted) {
         setState(() {
           _departments = depts;
         });
+
+        // 3. Logic Manager tự chọn phòng (Giữ nguyên)
+        if (_isManager) {
+          try {
+            final myDept = depts.firstWhere(
+              (d) => d.manager?.id == _currentUserId,
+            );
+            setState(() {
+              _selectedDepartment = myDept;
+            });
+          } catch (e) {
+            print("Manager $_currentUserId has no department assigned.");
+          }
+        }
       }
     } catch (e) {
-      print("Error fetching departments: $e");
+      print("Error initializing data: $e");
     }
   }
 
   Future<String?> _getCurrentUserId() async {
-    try {
-      String? userInfoStr = await _storage.read(key: 'user_info');
-      if (userInfoStr != null) {
-        Map<String, dynamic> userMap = jsonDecode(userInfoStr);
-        return userMap['id'].toString();
-      }
-    } catch (e) {
-      print("Error reading user info: $e");
-    }
-    return null;
+    // Hàm này giữ lại để dùng lúc create (double check)
+    return _currentUserId;
   }
 
   @override
@@ -88,31 +127,25 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
     super.dispose();
   }
 
-  // Tìm hàm cũ và thay thế bằng hàm này
   void _generateRandomPassword() {
     final random = Random();
-    const length = 10; // Độ dài mật khẩu (lớn hơn 8)
-
-    // Các bộ ký tự
+    const length = 10;
     const upperCase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
     const lowerCase = 'abcdefghijklmnopqrstuvwxyz';
     const numbers = '0123456789';
     const specialChars = '@#_-.!';
 
-    // 1. Đảm bảo mỗi loại có ít nhất 1 ký tự
     String chars = '';
     chars += upperCase[random.nextInt(upperCase.length)];
     chars += lowerCase[random.nextInt(lowerCase.length)];
     chars += numbers[random.nextInt(numbers.length)];
     chars += specialChars[random.nextInt(specialChars.length)];
 
-    // 2. Điền nốt các ký tự còn lại ngẫu nhiên từ tất cả các bộ
     const allChars = upperCase + lowerCase + numbers + specialChars;
     for (int i = 4; i < length; i++) {
       chars += allChars[random.nextInt(allChars.length)];
     }
 
-    // 3. Trộn ngẫu nhiên vị trí các ký tự để không theo quy luật cố định
     List<String> charList = chars.split('');
     charList.shuffle(random);
     String password = charList.join('');
@@ -138,15 +171,13 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
 
   // --- LOGIC CHÍNH ---
   Future<void> _handleCreateEmployee() async {
-    // Lấy giá trị và loại bỏ khoảng trắng thừa
     final fullName = _nameController.text.trim();
     final email = _emailController.text.trim();
     final phone = _phoneController.text.trim();
-    final password =
-        _passwordController.text; // Không trim password vì space cũng là ký tự
+    final password = _passwordController.text;
     final dob = _dobController.text.trim();
 
-    // 1. Kiểm tra điền đủ thông tin (Check Empty)
+    // 1. Validate Empty
     if (fullName.isEmpty ||
         email.isEmpty ||
         phone.isEmpty ||
@@ -158,8 +189,7 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
       return;
     }
 
-    // 2. Validate EMAIL (Phải đúng định dạng email)
-    // Regex: Ký tự + @ + Ký tự + . + Ký tự
+    // 2. Validate Email
     final emailRegex = RegExp(
       r"^[a-zA-Z0-9.a-zA-Z0-9.!#$%&'*+-/=?^_`{|}~]+@[a-zA-Z0-9]+\.[a-zA-Z]+",
     );
@@ -168,8 +198,7 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
       return;
     }
 
-    // 3. Validate PHONE (Chỉ được nhập số)
-    // Regex: ^[0-9]+$ nghĩa là từ đầu đến cuối chỉ được là số 0-9
+    // 3. Validate Phone
     final phoneRegex = RegExp(r'^[0-9]+$');
     if (!phoneRegex.hasMatch(phone)) {
       _showErrorSnackBar('Phone number must contain digits only (0-9).');
@@ -182,7 +211,7 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
       return;
     }
 
-    // 4. Validate PASSWORD (Kiểm tra chặt chẽ 5 điều kiện)
+    // 4. Validate Password
     if (password.length < 8) {
       _showErrorSnackBar('Password must be at least 8 characters long.');
       return;
@@ -210,9 +239,7 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
       return;
     }
 
-    // =========================================================================
-    // [FIXED] CHECK EXISTING MANAGER LOGIC
-    // =========================================================================
+    // 5. Check Manager Assignment (Only relevant for Admin)
     if (_selectedRole?.toUpperCase() == 'MANAGER' &&
         _selectedDepartment != null) {
       if (_selectedDepartment!.manager != null) {
@@ -220,20 +247,16 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
             _selectedDepartment!.manager?.fullName ?? "Unknown";
 
         _showErrorSnackBar(
-          'Department "${_selectedDepartment!.name}" already has a Manager ($currentManagerName). Cannot assign a new Manager!',
+          'Department "${_selectedDepartment!.name}" already has a Manager ($currentManagerName).',
         );
         return;
       }
     }
-    // =========================================================================
-    // [END FIXED SECTION]
-    // =========================================================================
 
     setState(() => _isLoading = true);
 
     try {
-      String? currentUserId = await _getCurrentUserId();
-      if (currentUserId == null) {
+      if (_currentUserId == null) {
         throw Exception("Session expired. Please login again.");
       }
 
@@ -247,7 +270,6 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
         }
       }
 
-      // Gọi API tạo nhân viên
       final success = await _employeeRepository.createEmployee(
         fullName: fullName,
         email: email,
@@ -255,7 +277,7 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
         dob: formattedDob,
         role: _selectedRole?.toUpperCase() ?? "STAFF",
         departmentId: _selectedDepartment!.id!,
-        currentUserId: currentUserId,
+        currentUserId: _currentUserId!,
         password: password,
       );
 
@@ -271,7 +293,6 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
     } catch (e) {
       if (mounted) {
         String errorMessage = e.toString();
-        // Logic làm sạch thông báo lỗi
         if (errorMessage.contains("Server Error:")) {
           try {
             final String jsonPart = errorMessage
@@ -289,7 +310,6 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
         } else {
           errorMessage = errorMessage.replaceAll("Exception: ", "");
         }
-
         _showErrorSnackBar(errorMessage);
       }
     } finally {
@@ -297,13 +317,12 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
     }
   }
 
-  // Helper function để hiển thị lỗi gọn gàng hơn
   void _showErrorSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
         backgroundColor: Colors.red,
-        behavior: SnackBarBehavior.floating, // Hiển thị kiểu nổi đẹp hơn
+        behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 4),
       ),
     );
@@ -311,21 +330,24 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
 
   // --- UI HELPER ---
   void _showDepartmentSelector() {
+    // [LOGIC MỚI] Nếu là Manager thì không cho chọn (chặn click từ logic build rồi nhưng thêm check cho chắc)
+    if (_isManager) return;
+
     if (_departments.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Loading departments or no data available...'),
         ),
       );
-      _fetchDepartments();
+      // Thử load lại nếu trống
+      _initDataAndCheckPermissions();
       return;
     }
 
     final List<Map<String, String>> deptItems = _departments
         .map(
           (dept) => {
-            'id': dept.id
-                .toString(), // id có thể null nhưng lấy từ API về thì ko null
+            'id': dept.id.toString(),
             'title': dept.name,
             'desc': dept.code ?? '',
           },
@@ -352,6 +374,9 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
   }
 
   void _showRoleSelector() {
+    // [LOGIC MỚI] Manager không được chọn Role
+    if (_isManager) return;
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -405,12 +430,10 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 600),
                 child: SingleChildScrollView(
-                  // [SỬA 1] Chỉnh padding top về 0 (các cạnh khác giữ nguyên 24)
                   padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // [SỬA 2] Thêm khoảng cách chuẩn 20px ở đầu
                       const SizedBox(height: 20),
                       Row(
                         children: [
@@ -439,7 +462,7 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
                         ],
                       ),
                       const SizedBox(height: 24),
-
+                      // ... (Phần Avatar giữ nguyên) ...
                       Center(
                         child: Container(
                           width: 110,
@@ -542,34 +565,26 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
                                 Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    // Tìm đoạn code UI phần Password và thay thế TextField bằng đoạn này:
                                     SizedBox(
                                       width: 180,
                                       child: TextField(
                                         controller: _passwordController,
                                         textAlign: TextAlign.end,
-                                        readOnly: false, // Cho phép nhập tay
-                                        // 1. Style cho MẬT KHẨU NHẬP VÀO (Xanh + Đậm)
+                                        readOnly: false,
                                         style: const TextStyle(
                                           color: AppColors.primary,
                                           fontWeight: FontWeight.w700,
                                           fontSize: 16,
                                           fontFamily: 'Inter',
                                         ),
-
                                         decoration: const InputDecoration(
                                           hintText: 'Enter password',
-
-                                          // 2. Style cho CHỮ GỢI Ý (Enter password)
-                                          // Đã chỉnh lên w500 để đậm hơn, giống với trường Email
                                           hintStyle: TextStyle(
                                             color: Color(0xFFBDC6DE),
                                             fontSize: 16,
-                                            fontWeight: FontWeight
-                                                .w500, // Tăng độ đậm lên Medium
+                                            fontWeight: FontWeight.w500,
                                             fontFamily: 'Inter',
                                           ),
-
                                           border: InputBorder.none,
                                           contentPadding: EdgeInsets.zero,
                                           isDense: true,
@@ -607,11 +622,18 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
                         decoration: _buildBlockDecoration(),
                         child: Column(
                           children: [
+                            // [SỬA UI] Dept Selector
                             _buildSelectorItem(
                               label: 'Department',
                               value: _selectedDepartment?.name ?? 'Select Dept',
+                              // Nếu là Manager thì không bao giờ là placeholder (vì đã gán cứng)
                               isPlaceholder: _selectedDepartment == null,
-                              onTap: _showDepartmentSelector,
+                              // Nếu là Manager -> Vô hiệu hóa tap (truyền null)
+                              onTap: _isManager
+                                  ? null
+                                  : _showDepartmentSelector,
+                              // Nếu là Manager -> Hiển thị kiểu bị khóa (read-only)
+                              isReadOnly: _isManager,
                             ),
                             const Padding(
                               padding: EdgeInsets.symmetric(vertical: 16),
@@ -620,11 +642,15 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
                                 color: Color(0xFFF1F5F9),
                               ),
                             ),
+                            // [SỬA UI] Role Selector
                             _buildSelectorItem(
                               label: 'Role',
                               value: _selectedRole ?? 'Select Role',
                               isPlaceholder: _selectedRole == null,
-                              onTap: _showRoleSelector,
+                              // Nếu là Manager -> Vô hiệu hóa tap
+                              onTap: _isManager ? null : _showRoleSelector,
+                              // Nếu là Manager -> Hiển thị kiểu bị khóa
+                              isReadOnly: _isManager,
                             ),
                           ],
                         ),
@@ -758,11 +784,13 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
     );
   }
 
+  // [ĐÃ SỬA] Cập nhật UI cho phép hiển thị trạng thái ReadOnly
   Widget _buildSelectorItem({
     required String label,
     required String value,
     required bool isPlaceholder,
-    required VoidCallback onTap,
+    required VoidCallback? onTap, // Cho phép null
+    bool isReadOnly = false, // Cờ báo chỉ xem
   }) {
     return InkWell(
       onTap: onTap,
@@ -782,18 +810,24 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
               Text(
                 value,
                 style: TextStyle(
-                  color: isPlaceholder
-                      ? const Color(0xFF9B9292)
-                      : AppColors.primary,
+                  // Nếu read-only (Manager) thì hiện màu đen/xám, ngược lại màu Primary
+                  color: isReadOnly
+                      ? Colors.grey[700]
+                      : (isPlaceholder
+                            ? const Color(0xFF9B9292)
+                            : AppColors.primary),
                   fontSize: 16,
                   fontWeight: isPlaceholder ? FontWeight.w300 : FontWeight.w600,
                 ),
               ),
               const SizedBox(width: 8),
-              const Icon(
-                Icons.arrow_forward_ios,
+              // Nếu read-only -> Hiện icon ổ khóa, ngược lại hiện mũi tên
+              Icon(
+                isReadOnly
+                    ? PhosphorIcons.lock(PhosphorIconsStyle.regular)
+                    : Icons.arrow_forward_ios,
                 size: 16,
-                color: Color(0xFFBDC6DE),
+                color: const Color(0xFFBDC6DE),
               ),
             ],
           ),

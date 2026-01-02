@@ -57,14 +57,20 @@ public class EmployeeController {
         private String password;    // [QUAN TRỌNG] Hứng mật khẩu
     }
 
- // API Cập nhật thông tin nhân viên (All-in-One)
-    @PutMapping("/{id}")
+ @PutMapping("/{id}")
     public ResponseEntity<?> updateEmployee(
+            @RequestHeader("X-User-Id") Long updaterId, // [MỚI] Lấy ID người thực hiện
             @PathVariable Long id,
             @RequestBody UpdateEmployeeRequest request
     ) {
         try {
+            // 1. Tìm thông tin người thực hiện (Updater)
+            Employee updater = employeeRepository.findById(updaterId)
+                    .orElseThrow(() -> new RuntimeException("Updater (User) not found"));
+
+            // 2. Gọi Service truyền updater vào để kiểm tra quyền
             Employee updated = employeeService.updateEmployee(
+                updater, // <--- Tham số quan trọng nhất
                 id,
                 request.getFullName(),
                 request.getPhone(),
@@ -73,11 +79,10 @@ public class EmployeeController {
                 request.getStatus(),
                 request.getRole(),
                 request.getDepartmentId(),
-                request.getEmail() // [MỚI] Truyền email xuống Service
+                request.getEmail()
             );
             return ResponseEntity.ok(updated);
         } catch (RuntimeException e) {
-            // Trả về lỗi 400 kèm message (ví dụ: "Email đã tồn tại")
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }
     }
@@ -96,50 +101,55 @@ public class EmployeeController {
         List<Employee> employees = employeeService.getAllEmployeesByRequester(requesterId);
         return ResponseEntity.ok(employees);
     }
+
+    
     @PostMapping
-    public ResponseEntity<Employee> createEmployee(
+    public ResponseEntity<?> createEmployee(
             @RequestHeader("X-User-Id") Long creatorId,
-            @RequestBody CreateEmployeeRequest request, // Sử dụng DTO
+            @RequestBody CreateEmployeeRequest request, 
             @RequestParam(required = false) Long departmentId
     ) {
-        // 1. Tìm thông tin người tạo
-        Employee creator = employeeRepository.findById(creatorId)
-                .orElseThrow(() -> new RuntimeException("Creator not found: " + creatorId));
-        
-        Long companyId = creator.getCompanyId(); 
-        
-        // 2. Chuyển đổi DTO -> Entity Employee
-        Employee newEmployee = new Employee();
-        newEmployee.setFullName(request.getFullName());
-        newEmployee.setEmail(request.getEmail());
-        newEmployee.setPhone(request.getPhone());
-        
-        // Xử lý ngày sinh (String -> LocalDate)
-        if (request.getDateOfBirth() != null && !request.getDateOfBirth().isEmpty()) {
-            try {
-               newEmployee.setDateOfBirth(java.time.LocalDate.parse(request.getDateOfBirth()));
-            } catch (Exception e) {
-               // Log error nếu cần
-            }
-        }
-        
-        // Xử lý Role
         try {
-            newEmployee.setRole(com.officesync.hr_service.Model.EmployeeRole.valueOf(request.getRole()));
-        } catch (Exception e) {
-            newEmployee.setRole(com.officesync.hr_service.Model.EmployeeRole.STAFF);
-        }
+            // 1. Tìm thông tin người tạo
+            Employee creator = employeeRepository.findById(creatorId)
+                    .orElseThrow(() -> new RuntimeException("Creator not found: " + creatorId));
+            
+            // 2. Chuyển đổi DTO -> Entity Employee
+            Employee newEmployee = new Employee();
+            newEmployee.setFullName(request.getFullName());
+            newEmployee.setEmail(request.getEmail());
+            newEmployee.setPhone(request.getPhone());
+            
+            if (request.getDateOfBirth() != null && !request.getDateOfBirth().isEmpty()) {
+                try {
+                   newEmployee.setDateOfBirth(java.time.LocalDate.parse(request.getDateOfBirth()));
+                } catch (Exception e) {}
+            }
+            
+            // Xử lý Role (Service sẽ ghi đè nếu là Manager)
+            try {
+                newEmployee.setRole(com.officesync.hr_service.Model.EmployeeRole.valueOf(request.getRole()));
+            } catch (Exception e) {
+                newEmployee.setRole(com.officesync.hr_service.Model.EmployeeRole.STAFF);
+            }
 
-        // 3. Gọi Service (Truyền password riêng)
-        Employee created = employeeService.createEmployee(
-            newEmployee, 
-            companyId, 
-            departmentId, 
-            request.getPassword() // [QUAN TRỌNG] Lấy password từ DTO truyền vào Service
-        );
-        
-        return ResponseEntity.ok(created);
+            // 3. [SỬA] GỌI SERVICE - Truyền object 'creator'
+            Employee created = employeeService.createEmployee(
+                newEmployee, 
+                creator,      // <--- Thay đổi quan trọng
+                departmentId, 
+                request.getPassword()
+            );
+            
+            return ResponseEntity.ok(created);
+
+        } catch (RuntimeException e) {
+            // Bắt lỗi permission hoặc validate để trả về 400/403 cho rõ ràng
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
     }
+
+
 
     // API TÌM KIẾM NHÂN VIÊN (Đã chuẩn hóa)
     @GetMapping("/search")

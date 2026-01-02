@@ -1,5 +1,8 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
 import '../../../../core/config/app_colors.dart';
 import '../../data/models/employee_model.dart';
 import '../../data/models/department_model.dart';
@@ -23,14 +26,16 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
   String _selectedRole = 'Staff';
   String _selectedDepartmentName = 'Loading...';
 
-  // [MỚI] Lưu trữ object phòng ban để kiểm tra Manager
-  DepartmentModel? _selectedDepartmentObj;
+  // [MỚI] Biến kiểm tra quyền hạn người đang đăng nhập
+  bool _isCurrentUserManager = false;
+  String? _currentUserId; // [QUAN TRỌNG] Lưu ID người đang thao tác
+  final _storage = const FlutterSecureStorage();
 
+  DepartmentModel? _selectedDepartmentObj;
   late TextEditingController _emailController;
   late final EmployeeRepositoryImpl _repository;
   bool _isLoading = false;
 
-  // [DATA THẬT] List phòng ban từ API
   List<DepartmentModel> _realDepartments = [];
 
   @override
@@ -40,14 +45,11 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
       remoteDataSource: EmployeeRemoteDataSource(),
     );
 
-    // 1. Fill dữ liệu từ widget.employee vào state
     _emailController = TextEditingController(text: widget.employee.email);
     _isActive = (widget.employee.status == "ACTIVE");
 
-    // Mapping Role
     String roleApi = widget.employee.role;
     try {
-      // Chỉ cho phép Staff hoặc Manager (Loại bỏ Company_Admin nếu có)
       if (roleApi.toUpperCase() == 'MANAGER') {
         _selectedRole = 'Manager';
       } else {
@@ -57,28 +59,57 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
       _selectedRole = "Staff";
     }
 
-    // Mapping Department Name ban đầu
     _selectedDepartmentName = widget.employee.departmentName ?? "Unassigned";
 
-    // 2. Tải danh sách phòng ban thật
-    _fetchDepartments();
+    // [SỬA] Gọi hàm khởi tạo tuần tự để tránh lỗi thiếu ID
+    _initData();
+  }
+
+  // [LOGIC MỚI] Hàm khởi tạo tuần tự
+  Future<void> _initData() async {
+    await _checkCurrentUserRole(); // 1. Lấy ID trước
+    if (_currentUserId != null) {
+      await _fetchDepartments(); // 2. Sau đó mới lấy phòng ban
+    }
+  }
+
+  Future<void> _checkCurrentUserRole() async {
+    try {
+      String? userInfoStr = await _storage.read(key: 'user_info');
+      if (userInfoStr != null) {
+        final data = jsonDecode(userInfoStr);
+        setState(() {
+          _currentUserId = data['id'].toString(); // Lưu ID
+        });
+
+        String role = data['role'] ?? 'STAFF';
+        if (role.toUpperCase() == 'MANAGER') {
+          setState(() {
+            _isCurrentUserManager = true;
+          });
+        }
+      }
+    } catch (e) {
+      print("Error checking user role: $e");
+    }
   }
 
   Future<void> _fetchDepartments() async {
     try {
-      final depts = await _repository.getDepartments();
+      if (_currentUserId == null) return;
+
+      // [SỬA] Truyền _currentUserId vào API getDepartments
+      final depts = await _repository.getDepartments(_currentUserId!);
+
       if (mounted) {
         setState(() {
           _realDepartments = depts;
-
-          // Logic map lại object phòng ban hiện tại để có dữ liệu manager
           if (_selectedDepartmentName != "Unassigned") {
             try {
               _selectedDepartmentObj = _realDepartments.firstWhere(
                 (d) => d.name == _selectedDepartmentName,
               );
             } catch (_) {
-              // Không tìm thấy (có thể bị xóa), reset về Unassigned
               _selectedDepartmentName = "Unassigned";
               _selectedDepartmentObj = null;
             }
@@ -97,18 +128,14 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
   }
 
   // --- LOGIC UI BOTTOM SHEET SELECTOR ---
-
-  // 1. Chọn Phòng ban
   void _showDepartmentSelector() {
+    if (_isCurrentUserManager) return;
+
     if (_realDepartments.isEmpty) return;
 
     final items = _realDepartments
         .map(
-          (d) => {
-            'id': d.id.toString(), // Dùng ID làm key
-            'title': d.name,
-            'desc': d.code ?? '',
-          },
+          (d) => {'id': d.id.toString(), 'title': d.name, 'desc': d.code ?? ''},
         )
         .toList();
 
@@ -134,8 +161,9 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
     );
   }
 
-  // 2. Chọn Quyền (Chỉ hiện Staff & Manager)
   void _showRoleSelector() {
+    if (_isCurrentUserManager) return;
+
     final items = [
       {'id': 'Staff', 'title': 'Staff', 'desc': 'Standard access'},
       {'id': 'Manager', 'title': 'Manager', 'desc': 'Department lead'},
@@ -148,7 +176,7 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
       builder: (context) => SelectionBottomSheet(
         title: 'Assign Role',
         items: items,
-        selectedId: _selectedRole, // 'Staff' hoặc 'Manager'
+        selectedId: _selectedRole,
         onSelected: (id) {
           setState(() => _selectedRole = id);
           Navigator.pop(context);
@@ -160,26 +188,18 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
   // --- LOGIC XỬ LÝ LƯU ---
   Future<void> _handleSave() async {
     final email = _emailController.text.trim();
-
-    // 1. Validate Email (Regex)
     final emailRegex = RegExp(
       r"^[a-zA-Z0-9.a-zA-Z0-9.!#$%&'*+-/=?^_`{|}~]+@[a-zA-Z0-9]+\.[a-zA-Z]+",
     );
     if (email.isEmpty || !emailRegex.hasMatch(email)) {
-      _showErrorSnackBar('Invalid email format. Example: user@company.com');
+      _showErrorSnackBar('Invalid email format.');
       return;
     }
 
-    // 2. Validate Manager Check
-    // Nếu chọn làm Manager của một phòng ban
     if (_selectedRole == 'Manager' && _selectedDepartmentObj != null) {
-      // Và phòng ban đó đã có Manager
       if (_selectedDepartmentObj!.manager != null) {
         final currentManagerId = _selectedDepartmentObj!.manager!.id;
         final myId = widget.employee.id;
-
-        // Nếu Manager hiện tại KHÔNG PHẢI là chính user này => Báo lỗi trùng
-        // (ID so sánh dạng String hoặc int tùy model, dùng toString() cho an toàn)
         if (currentManagerId.toString() != myId.toString()) {
           final currentManagerName =
               _selectedDepartmentObj!.manager?.fullName ?? "Unknown";
@@ -191,15 +211,20 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
       }
     }
 
+    if (_currentUserId == null) {
+      _showErrorSnackBar('Session expired. Please login again.');
+      return;
+    }
+
     setState(() => _isLoading = true);
     try {
-      // Chuẩn bị dữ liệu gửi
       String statusToSend = _isActive ? "ACTIVE" : "LOCKED";
-      String roleToSend = _selectedRole.toUpperCase(); // STAFF / MANAGER
+      String roleToSend = _selectedRole.toUpperCase();
       int? deptIdToSend = _selectedDepartmentObj?.id;
 
-      // Gọi API Update
+      // [SỬA] Truyền _currentUserId vào hàm updateEmployee
       final success = await _repository.updateEmployee(
+        _currentUserId!,
         widget.employee.id!,
         widget.employee.fullName,
         widget.employee.phone,
@@ -238,7 +263,7 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
     );
   }
 
-  // --- LOGIC XÓA ---
+  // --- DELETE & SUSPEND ---
   void _showDeleteConfirmation(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -318,7 +343,6 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
               padding: const EdgeInsets.all(24),
               child: Column(
                 children: [
-                  // 1. Header (Giữ nguyên)
                   Row(
                     children: [
                       IconButton(
@@ -347,13 +371,11 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
                   ),
                   const SizedBox(height: 24),
 
-                  // 2. Avatar Circle (Giữ nguyên)
                   Container(
                     width: 130,
                     height: 130,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withOpacity(0.1),
@@ -383,10 +405,7 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
                             ),
                     ),
                   ),
-
                   const SizedBox(height: 16),
-
-                  // 3. Name & ID (Giữ nguyên)
                   Text(
                     widget.employee.fullName,
                     style: const TextStyle(
@@ -405,14 +424,10 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
                       fontWeight: FontWeight.w400,
                     ),
                   ),
-
                   const SizedBox(height: 32),
 
-                  // 4. Form Fields
                   _buildSectionTitle('ACCOUNT SETTINGS'),
                   const SizedBox(height: 12),
-
-                  // Email Field (Giữ nguyên UI, Logic đã thêm validate)
                   Container(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                     decoration: _buildBlockDecoration(),
@@ -429,7 +444,6 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
                             Expanded(
                               child: TextFormField(
                                 controller: _emailController,
-
                                 style: const TextStyle(
                                   color: AppColors.primary,
                                   fontWeight: FontWeight.w600,
@@ -454,7 +468,7 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFFEFFD2),
+                            color: const Color(0xFFFEF3C7),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Row(
@@ -485,7 +499,6 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
                   _buildSectionTitle('ROLES & PERMISSIONS'),
                   const SizedBox(height: 12),
 
-                  // Roles & Dept (THAY ĐỔI UI SELECTOR TẠI ĐÂY)
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 16,
@@ -494,18 +507,24 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
                     decoration: _buildBlockDecoration(),
                     child: Column(
                       children: [
-                        // [SỬA UI] Thay _buildDropdownRow bằng _buildSelectorRow
                         _buildSelectorRow(
                           label: 'Department',
                           value: _selectedDepartmentName,
-                          onTap: _showDepartmentSelector,
+                          onTap: _isCurrentUserManager
+                              ? null
+                              : _showDepartmentSelector,
+                          isReadOnly: _isCurrentUserManager,
                         ),
                         const Divider(height: 1, color: Color(0xFFF1F5F9)),
+
                         _buildSelectorRow(
                           label: 'Role',
                           value: _selectedRole,
-                          onTap: _showRoleSelector,
-                          isBlueValue: true,
+                          onTap: _isCurrentUserManager
+                              ? null
+                              : _showRoleSelector,
+                          isBlueValue: !_isCurrentUserManager,
+                          isReadOnly: _isCurrentUserManager,
                         ),
                       ],
                     ),
@@ -514,8 +533,6 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
                   const SizedBox(height: 24),
                   _buildSectionTitle('STATUS'),
                   const SizedBox(height: 12),
-
-                  // Status Container (Giữ nguyên)
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: _buildBlockDecoration(),
@@ -593,7 +610,6 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
     );
   }
 
-  // Helper Widgets
   Widget _buildSectionTitle(String title) {
     return Align(
       alignment: Alignment.centerLeft,
@@ -609,20 +625,17 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
     );
   }
 
-  // [MỚI] Widget Row dùng để chọn (thay thế Dropdown cũ)
-  // Giữ nguyên style text/màu sắc của DropdownRow cũ
   Widget _buildSelectorRow({
     required String label,
     required String value,
-    required VoidCallback onTap,
+    required VoidCallback? onTap,
     bool isBlueValue = false,
+    bool isReadOnly = false,
   }) {
     return InkWell(
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(
-          vertical: 12,
-        ), // Tăng padding chút để dễ bấm
+        padding: const EdgeInsets.symmetric(vertical: 12),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -639,14 +652,22 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
                 Text(
                   value,
                   style: TextStyle(
-                    color: isBlueValue ? AppColors.primary : Colors.black,
+                    color: isReadOnly
+                        ? Colors.grey[700]
+                        : (isBlueValue ? AppColors.primary : Colors.black),
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
                     fontFamily: 'Inter',
                   ),
                 ),
                 const SizedBox(width: 8),
-                const Icon(Icons.chevron_right, color: Colors.grey),
+                Icon(
+                  isReadOnly
+                      ? PhosphorIcons.lock(PhosphorIconsStyle.regular)
+                      : Icons.chevron_right,
+                  color: const Color(0xFFBDC6DE),
+                  size: isReadOnly ? 18 : 24,
+                ),
               ],
             ),
           ],

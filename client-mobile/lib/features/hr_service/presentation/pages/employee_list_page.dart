@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'employee_profile_page.dart';
+
 // --- IMPORTS ---
 import '../../../../core/config/app_colors.dart';
 import '../../data/models/employee_model.dart';
@@ -17,12 +17,13 @@ import '../../data/datasources/department_remote_data_source.dart';
 
 import '../../widgets/employee_card.widget.dart';
 import '../../widgets/department_card.widget.dart';
-import '../../widgets/department_bottom_sheet.dart';
+import '../../widgets/department_bottom_sheet.dart'; // Đảm bảo đã import cái này
 import '../../widgets/employee_bottom_sheet.dart';
 import 'add_employee_page.dart';
 import 'create_department_page.dart';
 import 'department_details_page.dart';
-import 'edit_profile_emloyee_page.dart'; // Import trang Edit mới
+import 'edit_profile_emloyee_page.dart';
+import 'employee_profile_page.dart';
 
 class EmployeeListPage extends StatefulWidget {
   const EmployeeListPage({super.key});
@@ -39,11 +40,14 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
   List<DepartmentModel> _departments = [];
 
   String? _currentUserId;
+  // Biến lưu Role và Tên phòng ban của user hiện tại
+  String? _currentUserRole;
+  String? _currentUserDeptName;
 
   // Controller cho tìm kiếm
   final TextEditingController _searchController = TextEditingController();
 
-  // Timer để xử lý Debounce (tránh spam API khi gõ)
+  // Timer để xử lý Debounce
   Timer? _debounce;
 
   late final EmployeeRepository _employeeRepository;
@@ -65,7 +69,6 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
 
     _fetchData();
 
-    // Lắng nghe sự kiện nhập liệu với Debounce
     _searchController.addListener(_onSearchChanged);
   }
 
@@ -80,47 +83,80 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
   void _onSearchChanged() {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
     _debounce = Timer(const Duration(milliseconds: 500), () {
-      // Chỉ gọi API sau khi người dùng ngừng gõ 0.5s
       _fetchData(keyword: _searchController.text);
     });
   }
 
-  // --- LOGIC GỌI API ---
+  // --- LOGIC GỌI API & PHÂN QUYỀN ---
   Future<void> _fetchData({String keyword = ''}) async {
     if (mounted) setState(() => _isLoading = true);
 
     try {
       _currentUserId = await _getCurrentUserId();
 
-      if (_isEmployeesTab) {
-        if (_currentUserId != null) {
-          List<EmployeeModel> data;
+      if (_currentUserId != null) {
+        List<EmployeeModel> apiResult;
 
-          if (keyword.isEmpty) {
-            // Lấy tất cả
-            data = await _employeeRepository.getEmployees(_currentUserId!);
-          } else {
-            // Gọi API Search của Backend
-            data = await _employeeRepository.searchEmployees(
-              _currentUserId!,
-              keyword,
-            );
-          }
-          if (mounted) setState(() => _employees = data);
-        }
-      } else {
-        // Tab Departments
-        List<DepartmentModel> data;
+        // Backend đã lọc dữ liệu theo quyền (Data Scoping)
         if (keyword.isEmpty) {
-          data = await _employeeRepository.getDepartments();
+          apiResult = await _employeeRepository.getEmployees(_currentUserId!);
         } else {
-          // Tìm kiếm Phòng ban
-          data = await _departmentRepository.searchDepartments(
-            _currentUserId ?? '',
+          apiResult = await _employeeRepository.searchEmployees(
+            _currentUserId!,
             keyword,
           );
         }
-        if (mounted) setState(() => _departments = data);
+
+        // Cập nhật Role User hiện tại
+        if (_currentUserRole == null || keyword.isEmpty) {
+          try {
+            final me = apiResult.firstWhere(
+              (e) => e.id == _currentUserId,
+              orElse: () => apiResult.isNotEmpty
+                  ? apiResult[0]
+                  : EmployeeModel(
+                      id: "0",
+                      fullName: "",
+                      email: "",
+                      phone: "",
+                      dateOfBirth: "",
+                      role: "STAFF",
+                    ),
+            );
+
+            if (me.id == _currentUserId) {
+              _currentUserRole = me.role.toUpperCase();
+              _currentUserDeptName = me.departmentName;
+            }
+          } catch (e) {
+            print("Info: Current user not found in the fetched list.");
+          }
+        }
+
+        // GÁN DỮ LIỆU
+        if (_isEmployeesTab) {
+          _employees = apiResult;
+          // Tìm đoạn code trong hàm _fetchData và sửa lại:
+        } else {
+          // Tab Departments
+          List<DepartmentModel> deptData;
+
+          if (keyword.isEmpty) {
+            // [ĐÃ SỬA] Truyền _currentUserId vào hàm getDepartments
+            // Lưu ý: _currentUserId đã được check null ở đầu hàm _fetchData nên an toàn
+            deptData = await _employeeRepository.getDepartments(
+              _currentUserId!,
+            );
+          } else {
+            deptData = await _departmentRepository.searchDepartments(
+              _currentUserId ?? '',
+              keyword,
+            );
+          }
+          if (mounted) setState(() => _departments = deptData);
+        }
+
+        if (mounted) setState(() {});
       }
     } catch (e) {
       print("Error fetching data: $e");
@@ -143,6 +179,13 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
   }
 
   Future<void> _navigateToAddPage() async {
+    if (!_isEmployeesTab && _currentUserRole == 'MANAGER') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Managers cannot create departments.")),
+      );
+      return;
+    }
+
     Route<bool> route;
 
     if (_isEmployeesTab) {
@@ -174,11 +217,8 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
     }
   }
 
-  // Tìm hàm _showOptions và sửa lại như sau:
+  // --- MENU NHÂN VIÊN ---
   void _showOptions(BuildContext context, EmployeeModel employee) async {
-    // [1] Thêm async
-
-    // [2] Thêm await để chờ BottomSheet đóng lại và hứng kết quả
     final result = await showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -190,16 +230,32 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
       ),
     );
 
-    // [3] Kiểm tra kết quả
-    // Nếu result == true (từ trang Edit trả về) -> Load lại data
     if (result == true) {
       _fetchData(keyword: _searchController.text);
     }
   }
 
-  // Xóa nhân viên (Logic thật)
+  // --- [ĐÃ SỬA] MENU PHÒNG BAN ---
+  void _showDepartmentOptions(DepartmentModel dept) async {
+    // Gọi BottomSheet từ file widget bên ngoài
+    await showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => DepartmentBottomSheet(
+        department: dept,
+        // Callback khi xóa/sửa thành công -> Load lại list
+        onDeleteSuccess: () {
+          _fetchData(keyword: _searchController.text);
+        },
+      ),
+    );
+
+    // Sau khi đóng bottom sheet, load lại data cho chắc chắn
+    _fetchData(keyword: _searchController.text);
+  }
+
   Future<void> _handleDeleteEmployee(String id) async {
-    // Bottom Sheet đã close ở UI, giờ gọi API
     try {
       bool success = await _employeeRepository.deleteEmployee(id);
       if (mounted) {
@@ -207,7 +263,7 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text("Employee deleted successfully")),
           );
-          _fetchData(); // Reload list
+          _fetchData();
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text("Failed to delete employee")),
@@ -219,18 +275,26 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
     }
   }
 
-  // Khóa/Mở khóa (Logic thật)
   Future<void> _handleToggleLock(EmployeeModel emp) async {
-    // Đảo ngược trạng thái hiện tại
+    if (_currentUserId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Session expired. Please login again.")),
+      );
+      return;
+    }
+
     String newStatus = emp.status == 'ACTIVE' ? 'LOCKED' : 'ACTIVE';
     try {
-      // Tận dụng hàm update, chỉ gửi status
       bool success = await _employeeRepository.updateEmployee(
+        _currentUserId!,
         emp.id!,
         emp.fullName,
         emp.phone,
         emp.dateOfBirth,
         status: newStatus,
+        email: emp.email,
+        role: emp.role,
+        departmentId: null,
       );
 
       if (mounted) {
@@ -238,7 +302,7 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
           ScaffoldMessenger.of(
             context,
           ).showSnackBar(SnackBar(content: Text("Account is now $newStatus")));
-          _fetchData(); // Reload để cập nhật icon khóa/mở khóa
+          _fetchData(keyword: _searchController.text);
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text("Failed to update status")),
@@ -247,36 +311,37 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
       }
     } catch (e) {
       print("Status update error: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Error: ${e.toString()}")));
+      }
     }
-  }
-
-  void _showDepartmentOptions(DepartmentModel dept) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) => DepartmentBottomSheet(
-        department: dept,
-        onDeleteSuccess: () {
-          _fetchData();
-        },
-      ),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
+    bool showFab = true;
+
+    if (_currentUserRole == 'STAFF') {
+      showFab = false;
+    } else if (!_isEmployeesTab && _currentUserRole != 'COMPANY_ADMIN') {
+      showFab = false;
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFFF9F9F9),
       bottomNavigationBar: _buildBottomNavBar(),
 
-      floatingActionButton: FloatingActionButton(
-        onPressed: _navigateToAddPage,
-        backgroundColor: AppColors.primary,
-        shape: const CircleBorder(),
-        elevation: 4,
-        child: const Icon(Icons.add, color: Colors.white, size: 28),
-      ),
+      floatingActionButton: showFab
+          ? FloatingActionButton(
+              onPressed: _navigateToAddPage,
+              backgroundColor: AppColors.primary,
+              shape: const CircleBorder(),
+              elevation: 4,
+              child: const Icon(Icons.add, color: Colors.white, size: 28),
+            )
+          : null,
 
       body: SafeArea(
         child: Center(
@@ -312,7 +377,6 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
   }
 
   Widget _buildEmployeeList() {
-    // Lọc bỏ user hiện tại để không tự xóa chính mình
     final filteredList = _employees.where((emp) {
       return emp.id != _currentUserId;
     }).toList();
@@ -336,16 +400,16 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
           child: EmployeeCard(
             employee: emp,
             onMenuTap: () => _showOptions(context, emp),
-
-            // [SỬA LẠI ĐOẠN NÀY]
             onTap: () {
+              // [ĐÃ SỬA] Chuyển hướng sang trang Profile (Xem chi tiết)
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  // Chuyển hướng sang trang Profile thay vì trang Edit
                   builder: (context) => EmployeeProfilePage(employee: emp),
                 ),
-              );
+              ).then(
+                (_) => _fetchData(),
+              ); // Vẫn giữ fetch lại data đề phòng có sửa trong trang chi tiết
             },
           ),
         );
@@ -372,7 +436,13 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
               : EdgeInsets.zero,
           child: DepartmentCard(
             department: dept,
-            onMenuTap: () => _showDepartmentOptions(dept),
+
+            // [SỬA QUAN TRỌNG] Gọi hàm _showDepartmentOptions thay vì navigate
+            onMenuTap: (_currentUserRole == 'COMPANY_ADMIN')
+                ? () =>
+                      _showDepartmentOptions(dept) // [ĐÃ SỬA]
+                : null,
+
             onTap: () {
               Navigator.push(
                 context,

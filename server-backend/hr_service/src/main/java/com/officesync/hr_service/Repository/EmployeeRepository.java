@@ -51,4 +51,10 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
         @Param("requesterId") Long requesterId, 
         @Param("keyword") String keyword
     );
+
+    // [MỚI] Search chỉ trong một phòng ban cụ thể
+    @Query("SELECT e FROM Employee e WHERE e.department.id = :deptId " +
+           "AND (LOWER(e.fullName) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
+           "OR LOWER(e.employeeCode) LIKE LOWER(CONCAT('%', :keyword, '%')))")
+    List<Employee> searchEmployeesInDepartment(@Param("deptId") Long deptId, @Param("keyword") String keyword);
 }

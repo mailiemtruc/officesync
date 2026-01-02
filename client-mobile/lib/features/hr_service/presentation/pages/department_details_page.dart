@@ -25,9 +25,10 @@ class _DepartmentDetailsPageState extends State<DepartmentDetailsPage> {
   bool _isLoading = true;
   late final EmployeeRepositoryImpl _employeeRepo;
 
-  // [LOGIC MỚI] Khởi tạo storage
+  String? _currentUserId;
+  String? _currentUserRole; // [MỚI] Biến để lưu quyền hạn (ADMIN/MANAGER/STAFF)
+
   final _storage = const FlutterSecureStorage();
-  // [SỬA 1] Biến state để lưu thông tin phòng ban hiện tại
   late DepartmentModel _currentDept;
 
   @override
@@ -36,29 +37,47 @@ class _DepartmentDetailsPageState extends State<DepartmentDetailsPage> {
     _employeeRepo = EmployeeRepositoryImpl(
       remoteDataSource: EmployeeRemoteDataSource(),
     );
-
-    // [SỬA 2] Copy dữ liệu từ widget sang biến local
     _currentDept = widget.department;
+    _initData();
+  }
 
+  Future<void> _initData() async {
+    await _loadCurrentUser();
     _fetchMembers();
   }
 
+  // [ĐÃ SỬA] Lấy thêm Role từ storage
+  Future<void> _loadCurrentUser() async {
+    try {
+      String? userInfoStr = await _storage.read(key: 'user_info');
+      if (userInfoStr != null) {
+        final data = jsonDecode(userInfoStr);
+        if (mounted) {
+          setState(() {
+            _currentUserId = data['id'].toString();
+            _currentUserRole =
+                data['role']; // [QUAN TRỌNG] Lấy role để check quyền
+          });
+        }
+      }
+    } catch (e) {
+      print("Error loading user: $e");
+    }
+  }
+
   Future<void> _fetchMembers() async {
-    // Nếu department chưa có ID (vừa tạo xong chưa sync), không load được
-    if (widget.department.id == null) {
-      setState(() => _isLoading = false);
+    if (_currentDept.id == null) {
+      if (mounted) setState(() => _isLoading = false);
       return;
     }
 
     try {
-      // [CHUẨN DOANH NGHIỆP] Gọi API lấy đúng thành viên của phòng này thôi
       final deptMembers = await _employeeRepo.getEmployeesByDepartment(
-        widget.department.id!,
+        _currentDept.id!,
       );
 
       if (mounted) {
         setState(() {
-          // Chỉ cần lọc bỏ người Manager ra khỏi list hiển thị (nếu API trả về cả Manager)
           _members = deptMembers
               .where((e) => e.id != _currentDept.manager?.id)
               .toList();
@@ -86,89 +105,83 @@ class _DepartmentDetailsPageState extends State<DepartmentDetailsPage> {
   }
 
   Future<void> _onAddMembers() async {
+    // [BẢO VỆ] Chặn nếu không phải Admin
+    if (_currentUserRole != 'COMPANY_ADMIN') return;
+
     final List<EmployeeModel>? finalSelection = await Navigator.push(
       context,
       MaterialPageRoute(
+        // [SỬA LẠI THAM SỐ CHO ĐÚNG VỚI AddMembersPage]
         builder: (context) => AddMembersPage(
-          alreadySelectedMembers: _members,
-          excludeManagerId: _currentDept.manager?.id?.toString(),
+          alreadySelectedMembers: _members, // Truyền danh sách hiện tại
+          excludeManagerId: _currentDept.manager?.id
+              ?.toString(), // Loại trừ quản lý
         ),
       ),
     );
 
+    // Nếu không chọn gì hoặc bấm Back thì thôi
     if (finalSelection == null) return;
 
     setState(() => _isLoading = true);
 
-    // Logic Diffing (Giữ nguyên)
-    final oldIds = _members.map((e) => e.id).toSet();
-    final newIds = finalSelection.map((e) => e.id).toSet();
-    final toAdd = finalSelection.where((e) => !oldIds.contains(e.id)).toList();
-    final toRemove = _members.where((e) => !newIds.contains(e.id)).toList();
+    try {
+      // --- LOGIC CẬP NHẬT THÀNH VIÊN (DIFFING) ---
 
-    // Gọi API (Giữ nguyên)
-    for (var emp in toAdd) {
-      await _updateMemberDept(emp, _currentDept.id);
-    }
-    for (var emp in toRemove) {
-      await _updateMemberDept(emp, 0);
-    }
+      // 1. Tìm ra ai cần thêm vào
+      final oldIds = _members.map((e) => e.id).toSet();
+      final toAdd = finalSelection
+          .where((e) => !oldIds.contains(e.id))
+          .toList();
 
-    if (mounted) {
-      setState(() {
-        // 1. Cập nhật danh sách hiển thị (Gán cứng tên phòng ban để UI cập nhật ngay)
-        _members = finalSelection.map((e) {
-          return EmployeeModel(
-            id: e.id,
-            employeeCode: e.employeeCode,
-            fullName: e.fullName,
-            email: e.email,
-            phone: e.phone,
-            dateOfBirth: e.dateOfBirth,
-            role: e.role,
-            status: e.status,
-            avatarUrl: e.avatarUrl,
-            departmentName: _currentDept.name,
-          );
-        }).toList();
+      // 2. Tìm ra ai cần xóa đi (có trong list cũ nhưng không có trong list mới chọn)
+      final newIds = finalSelection.map((e) => e.id).toSet();
+      final toRemove = _members.where((e) => !newIds.contains(e.id)).toList();
 
-        _isLoading = false;
+      // 3. Gọi API cập nhật
+      // - Thêm người mới vào phòng này
+      for (var emp in toAdd) {
+        await _updateMemberDept(emp, _currentDept.id);
+      }
+      // - Đuổi người cũ ra (set departmentId = 0 hoặc null)
+      for (var emp in toRemove) {
+        await _updateMemberDept(emp, 0);
+      }
 
-        // [SỬA LỖI ĐẾM SỐ LƯỢNG]
-        // Nếu có Manager -> Tổng = Danh sách chọn + 1
-        // Nếu không Manager -> Tổng = Danh sách chọn
-        int totalCount = finalSelection.length;
-        if (_currentDept.manager != null) {
-          totalCount += 1;
-        }
+      // 4. Load lại dữ liệu mới nhất từ Server
+      await _fetchMembers();
 
-        _currentDept = DepartmentModel(
-          id: _currentDept.id,
-          name: _currentDept.name,
-          code: _currentDept.code,
-          color: _currentDept.color,
-          manager: _currentDept.manager,
-          memberCount: totalCount, // [QUAN TRỌNG] Dùng biến đã tính toán
-          memberIds: _currentDept.memberIds,
-        );
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Updated: Added ${toAdd.length}, Removed ${toRemove.length}',
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Updated: Added ${toAdd.length}, Removed ${toRemove.length}',
+            ),
+            backgroundColor: Colors.green,
           ),
-          backgroundColor: Colors.green,
-        ),
-      );
+        );
+      }
+    } catch (e) {
+      print("Error updating members: $e");
+      // Load lại để đảm bảo dữ liệu đúng
+      _fetchMembers();
     }
   }
 
-  // Helper function gọi API update (giúp code gọn hơn)
   Future<void> _updateMemberDept(EmployeeModel emp, int? deptId) async {
-    if (emp.id == null) return;
+    if (emp.id == null || _currentUserId == null) return;
+
+    // [BẢO VỆ] Chỉ Admin mới được xóa thành viên
+    if (_currentUserRole != 'COMPANY_ADMIN') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Only Admin can remove members.")),
+      );
+      return;
+    }
+
     try {
       await _employeeRepo.updateEmployee(
+        _currentUserId!,
         emp.id!,
         emp.fullName,
         emp.phone,
@@ -177,8 +190,9 @@ class _DepartmentDetailsPageState extends State<DepartmentDetailsPage> {
         role: emp.role,
         status: emp.status,
         avatarUrl: emp.avatarUrl,
-        departmentId: deptId, // Truyền null nếu xóa
+        departmentId: deptId,
       );
+      _fetchMembers();
     } catch (e) {
       print("Error update dept for ${emp.fullName}: $e");
     }
@@ -187,7 +201,7 @@ class _DepartmentDetailsPageState extends State<DepartmentDetailsPage> {
   @override
   Widget build(BuildContext context) {
     final themeColor = _parseColor(widget.department.color);
-    final manager = widget.department.manager;
+    final manager = _currentDept.manager;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF9F9F9),
@@ -218,6 +232,7 @@ class _DepartmentDetailsPageState extends State<DepartmentDetailsPage> {
                             style: TextStyle(
                               color: AppColors.primary,
                               fontSize: 24,
+                              fontFamily: 'Inter',
                               fontWeight: FontWeight.w700,
                             ),
                           ),
@@ -269,7 +284,7 @@ class _DepartmentDetailsPageState extends State<DepartmentDetailsPage> {
                               ),
                               const SizedBox(height: 16),
                               Text(
-                                widget.department.name,
+                                _currentDept.name,
                                 style: const TextStyle(
                                   fontSize: 22,
                                   fontWeight: FontWeight.bold,
@@ -278,14 +293,12 @@ class _DepartmentDetailsPageState extends State<DepartmentDetailsPage> {
                               ),
                               const SizedBox(height: 4),
 
-                              // [ĐÃ SỬA] Làm đậm phần Code
                               Text(
-                                'Code: ${widget.department.code ?? "N/A"}',
+                                'Code: ${_currentDept.code ?? "N/A"}',
                                 style: const TextStyle(
                                   color: Colors.grey,
                                   fontSize: 14,
-                                  fontWeight: FontWeight
-                                      .w600, // Đã thêm: Làm đậm chữ (Semi-bold)
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
 
@@ -323,10 +336,8 @@ class _DepartmentDetailsPageState extends State<DepartmentDetailsPage> {
                             ),
                           ),
                           const SizedBox(height: 12),
-                          // [SỬA ĐOẠN NÀY]
                           EmployeeCard(
                             employee: manager,
-                            // Thêm điều hướng sang trang Profile của Manager
                             onTap: () {
                               Navigator.push(
                                 context,
@@ -340,6 +351,7 @@ class _DepartmentDetailsPageState extends State<DepartmentDetailsPage> {
                           const SizedBox(height: 24),
                         ],
 
+                        // 3. MEMBERS HEADER + ADD BUTTON
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
@@ -353,37 +365,39 @@ class _DepartmentDetailsPageState extends State<DepartmentDetailsPage> {
                               ),
                             ),
 
-                            // Nút Add Member
-                            InkWell(
-                              onTap: _onAddMembers, // Gọi hàm vừa viết ở trên
-                              borderRadius: BorderRadius.circular(8),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      PhosphorIcons.plus(
-                                        PhosphorIconsStyle.bold,
-                                      ),
-                                      size: 16,
-                                      color: AppColors.primary,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    const Text(
-                                      'Add Member',
-                                      style: TextStyle(
+                            // [LOGIC UI MỚI] Chỉ hiện nút Add Member nếu là COMPANY_ADMIN
+                            // Các quyền khác (MANAGER, STAFF) sẽ không thấy nút này
+                            if (_currentUserRole == 'COMPANY_ADMIN')
+                              InkWell(
+                                onTap: _onAddMembers,
+                                borderRadius: BorderRadius.circular(8),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        PhosphorIcons.plus(
+                                          PhosphorIconsStyle.bold,
+                                        ),
+                                        size: 16,
                                         color: AppColors.primary,
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w600,
                                       ),
-                                    ),
-                                  ],
+                                      const SizedBox(width: 4),
+                                      const Text(
+                                        'Add Member',
+                                        style: TextStyle(
+                                          color: AppColors.primary,
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
-                            ),
                           ],
                         ),
                         const SizedBox(height: 12),
@@ -408,15 +422,17 @@ class _DepartmentDetailsPageState extends State<DepartmentDetailsPage> {
                             itemBuilder: (context, index) {
                               final emp = _members[index];
                               return Padding(
-                                // Nên bọc Padding để các card cách nhau ra chút
                                 padding: const EdgeInsets.only(bottom: 8.0),
                                 child: EmployeeCard(
                                   employee: emp,
 
-                                  // [SỬA 2] Không truyền 'onMenuTap' -> Sẽ ẩn dấu 3 chấm (nếu EmployeeCard được code chuẩn)
-                                  // onMenuTap: () {},
+                                  // [LOGIC UI MỚI] Chỉ Admin mới thấy menu xóa (dấu 3 chấm)
+                                  // Nếu không phải Admin, truyền null để ẩn menu đi
+                                  onMenuTap:
+                                      (_currentUserRole == 'COMPANY_ADMIN')
+                                      ? () => _updateMemberDept(emp, 0)
+                                      : null,
 
-                                  // [SỬA 3] Thêm điều hướng sang trang chi tiết
                                   onTap: () {
                                     Navigator.push(
                                       context,

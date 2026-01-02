@@ -13,6 +13,7 @@ import com.officesync.hr_service.Model.Department;
 @Repository
 public interface DepartmentRepository extends JpaRepository<Department, Long> {
 
+    List<Department> findByCompanyId(Long companyId);
 
     // SỬA: Đổi findByCode -> findByDepartmentCode
     Optional<Department> findByDepartmentCode(String departmentCode);
