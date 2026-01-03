@@ -8,6 +8,8 @@ import com.officesync.notification_service.repository.NotificationRepository;
 import com.officesync.notification_service.repository.UserDeviceRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
@@ -79,5 +81,22 @@ public class NotificationService {
                 System.err.println("Lỗi gửi Firebase: " + e.getMessage());
             }
         }
+    }
+    @Transactional // Bắt buộc phải có để cho phép xóa dữ liệu
+    public void unregisterDevice(Long userId) {
+        deviceRepository.deleteByUserId(userId);
+        System.out.println("✅ Đã xóa Token của User " + userId + " (Logout)");
+    }
+// 👇 THÊM HÀM NÀY: Đánh dấu đã đọc
+    public void markAsRead(Long notificationId) {
+        Optional<com.officesync.notification_service.model.Notification> notiOpt = notificationRepository.findById(notificationId);
+        if (notiOpt.isPresent()) {
+            com.officesync.notification_service.model.Notification noti = notiOpt.get();
+            noti.setRead(true); // Đổi thành đã đọc
+            notificationRepository.save(noti); // Lưu vào DB
+        }
+    }
+    public void deleteNotification(Long id) {
+        notificationRepository.deleteById(id);
     }
 }

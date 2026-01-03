@@ -361,16 +361,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildHomeByRole(String role) {
+    // 1. Lấy ID an toàn
+    int myId = int.tryParse(widget.userInfo['id'].toString()) ?? 0;
+
     switch (role) {
       case 'SUPER_ADMIN':
-        return const AdminHomeView();
+        return AdminHomeView(currentUserId: myId); // 👈 Truyền ID vào
       case 'COMPANY_ADMIN':
-        return const DirectorHomeView();
+        return DirectorHomeView(currentUserId: myId); // (Cái này đã làm rồi)
       case 'MANAGER':
-        return const ManagerHomeView();
+        return ManagerHomeView(currentUserId: myId); // 👈 Truyền ID vào
       case 'STAFF':
       default:
-        return const StaffHomeView();
+        // Nếu bạn có file StaffHomeView thì cũng làm tương tự nhé, tạm thời tôi để code cũ
+        return StaffHomeView(currentUserId: myId);
     }
   }
 

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:http/http.dart' as http;
+import 'models/notification_model.dart';
 
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
@@ -99,6 +100,72 @@ class NotificationService {
       }
     } catch (e) {
       print("❌ Lỗi kết nối Backend: $e");
+    }
+  } // 1. Hàm gọi API lấy danh sách thông báo
+
+  Future<List<NotificationModel>> fetchNotifications(int userId) async {
+    final url = Uri.parse(
+      "http://10.0.2.2:8089/api/notifications/user/$userId",
+    );
+    try {
+      final response = await http.get(url);
+
+      if (response.statusCode == 200) {
+        // Decode JSON
+        final List<dynamic> rawList = jsonDecode(
+          utf8.decode(response.bodyBytes),
+        );
+
+        // 3. Map từ JSON sang Model
+        return rawList.map((e) => NotificationModel.fromJson(e)).toList();
+      }
+      return [];
+    } catch (e) {
+      print("❌ Lỗi tải thông báo: $e");
+      return [];
+    }
+  }
+
+  // 2. Hàm hủy đăng ký (Dùng cho nút Logout)
+  Future<void> unregisterDevice(int userId) async {
+    try {
+      final url = Uri.parse(
+        "http://10.0.2.2:8089/api/notifications/unregister-device",
+      );
+      await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({"userId": userId}),
+      );
+
+      // Xóa token phía Client luôn cho sạch
+      await _firebaseMessaging.deleteToken();
+      print("👋 Đã hủy đăng ký thiết bị (Logout thành công)");
+    } catch (e) {
+      print("⚠️ Lỗi hủy đăng ký: $e");
+    }
+  }
+
+  Future<void> markAsRead(int notificationId) async {
+    try {
+      // Gọi API báo Server là đã đọc tin này
+      final url = Uri.parse(
+        "http://10.0.2.2:8089/api/notifications/$notificationId/read",
+      );
+
+      // Gửi request PUT (không cần body)
+      await http.put(url);
+    } catch (e) {
+      print("⚠️ Lỗi đánh dấu đã đọc: $e");
+    }
+  }
+
+  Future<void> deleteNotification(int id) async {
+    try {
+      final url = Uri.parse("http://10.0.2.2:8089/api/notifications/$id");
+      await http.delete(url);
+    } catch (e) {
+      print("⚠️ Lỗi xóa: $e");
     }
   }
 }

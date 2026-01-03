@@ -7,9 +7,11 @@ import '../../../../core/config/app_colors.dart';
 
 import 'director_company_profile_screen.dart';
 import '../../../../core/utils/custom_snackbar.dart';
+import 'package:officesync/features/notification_service/presentation/pages/notification_list_screen.dart';
 
 class DirectorHomeView extends StatefulWidget {
-  const DirectorHomeView({super.key});
+  final int currentUserId;
+  const DirectorHomeView({super.key, required this.currentUserId});
 
   @override
   State<DirectorHomeView> createState() => _DirectorHomeViewState();
@@ -163,10 +165,14 @@ class _DirectorHomeViewState extends State<DirectorHomeView> {
         Row(
           children: [
             _buildCircleIcon(PhosphorIconsBold.bell, () {
-              CustomSnackBar.show(
+              Navigator.push(
                 context,
-                title: "Notifications",
-                message: "No new alerts.",
+                MaterialPageRoute(
+                  builder: (context) => NotificationListScreen(
+                    userId: widget
+                        .currentUserId, // Truyền ID user vào màn hình thông báo
+                  ),
+                ),
               );
             }),
             const SizedBox(width: 12),
@@ -293,15 +299,13 @@ class _DirectorHomeViewState extends State<DirectorHomeView> {
           );
         }),
 
-       _buildActionItem("News", PhosphorIconsBold.newspaper, () {
-  // 👇 Thay thế đoạn CustomSnackBar cũ bằng đoạn Navigator này:
-  Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (context) => const NewsfeedScreen(),
-    ),
-  );
-}),
+        _buildActionItem("News", PhosphorIconsBold.newspaper, () {
+          // 👇 Thay thế đoạn CustomSnackBar cũ bằng đoạn Navigator này:
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const NewsfeedScreen()),
+          );
+        }),
       ],
     );
   }

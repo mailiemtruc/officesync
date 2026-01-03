@@ -46,4 +46,26 @@ public class NotificationController {
         notificationService.sendNotification(userId, title, body, "TEST", 0L);
         return ResponseEntity.ok("Sent test notification");
     }
+    @PostMapping("/unregister-device")
+    public ResponseEntity<?> unregisterDevice(@RequestBody Map<String, Object> payload) {
+        // Lấy userId từ json gửi lên
+        if (payload.get("userId") != null) {
+             Long userId = Long.valueOf(payload.get("userId").toString());
+             notificationService.unregisterDevice(userId);
+             return ResponseEntity.ok("Device unregistered successfully");
+        }
+        return ResponseEntity.badRequest().body("Missing userId");
+    }
+    // 👇 THÊM API NÀY:
+    // PUT /api/notifications/{id}/read
+    @PutMapping("/{id}/read")
+    public ResponseEntity<?> markAsRead(@PathVariable Long id) {
+        notificationService.markAsRead(id);
+        return ResponseEntity.ok("Marked as read");
+    }
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> deleteNotification(@PathVariable Long id) {
+        notificationService.deleteNotification(id);
+        return ResponseEntity.ok("Deleted successfully");
+    }
 }

@@ -8,9 +8,11 @@ import '../../data/models/company_model.dart';
 import '../../../../core/utils/custom_snackbar.dart';
 import 'company_detail_screen.dart';
 import 'all_companies_screen.dart';
+import 'package:officesync/features/notification_service/presentation/pages/notification_list_screen.dart';
 
 class AdminHomeView extends StatefulWidget {
-  const AdminHomeView({super.key});
+  final int currentUserId; // 👈 Thêm dòng này
+  const AdminHomeView({super.key, required this.currentUserId});
 
   @override
   State<AdminHomeView> createState() => _AdminHomeViewState();
@@ -234,7 +236,15 @@ class _AdminHomeViewState extends State<AdminHomeView> {
         ),
         Row(
           children: [
-            _buildCircleIcon(PhosphorIconsBold.bell, () {}),
+            _buildCircleIcon(PhosphorIconsBold.bell, () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) =>
+                      NotificationListScreen(userId: widget.currentUserId),
+                ),
+              );
+            }),
             const SizedBox(width: 12),
             _buildCircleIcon(PhosphorIconsBold.gear, () {}),
           ],

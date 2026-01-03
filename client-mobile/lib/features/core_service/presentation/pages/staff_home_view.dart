@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'dart:async';
 import '../../../../core/config/app_colors.dart';
+import 'package:officesync/features/notification_service/presentation/pages/notification_list_screen.dart';
 
 class StaffHomeView extends StatefulWidget {
-  const StaffHomeView({super.key});
+  final int currentUserId; // 👈 Thêm dòng này
+  const StaffHomeView({super.key, required this.currentUserId});
 
   @override
   State<StaffHomeView> createState() => _StaffHomeViewState();
@@ -158,7 +160,15 @@ class _StaffHomeViewState extends State<StaffHomeView> {
         Row(
           children: [
             _buildCircleIcon(PhosphorIconsBold.bell, () {
-              print("Đã nhấn chuông thông báo");
+              // 👈 Sửa hàm bên trong này
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => NotificationListScreen(
+                    userId: widget.currentUserId, // Truyền ID vào
+                  ),
+                ),
+              );
             }),
             const SizedBox(width: 12),
             _buildCircleIcon(PhosphorIconsBold.chatCircleDots, () {

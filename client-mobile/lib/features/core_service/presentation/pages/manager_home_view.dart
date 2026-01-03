@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'dart:async';
 import '../../../../core/config/app_colors.dart';
+import 'package:officesync/features/notification_service/presentation/pages/notification_list_screen.dart';
 
 class ManagerHomeView extends StatefulWidget {
-  const ManagerHomeView({super.key});
+  final int currentUserId; // 👈 Thêm dòng này
+  const ManagerHomeView({super.key, required this.currentUserId});
 
   @override
   State<ManagerHomeView> createState() => _ManagerHomeViewState();
@@ -157,7 +159,15 @@ class _ManagerHomeViewState extends State<ManagerHomeView> {
         ),
         Row(
           children: [
-            _buildCircleIcon(PhosphorIconsBold.bell, () {}),
+            _buildCircleIcon(PhosphorIconsBold.bell, () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) =>
+                      NotificationListScreen(userId: widget.currentUserId),
+                ),
+              );
+            }),
             const SizedBox(width: 12),
             _buildCircleIcon(PhosphorIconsBold.chatCircleDots, () {}),
           ],
