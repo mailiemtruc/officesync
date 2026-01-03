@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:officesync/features/communication_service/data/newsfeed_api.dart';
+//notification
+import 'package:officesync/features/notification_service/notification_service.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:intl/intl.dart';
@@ -247,6 +249,18 @@ class _UserProfilePageState extends State<UserProfilePage> {
   // [QUAN TRỌNG] HÀM ĐĂNG XUẤT ĐÃ SỬA
   Future<void> _handleLogout() async {
     try {
+      // -----------------------------------------------------------
+      // 👇 1. [THÊM MỚI] Gọi API báo Server xóa Token đi
+      // -----------------------------------------------------------
+      String? userIdStr = await _getUserIdSafe(); // Tận dụng hàm có sẵn của bạn
+      if (userIdStr != null) {
+        int uid = int.tryParse(userIdStr) ?? 0;
+        if (uid > 0) {
+          await NotificationService().unregisterDevice(uid);
+          print("--> Đã logout và hủy Token thông báo thành công");
+        }
+      }
+      // -----------------------------------------------------------
       // 1. Xóa dữ liệu local
       await _storage.deleteAll();
 
@@ -259,6 +273,10 @@ class _UserProfilePageState extends State<UserProfilePage> {
       }
     } catch (e) {
       print("Logout error: $e");
+      // Dù lỗi mạng vẫn cho đăng xuất khỏi App để tránh kẹt
+      if (mounted) {
+        Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+      }
     }
   }
 
