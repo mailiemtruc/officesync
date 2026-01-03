@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import '../../data/models/employee_model.dart'; // Import Model
 import '../../data/models/department_model.dart'; // Import Model
 
@@ -13,7 +15,8 @@ abstract class EmployeeRepository {
     required String currentUserId,
     required String password, // [MỚI] Thêm tham số này
   });
-
+  // [MỚI] Thêm hàm upload
+  Future<String> uploadFile(File file);
   // [Mới] Hàm lấy danh sách nhân viên
   Future<List<EmployeeModel>> getEmployees(String currentUserId);
 

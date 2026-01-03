@@ -71,7 +71,7 @@ class _ManagerRequestReviewPageState extends State<ManagerRequestReviewPage> {
   void dispose() {
     // Hủy đăng ký topic này (các topic khác vẫn chạy)
     if (_unsubscribeFn != null) {
-      _unsubscribeFn(unsubscribeHeaders: {});
+      _unsubscribeFn(unsubscribeHeaders: const <String, String>{});
     }
     _rejectReasonController.dispose(); // Dispose Controller
     super.dispose();
@@ -592,8 +592,9 @@ class _ManagerRequestReviewPageState extends State<ManagerRequestReviewPage> {
   }
 
   Widget _buildEmployeeInfoCard(RequestModel req) {
-    // Check tạm ID để hiển thị badge Manager
-    final bool isManager = ['001', '004'].contains(req.requesterId);
+    // [SAU KHI SỬA] Dùng role thực tế
+    final bool isManager =
+        req.requesterRole == 'MANAGER' || req.requesterRole == 'COMPANY_ADMIN';
 
     // Lấy thông tin từ req
     final statusText = req.status.name;
@@ -707,7 +708,7 @@ class _ManagerRequestReviewPageState extends State<ManagerRequestReviewPage> {
                   style: const TextStyle(
                     color: Color(0xFF555252),
                     fontSize: 13,
-                    fontWeight: FontWeight.w300,
+                    fontWeight: FontWeight.w400,
                     fontFamily: 'Inter',
                   ),
                 ),
@@ -1082,64 +1083,6 @@ class _ManagerRequestReviewPageState extends State<ManagerRequestReviewPage> {
     }
   }
 
-  // Widget hiển thị dòng chi tiết (cho Annual Leave)
-  Widget _buildDetailRow(String label, String value, {bool isBlue = false}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-              color: Color(0xFF64748B),
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              fontFamily: 'Inter',
-            ),
-          ),
-          Text(
-            value,
-            style: TextStyle(
-              color: isBlue ? const Color(0xFF2563EB) : Colors.black,
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              fontFamily: 'Inter',
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Widget vẽ đường kẻ nét đứt
-  Widget _buildDottedLine() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: LayoutBuilder(
-        builder: (BuildContext context, BoxConstraints constraints) {
-          final boxWidth = constraints.constrainWidth();
-          const dashWidth = 6.0;
-          const dashSpace = 4.0;
-          final dashCount = (boxWidth / (dashWidth + dashSpace)).floor();
-          return Flex(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            direction: Axis.horizontal,
-            children: List.generate(dashCount, (_) {
-              return SizedBox(
-                width: dashWidth,
-                height: 1,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(color: Colors.grey[300]),
-                ),
-              );
-            }),
-          );
-        },
-      ),
-    );
-  }
-
   Widget _buildInfoItem(String label, String value, {bool isBlue = false}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1216,10 +1159,16 @@ class _FullScreenImageViewer extends StatelessWidget {
         backgroundColor: Colors.black.withOpacity(0.5),
         iconTheme: const IconThemeData(color: Colors.white),
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: () => Navigator.pop(context),
-        ),
+        automaticallyImplyLeading:
+            false, // [QUAN TRỌNG] Tắt nút back mặc định bên trái
+        // [ĐÚNG] actions nằm bên phải
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: () => Navigator.pop(context),
+          ),
+          const SizedBox(width: 8), // Căn lề phải một chút cho đẹp
+        ],
       ),
       body: PageView.builder(
         controller: controller,

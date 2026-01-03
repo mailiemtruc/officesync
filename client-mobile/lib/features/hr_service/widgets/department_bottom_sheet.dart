@@ -69,7 +69,6 @@ class DepartmentBottomSheet extends StatelessWidget {
 
             if (context.mounted) {
               Navigator.pop(context); // Đóng Dialog Confirm
-              Navigator.pop(context); // Đóng BottomSheet Menu
               onDeleteSuccess(); // Refresh list ở trang chủ
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
@@ -173,7 +172,7 @@ class DepartmentBottomSheet extends StatelessWidget {
                             color: Color(0xFF555252),
                             fontSize: 13,
                             fontFamily: 'Inter',
-                            fontWeight: FontWeight.w300,
+                            fontWeight: FontWeight.w400,
                           ),
                         ),
                       ],
@@ -251,24 +250,32 @@ class DepartmentBottomSheet extends StatelessWidget {
     required Color color,
     required VoidCallback onTap,
   }) {
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-        child: Row(
-          children: [
-            Icon(icon, size: 24, color: color),
-            const SizedBox(width: 16),
-            Text(
-              text,
-              style: TextStyle(
-                color: color,
-                fontSize: 16,
-                fontFamily: 'Inter',
-                fontWeight: FontWeight.w600,
+    // [ĐÃ SỬA] Thêm Material để hiển thị hiệu ứng sóng nước (Ripple) rõ ràng
+    return Material(
+      color:
+          Colors.transparent, // Quan trọng: Để không che mất nền trắng bên dưới
+      child: InkWell(
+        onTap: onTap,
+        // Tùy chỉnh màu hiệu ứng lan tỏa theo màu của icon (VD: Nút xóa sẽ lan màu đỏ nhạt)
+        splashColor: color.withOpacity(0.1),
+        highlightColor: color.withOpacity(0.05),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          child: Row(
+            children: [
+              Icon(icon, size: 24, color: color),
+              const SizedBox(width: 16),
+              Text(
+                text,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 16,
+                  fontFamily: 'Inter',
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

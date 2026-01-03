@@ -50,7 +50,7 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
   void dispose() {
     // [QUAN TRỌNG] Hủy đăng ký khi thoát màn hình để tránh leak
     if (_unsubscribeFn != null) {
-      _unsubscribeFn(unsubscribeHeaders: {});
+      _unsubscribeFn(unsubscribeHeaders: const <String, String>{});
     }
     super.dispose();
   }
@@ -81,33 +81,11 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
       _unsubscribeFn = WebSocketService().subscribe(topic, (data) {
         if (!mounted) return;
 
-        // 1. Nếu nhận được chuỗi "NEW_REQUEST" -> Reload API
-        if (data is String && data == "NEW_REQUEST") {
-          _fetchRequests(isBackgroundRefresh: true);
-        }
-        // 2. Nếu nhận được JSON Object -> Update UI trực tiếp
-        else if (data is Map<String, dynamic>) {
-          try {
-            final updatedReq = RequestModel.fromJson(data);
-            setState(() {
-              final index = _requestList.indexWhere(
-                (item) => (item['request'] as RequestModel).id == updatedReq.id,
-              );
-
-              if (index != -1) {
-                // Update item có sẵn
-                _requestList[index]['request'] = updatedReq;
-                // Cập nhật lại status text/color nếu cần thiết
-                _requestList[index]['status'] = updatedReq.status.name;
-              } else {
-                // Nếu không tìm thấy (trường hợp hiếm), reload lại cho chắc
-                _fetchRequests(isBackgroundRefresh: true);
-              }
-            });
-          } catch (e) {
-            print("Socket Parse Error: $e");
-          }
-        }
+        // [GIẢI PHÁP] Bất kể là tin nhắn NEW_REQUEST hay Update/Delete (JSON)
+        // Ta đều gọi reload lại API để đảm bảo danh sách chuẩn nhất.
+        // Việc này giúp đơn bị xóa (Deleted) tự động biến mất khỏi danh sách.
+        print("--> Socket received update. Reloading list...");
+        _fetchRequests(isBackgroundRefresh: true);
       });
     }
   }
@@ -731,98 +709,105 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
                   child: _isLoading
                       ? const Center(child: CircularProgressIndicator())
                       : displayList.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.assignment_turned_in_outlined,
-                                size: 48,
-                                color: Colors.grey[300],
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                "No requests found",
-                                style: TextStyle(color: Colors.grey[400]),
-                              ),
-                            ],
-                          ),
-                        )
-                      : ListView.builder(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 24,
-                            vertical: 8,
-                          ),
-                          itemCount: displayList.length,
-                          itemBuilder: (context, index) {
-                            final item = displayList[index];
-                            final request = item['request'] as RequestModel;
-
-                            // --- LOGIC GOM NHÓM THÁNG ---
-                            final date = request.createdAt ?? request.startTime;
-                            bool showHeader = false;
-
-                            if (index == 0) {
-                              showHeader = true;
-                            } else {
-                              final prevItem = displayList[index - 1];
-                              final prevRequest =
-                                  prevItem['request'] as RequestModel;
-                              final prevDate =
-                                  prevRequest.createdAt ??
-                                  prevRequest.startTime;
-
-                              // Kiểm tra khác tháng hoặc khác năm
-                              if (date.month != prevDate.month ||
-                                  date.year != prevDate.year) {
-                                showHeader = true;
-                              }
-                            }
-
-                            return Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // Hiển thị Header Tháng
-                                if (showHeader)
-                                  Padding(
-                                    padding: const EdgeInsets.only(
-                                      top: 16,
-                                      bottom: 12,
-                                    ),
-                                    child: Text(
-                                      DateFormat('MMMM yyyy').format(date),
-                                      // [ĐÃ SỬA] Style đồng nhất với MyRequestsPage
-                                      style: const TextStyle(
-                                        color: Color(
-                                          0xFF6B7280,
-                                        ), // Màu xám đậm hơn (Chuẩn)
-                                        fontSize: 15, // Size 15 (Chuẩn)
-                                        fontWeight:
-                                            FontWeight.bold, // In đậm (Chuẩn)
-                                        fontFamily: 'Inter',
-                                      ),
-                                    ),
-                                  ),
-
-                                // Hiển thị Card
-                                _ManagerRequestCard(
-                                  data: item,
-                                  onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) =>
-                                            ManagerRequestReviewPage(
-                                              request: item['request'],
-                                            ),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ],
-                            );
+                      ? _buildEmptyState()
+                      : RefreshIndicator(
+                          // [SỬA] Bắt đầu RefreshIndicator
+                          onRefresh: () async {
+                            // Gọi hàm lấy dữ liệu khi người dùng kéo xuống
+                            await _fetchRequests(isBackgroundRefresh: true);
                           },
-                        ),
+                          color: const Color(0xFF2260FF),
+                          // [SỬA QUAN TRỌNG] Thay dấu ":" sai bằng "child:"
+                          child: ListView.builder(
+                            physics:
+                                const AlwaysScrollableScrollPhysics(), // Giúp kéo được ngay cả khi list ngắn
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 24,
+                              vertical: 8,
+                            ),
+                            itemCount: displayList.length,
+                            itemBuilder: (context, index) {
+                              final item = displayList[index];
+                              final request = item['request'] as RequestModel;
+
+                              // --- LOGIC GOM NHÓM THÁNG ---
+                              final date =
+                                  request.createdAt ?? request.startTime;
+                              bool showHeader = false;
+
+                              if (index == 0) {
+                                showHeader = true;
+                              } else {
+                                final prevItem = displayList[index - 1];
+                                final prevRequest =
+                                    prevItem['request'] as RequestModel;
+                                final prevDate =
+                                    prevRequest.createdAt ??
+                                    prevRequest.startTime;
+
+                                // Kiểm tra khác tháng hoặc khác năm
+                                if (date.month != prevDate.month ||
+                                    date.year != prevDate.year) {
+                                  showHeader = true;
+                                }
+                              }
+
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Hiển thị Header Tháng
+                                  if (showHeader)
+                                    Padding(
+                                      padding: const EdgeInsets.only(
+                                        top: 16,
+                                        bottom: 12,
+                                      ),
+                                      child: Text(
+                                        DateFormat('MMMM yyyy').format(date),
+                                        style: const TextStyle(
+                                          color: Color(0xFF6B7280),
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.bold,
+                                          fontFamily: 'Inter',
+                                        ),
+                                      ),
+                                    ),
+
+                                  _ManagerRequestCard(
+                                    data: item,
+                                    // [SỬA LẠI ĐOẠN NÀY]
+                                    onTap: () async {
+                                      // 1. Thêm từ khóa async
+                                      // 2. Thêm await để chờ kết quả từ trang Review
+                                      final result = await Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) =>
+                                              ManagerRequestReviewPage(
+                                                request: item['request'],
+                                              ),
+                                        ),
+                                      );
+
+                                      // 3. Kiểm tra: Nếu trang kia trả về 'true' (tức là đã Duyệt/Từ chối thành công)
+                                      if (result == true) {
+                                        print(
+                                          "--> Action success. Reloading list...",
+                                        );
+                                        // Gọi hàm load lại API ngay lập tức
+                                        if (mounted) {
+                                          _fetchRequests(
+                                            isBackgroundRefresh: true,
+                                          );
+                                        }
+                                      }
+                                    },
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
+                        ), // [SỬA] Đóng ngoặc RefreshIndicator
                 ),
               ],
             ),
@@ -981,43 +966,69 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
     );
   }
 
-  // [ĐÃ SỬA] Đồng bộ theo giao diện trang MyRequestsPage
   Widget _buildSearchBar() {
     return Container(
-      height: 45, // [SỬA] Tăng chiều cao lên 45
+      height: 45,
       decoration: BoxDecoration(
-        color: const Color(0xFFF5F5F5), // [SỬA] Màu nền sáng hơn (F5F5F5)
-        borderRadius: BorderRadius.circular(12), // [SỬA] Bo góc 12
-        border: Border.all(
-          color: const Color(0xFFE0E0E0),
-        ), // [SỬA] Viền nhạt hơn (E0E0E0)
+        color: const Color(0xFFF5F5F5),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE0E0E0)),
       ),
       child: TextField(
         controller: _searchController,
-        onChanged: _onSearchChanged,
+        // [MỚI] Cập nhật UI để hiện/ẩn nút X khi gõ
+        onChanged: (val) {
+          _onSearchChanged(val);
+          setState(() {});
+        },
         decoration: InputDecoration(
           hintText: 'Search requests...',
           hintStyle: const TextStyle(
-            color: Color(0xFF9E9E9E), // [SỬA] Màu chữ gợi ý nhạt hơn (9E9E9E)
-            fontSize: 14, // [SỬA] Size 14
+            color: Color(0xFF9E9E9E),
+            fontSize: 14,
             fontWeight: FontWeight.w300,
             fontFamily: 'Inter',
           ),
           prefixIcon: Icon(
             PhosphorIcons.magnifyingGlass(),
-            color: const Color(0xFF757575), // [SỬA] Màu icon (757575)
+            color: const Color(0xFF757575),
             size: 20,
           ),
+          // [MỚI] Nút Xóa hình tròn (Đồng bộ giao diện)
+          suffixIcon: _searchController.text.isNotEmpty
+              ? Padding(
+                  padding: const EdgeInsets.all(10.0),
+                  child: GestureDetector(
+                    onTap: () {
+                      _searchController.clear();
+                      setState(() {}); // Cập nhật UI ẩn nút X
+
+                      // Hủy debounce cũ và load lại danh sách gốc
+                      if (_debounce?.isActive ?? false) _debounce!.cancel();
+                      _fetchRequests();
+                    },
+                    child: Container(
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFC4C4C4), // Màu nền xám
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        PhosphorIcons.x(PhosphorIconsStyle.bold),
+                        size: 12,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                )
+              : null,
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(
-            vertical: 10,
-          ), // [SỬA] Padding dọc 10
+          contentPadding: const EdgeInsets.symmetric(vertical: 10),
         ),
       ),
     );
   }
 
-  // [ĐÃ SỬA] Đồng bộ theo giao diện trang MyRequestsPage
+  // [CẬP NHẬT] Nút Filter có hiệu ứng nhấn (Ripple Effect)
   Widget _buildFilterButton() {
     // Kiểm tra có đang lọc không
     final bool hasFilter =
@@ -1034,65 +1045,109 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
       }
     }
 
-    return GestureDetector(
-      onTap: _onFilterTap,
-      child: Container(
-        // Co giãn chiều rộng nếu có text
-        width: hasFilter ? null : 45, // [SỬA] Chiều rộng mặc định 45
-        height: 45, // [SỬA] Chiều cao 45
-        padding: EdgeInsets.symmetric(horizontal: hasFilter ? 12 : 0),
-        decoration: BoxDecoration(
-          // Đổi màu nền: Nếu không lọc thì dùng F5F5F5 (giống SearchBar)
-          color: hasFilter ? const Color(0xFFECF1FF) : const Color(0xFFF5F5F5),
-          borderRadius: BorderRadius.circular(12), // [SỬA] Bo góc 12
-          border: Border.all(
-            // Viền: Nếu không lọc thì dùng E0E0E0
-            color: hasFilter
-                ? const Color(0xFF2260FF)
-                : const Color(0xFFE0E0E0),
+    // Màu sắc nền và viền
+    final bgColor = hasFilter
+        ? const Color(0xFFECF1FF)
+        : const Color(0xFFF5F5F5);
+    final borderColor = hasFilter
+        ? const Color(0xFF2260FF)
+        : const Color(0xFFE0E0E0);
+
+    return Material(
+      color: bgColor,
+
+      // Tạo viền
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: borderColor, width: 1),
+      ),
+      child: InkWell(
+        onTap: _onFilterTap,
+        borderRadius: BorderRadius.circular(12),
+
+        // Mới (Màu xám)
+        splashColor: Colors.grey.withOpacity(0.2),
+        highlightColor: Colors.grey.withOpacity(0.1),
+        child: Container(
+          // Co giãn chiều rộng nếu có text
+          width: hasFilter ? null : 45,
+          height: 45,
+          padding: EdgeInsets.symmetric(horizontal: hasFilter ? 12 : 0),
+          alignment: Alignment.center,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Icon Phễu
+              Icon(
+                hasFilter
+                    ? PhosphorIconsFill.funnel
+                    : PhosphorIconsRegular.funnel,
+                color: hasFilter
+                    ? const Color(0xFF2260FF)
+                    : const Color(0xFF555252),
+                size: 20,
+              ),
+
+              // Text hiển thị & Nút xóa
+              if (hasFilter) ...[
+                const SizedBox(width: 8),
+                Text(
+                  dateText,
+                  style: const TextStyle(
+                    color: Color(0xFF2260FF),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    fontFamily: 'Inter',
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // Nút xóa filter (X) - Dùng GestureDetector để chặn sự kiện xuyên thấu
+                GestureDetector(
+                  onTap: _clearFilter,
+                  child: const Icon(
+                    Icons.close,
+                    size: 18,
+                    color: Color(0xFF2260FF),
+                  ),
+                ),
+              ],
+            ],
           ),
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Icon Phễu
-            Icon(
-              hasFilter
-                  ? PhosphorIconsFill.funnel
-                  : PhosphorIconsRegular.funnel,
-              // [SỬA] Màu icon khi chưa chọn là 555252 (đậm hơn chút cho dễ nhìn trên nền sáng)
-              color: hasFilter
-                  ? const Color(0xFF2260FF)
-                  : const Color(0xFF555252),
-              size: 20,
-            ),
+      ),
+    );
+  }
 
-            // Text hiển thị & Nút xóa
-            if (hasFilter) ...[
-              const SizedBox(width: 8),
-              Text(
-                dateText,
-                style: const TextStyle(
-                  color: Color(0xFF2260FF),
-                  fontSize: 13, // [SỬA] Size 13
-                  fontWeight: FontWeight.w600,
-                  fontFamily: 'Inter',
-                ),
-              ),
-              const SizedBox(width: 8),
-              // Nút xóa filter (X)
-              InkWell(
-                onTap: _clearFilter,
-                child: const Icon(
-                  Icons.close,
-                  size: 18,
-                  color: Color(0xFF2260FF),
-                ),
-              ),
-            ],
-          ],
-        ),
+  Widget _buildEmptyState() {
+    String message = _searchController.text.isNotEmpty
+        ? "No requests found matching '${_searchController.text}'"
+        : "No requests found";
+
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // [ĐÃ SỬA] Dùng icon ClipboardText giống trang MyRequests
+          Icon(
+            PhosphorIcons.clipboardText(PhosphorIconsStyle.regular),
+            size: 64, // Kích thước lớn 64
+            color: const Color(0xFFE5E7EB), // Màu xám rất nhạt
+          ),
+          const SizedBox(height: 16),
+
+          // [ĐÃ SỬA] Style chữ đồng bộ: Màu 9CA3AF, Size 16, Weight 500
+          Text(
+            message,
+            style: const TextStyle(
+              color: Color(0xFF9CA3AF), // Màu xám chuẩn
+              fontSize: 16,
+              fontWeight: FontWeight.w500, // Độ đậm 500 (Medium)
+              fontFamily: 'Inter',
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
       ),
     );
   }
@@ -1108,7 +1163,9 @@ class _ManagerRequestCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final RequestModel request = data['request'];
     final String timeInfo = data['timeInfo'] ?? request.duration;
-    final bool isManager = ['001', '004'].contains(data['employeeId']);
+    final bool isManager =
+        request.requesterRole == 'MANAGER' ||
+        request.requesterRole == 'COMPANY_ADMIN';
     final String processedDate = data['processedDate'] ?? '';
 
     return Container(
@@ -1202,20 +1259,27 @@ class _ManagerRequestCard extends StatelessWidget {
                                     WidgetSpan(
                                       alignment: PlaceholderAlignment.middle,
                                       child: Container(
+                                        margin: const EdgeInsets.only(
+                                          left: 4,
+                                        ), // Thêm margin nhẹ
                                         padding: const EdgeInsets.symmetric(
                                           horizontal: 8,
                                           vertical: 2,
                                         ),
                                         decoration: BoxDecoration(
-                                          color: const Color(0xFFECF1FF),
+                                          color: const Color(
+                                            0xFFECF1FF,
+                                          ), // Màu nền xanh nhạt giống hình
                                           borderRadius: BorderRadius.circular(
-                                            5,
-                                          ),
+                                            4,
+                                          ), // Bo góc nhẹ
                                         ),
                                         child: const Text(
                                           'Manager',
                                           style: TextStyle(
-                                            color: Color(0xFF2260FF),
+                                            color: Color(
+                                              0xFF2260FF,
+                                            ), // Màu chữ xanh dương
                                             fontSize: 12,
                                             fontWeight: FontWeight.w600,
                                             fontFamily: 'Inter',
@@ -1258,7 +1322,7 @@ class _ManagerRequestCard extends StatelessWidget {
                         style: const TextStyle(
                           color: Color(0xFF555252),
                           fontSize: 13,
-                          fontWeight: FontWeight.w300,
+                          fontWeight: FontWeight.w400,
                           fontFamily: 'Inter',
                         ),
                         maxLines: 1,
@@ -1288,7 +1352,7 @@ class _ManagerRequestCard extends StatelessWidget {
                               style: const TextStyle(
                                 color: Color(0xFF555252),
                                 fontSize: 13,
-                                fontWeight: FontWeight.w300,
+                                fontWeight: FontWeight.w400,
                                 fontFamily: 'Inter',
                               ),
                             ),

@@ -1,12 +1,12 @@
 package com.officesync.hr_service.Service;
 import java.time.LocalDateTime;
 import java.util.Collections;
-import java.util.List; // Import Role
+import java.util.List;
 
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional; // Import thêm
+import org.springframework.transaction.annotation.Transactional; 
 
 import com.officesync.hr_service.Model.Department;
 import com.officesync.hr_service.Model.Employee;
@@ -84,103 +84,132 @@ public class RequestService {
         return null;
     }
 
-   // --- 2. DUYỆT ĐƠN (SỬA LẠI ĐỂ REALTIME CHI TIẾT) ---
 
+
+   // --- 2. DUYỆT ĐƠN (ĐÃ SỬA LOGIC PHÂN QUYỀN CHẶT CHẼ) ---
     @Transactional
     public Request approveRequest(Long requestId, Long approverId, RequestStatus newStatus, String comment) {
         Request request = requestRepository.findById(requestId)
                 .orElseThrow(() -> new RuntimeException("Request not found"));
         Employee approver = employeeRepository.findById(approverId)
-
                 .orElseThrow(() -> new RuntimeException("Approver not found"));
 
-        // Check quyền (Giữ nguyên code cũ của bạn)
-        boolean isAdmin = approver.getRole() == EmployeeRole.COMPANY_ADMIN;
-        boolean isManager = approver.getRole() == EmployeeRole.MANAGER;
-        boolean isHrStaff = isHrEmployee(approver);
-        if (!isAdmin && !isManager && !isHrStaff) {
-
-            throw new RuntimeException("Bạn không có quyền duyệt đơn này (Yêu cầu: Admin, Manager hoặc HR)");
-
+        // 1. Không được tự duyệt đơn của chính mình
+        if (request.getRequester().getId().equals(approverId)) {
+            throw new RuntimeException("Bạn không thể tự duyệt/từ chối đơn của chính mình.");
         }
+
+        EmployeeRole approverRole = approver.getRole();
+        EmployeeRole requesterRole = request.getRequester().getRole();
+        boolean isHrApprover = isHrEmployee(approver);
+        boolean isAdmin = approverRole == EmployeeRole.COMPANY_ADMIN;
+
+        // 2. Logic phân quyền duyệt đơn [MỚI]
+
+        // RULE A: Nếu người tạo đơn là MANAGER (Bất kể manager phòng nào) -> Chỉ ADMIN mới được duyệt
+        if (requesterRole == EmployeeRole.MANAGER) {
+            if (!isAdmin) {
+                throw new RuntimeException("Chỉ Giám đốc (Admin) mới có quyền duyệt đơn của Quản lý (Manager).");
+            }
+        }
+        // RULE B: Nếu người tạo đơn là nhân viên phòng HR -> Chỉ HR Manager hoặc Admin được duyệt
+        else if (isHrEmployee(request.getRequester())) {
+            // Kiểm tra: Người duyệt phải là Admin HOẶC (Là Manager VÀ thuộc phòng HR)
+            boolean isHrManager = (approverRole == EmployeeRole.MANAGER && isHrApprover);
+            if (!isAdmin && !isHrManager) {
+                throw new RuntimeException("Đơn của nhân viên HR chỉ được duyệt bởi Quản lý phòng HR hoặc Giám đốc.");
+            }
+        }
+        // RULE C: Nhân viên bình thường các phòng ban khác
+        else {
+            // Cho phép: Admin, HR Staff/Manager, Manager của phòng ban đó
+            boolean isSameDeptManager = (approverRole == EmployeeRole.MANAGER 
+                                        && request.getDepartment().getId().equals(approver.getDepartment().getId()));
+            
+            if (!isAdmin && !isHrApprover && !isSameDeptManager) {
+                throw new RuntimeException("Bạn không có quyền duyệt đơn này.");
+            }
+        }
+
+        // 3. Tiến hành cập nhật trạng thái
         if (request.getStatus() != RequestStatus.PENDING) {
-
             throw new RuntimeException("Đơn này đã được xử lý trước đó.");
-
         }
 
-        // Cập nhật
         request.setStatus(newStatus);
-
-        request.setApprover(approver); 
+        request.setApprover(approver);
 
         if (newStatus == RequestStatus.REJECTED) {
-
-             request.setRejectReason(comment); 
+            request.setRejectReason(comment);
         }
+        
         saveAuditLog(request, approver, newStatus.name(), comment);
         Request savedRequest = requestRepository.save(request);
 
-       // [SỬA LẠI PHẦN SOCKET]
+        // [SOCKET] Gửi thông báo realtime
         try {
-            // 1. Gửi vào trang chi tiết (Để ai đang xem đơn này thấy ngay)
+            // Gửi vào trang chi tiết
             String detailDest = "/topic/request/" + savedRequest.getId();
             messagingTemplate.convertAndSend(detailDest, savedRequest);
 
-            // 2. Gửi cho User (Để cập nhật danh sách My Requests)
+            // Gửi cho User
             String userDest = "/topic/user/" + savedRequest.getRequester().getId() + "/requests";
-            messagingTemplate.convertAndSend(userDest, savedRequest); 
+            messagingTemplate.convertAndSend(userDest, savedRequest);
 
-            // 3. [QUAN TRỌNG] Gửi OBJECT cho Company (Manager List)
-            // Thay vì gửi chuỗi "UPDATE_REQUEST", ta gửi luôn savedRequest để Client cập nhật đè lên item cũ
+            // Gửi update list cho Manager
             String companyDest = "/topic/company/" + savedRequest.getCompanyId() + "/requests";
-            messagingTemplate.convertAndSend(companyDest, savedRequest); 
-            
+            messagingTemplate.convertAndSend(companyDest, savedRequest);
         } catch (Exception e) {
             log.error("Lỗi gửi WebSocket: " + e.getMessage());
         }
         return savedRequest;
     }
 
-    // 1. Sửa hàm getRequestsForManager (Dùng cho Manager/Admin/HR)
-public List<Request> getRequestsForManager(Long requesterId, String keyword, Integer day, Integer month, Integer year) {
-    Employee requester = employeeRepository.findById(requesterId)
-            .orElseThrow(() -> new RuntimeException("User not found"));
-    
-    // Xử lý keyword: Nếu rỗng thì gửi null để Query bỏ qua
-    String searchKey = (keyword != null && !keyword.trim().isEmpty()) ? keyword.trim() : null;
+// --- 3. LẤY DANH SÁCH DUYỆT (ĐÃ SỬA LỖI HIỂN THỊ) ---
+    public List<Request> getRequestsForManager(Long requesterId, String keyword, Integer day, Integer month, Integer year) {
+        Employee requester = employeeRepository.findById(requesterId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
 
-    boolean isAdmin = requester.getRole() == EmployeeRole.COMPANY_ADMIN;
-    boolean isManager = requester.getRole() == EmployeeRole.MANAGER;
-    boolean isHrStaff = isHrEmployee(requester);
+        String searchKey = (keyword != null && !keyword.trim().isEmpty()) ? keyword.trim() : null;
 
-    // ADMIN hoặc HR -> Tìm toàn công ty
-    if (isAdmin || isHrStaff) {
-        return requestRepository.searchRequestsForAdmin(
-            requester.getCompanyId(), searchKey, day , month, year
-        );
-    }
-    
-    // MANAGER -> Tìm trong phòng ban
-    if (isManager) {
-        Department dept = requester.getDepartment();
-        if (dept != null) {
-            return requestRepository.searchRequestsForManager(
-                dept.getId(), searchKey, day , month, year
+        boolean isAdmin = requester.getRole() == EmployeeRole.COMPANY_ADMIN;
+        boolean isManager = requester.getRole() == EmployeeRole.MANAGER;
+        boolean isHrStaff = isHrEmployee(requester);
+
+        // CASE 1: ADMIN -> Thấy tất cả (trừ của mình)
+        if (isAdmin) {
+            return requestRepository.searchRequestsForAdmin(
+                requester.getCompanyId(), requesterId, searchKey, day, month, year
             );
         }
+
+        // CASE 2: HR (Nhân viên hoặc Quản lý HR) -> Thấy tất cả STAFF (Không thấy đơn Manager, Không thấy đơn của chính mình)
+        if (isHrStaff) {
+            return requestRepository.searchRequestsForHR(
+                requester.getCompanyId(), requesterId, searchKey, day, month, year
+            );
+        }
+
+        // CASE 3: MANAGER THƯỜNG (Không phải HR) -> Chỉ thấy đơn phòng mình (Không thấy đơn của chính mình)
+        if (isManager) {
+            Department dept = requester.getDepartment();
+            if (dept != null) {
+                return requestRepository.searchRequestsForManager(
+                    dept.getId(), requesterId, searchKey, day, month, year
+                );
+            }
+        }
+
+        // Nếu là Staff thường (không phải HR) -> Không thấy gì trong trang quản lý
+        return Collections.emptyList();
     }
-    return Collections.emptyList();
-}
-    // --- Helper Check HR ---
 
     private boolean isHrEmployee(Employee emp) {
-        // Kiểm tra nhân viên có thuộc phòng ban nào không
         if (emp.getDepartment() == null) return false;
-        // Kiểm tra cờ isHr của phòng ban đó (Dùng Boolean.TRUE.equals để tránh NullPointerException)
+
         return Boolean.TRUE.equals(emp.getDepartment().getIsHr());
     }
-   // --- 3. HỦY ĐƠN (SỬA LẠI ĐỂ REALTIME CHI TIẾT) ---
+
 
   @Transactional
     public void cancelRequest(Long requestId, Long userId) {

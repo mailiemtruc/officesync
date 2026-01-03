@@ -23,39 +23,53 @@ class EmployeeProfilePage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF9F9F9),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFFF9F9F9),
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        centerTitle: true,
-        leading: IconButton(
-          icon: Icon(
-            PhosphorIcons.caretLeft(PhosphorIconsStyle.bold),
-            color: AppColors.primary,
-            size: 24,
-          ),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        title: const Text(
-          'EMPLOYEE PROFILE',
-          style: TextStyle(
-            color: AppColors.primary,
-            fontSize: 24,
-            fontFamily: 'Inter',
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ),
+
+      // [SỬA] 1. Bỏ hoàn toàn AppBar mặc định
+      // appBar: AppBar(...),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 600),
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              // [SỬA] 2. Cập nhật padding để khớp với UserProfilePage
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 30),
               child: Column(
                 children: [
+                  // [SỬA] 3. Thêm Header thủ công giống UserProfilePage
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      IconButton(
+                        icon: Icon(
+                          PhosphorIcons.caretLeft(PhosphorIconsStyle.bold),
+                          color: AppColors.primary,
+                          size: 24,
+                        ),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                      const Expanded(
+                        child: Center(
+                          child: Text(
+                            'EMPLOYEE PROFILE',
+                            style: TextStyle(
+                              color: AppColors.primary,
+                              fontSize: 24, // Đồng bộ size 22 với UserProfile
+                              fontFamily: 'Inter',
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
+                      // SizedBox này để cân bằng khoảng cách với nút Back bên trái, giúp Title ra giữa chuẩn xác
+                      const SizedBox(width: 40),
+                    ],
+                  ),
+                  const SizedBox(height: 32), // Khoảng cách sau header
+
                   _buildHeader(employee),
                   const SizedBox(height: 32),
+
+                  // Phần Card thông tin (Giữ nguyên)
                   Container(
                     width: double.infinity,
                     decoration: BoxDecoration(

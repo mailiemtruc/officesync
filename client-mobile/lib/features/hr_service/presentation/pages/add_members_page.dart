@@ -387,7 +387,11 @@ class _AddMembersPageState extends State<AddMembersPage> {
     ),
     child: TextField(
       controller: _searchController,
-      onChanged: _onSearchChanged,
+      // [MỚI] Cập nhật UI để hiện nút xóa
+      onChanged: (val) {
+        _onSearchChanged(val);
+        setState(() {});
+      },
       decoration: InputDecoration(
         hintText: 'Search name, employee ID...',
         hintStyle: const TextStyle(
@@ -400,6 +404,32 @@ class _AddMembersPageState extends State<AddMembersPage> {
           color: const Color(0xFF757575),
           size: 20,
         ),
+        // [MỚI] Nút Xóa hình tròn (Đồng bộ với EmployeeListPage)
+        suffixIcon: _searchController.text.isNotEmpty
+            ? Padding(
+                padding: const EdgeInsets.all(10.0),
+                child: GestureDetector(
+                  onTap: () {
+                    _searchController.clear();
+                    setState(() {});
+                    // Hủy debounce và load lại list rỗng hoặc mặc định
+                    if (_debounce?.isActive ?? false) _debounce!.cancel();
+                    _performSearch("");
+                  },
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFC4C4C4),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      PhosphorIcons.x(PhosphorIconsStyle.bold),
+                      size: 12,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              )
+            : null,
         border: InputBorder.none,
         contentPadding: const EdgeInsets.symmetric(vertical: 10),
       ),

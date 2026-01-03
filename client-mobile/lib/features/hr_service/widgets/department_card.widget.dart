@@ -48,7 +48,6 @@ class DepartmentCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            // [CẬP NHẬT] Đổ bóng đậm hơn (0.1)
             color: Colors.black.withOpacity(0.1),
             blurRadius: 10,
             offset: const Offset(0, 4),
@@ -92,30 +91,31 @@ class DepartmentCard extends StatelessWidget {
                                       ),
                                     ),
                                     const SizedBox(height: 4),
-                                    // [CẬP NHẬT] Code đậm hơn (w500)
                                     Text(
                                       'Code: ${department.code ?? "N/A"}',
                                       style: const TextStyle(
                                         color: Color(0xFF9E9E9E),
                                         fontSize: 13,
                                         fontFamily: 'Inter',
-                                        fontWeight:
-                                            FontWeight.w500, // Đậm hơn xíu
+                                        fontWeight: FontWeight.w500,
                                       ),
                                     ),
                                   ],
                                 ),
                               ),
-                              GestureDetector(
-                                onTap: onMenuTap,
-                                child: Icon(
-                                  PhosphorIcons.dotsThree(
-                                    PhosphorIconsStyle.bold,
+
+                              // [ĐÃ SỬA] Chỉ hiện nút 3 chấm nếu onMenuTap KHÁC NULL
+                              if (onMenuTap != null)
+                                GestureDetector(
+                                  onTap: onMenuTap,
+                                  child: Icon(
+                                    PhosphorIcons.dotsThree(
+                                      PhosphorIconsStyle.bold,
+                                    ),
+                                    color: const Color(0xFFBDBDBD),
+                                    size: 24,
                                   ),
-                                  color: const Color(0xFFBDBDBD),
-                                  size: 24,
                                 ),
-                              ),
                             ],
                           ),
 
@@ -124,13 +124,12 @@ class DepartmentCard extends StatelessWidget {
                           // --- FOOTER: Manager Info & Member Count ---
                           Row(
                             children: [
-                              // [CẬP NHẬT] Avatar Manager
+                              // Avatar Manager
                               Container(
                                 width: 40,
                                 height: 40,
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
-                                  // Nếu không có ảnh thì nền xám nhạt
                                   color: hasAvatar
                                       ? Colors.transparent
                                       : const Color(0xFFE0E0E0),
@@ -143,7 +142,7 @@ class DepartmentCard extends StatelessWidget {
                                           errorBuilder: (ctx, err, stack) =>
                                               _buildDefaultAvatar(),
                                         )
-                                      : _buildDefaultAvatar(), // Gọi hàm tạo icon mặc định
+                                      : _buildDefaultAvatar(),
                                 ),
                               ),
 
@@ -227,16 +226,11 @@ class DepartmentCard extends StatelessWidget {
     );
   }
 
-  // [MỚI] Hàm tạo Avatar mặc định (Icon xám trên nền xám nhạt)
   Widget _buildDefaultAvatar() {
     return Container(
       alignment: Alignment.center,
-      color: const Color(0xFFEFF1F5), // Màu nền xám nhạt
-      child: const Icon(
-        Icons.person,
-        color: Color(0xFF9CA3AF), // Màu icon xám đậm hơn
-        size: 24,
-      ),
+      color: const Color(0xFFEFF1F5),
+      child: const Icon(Icons.person, color: Color(0xFF9CA3AF), size: 24),
     );
   }
 }

@@ -426,13 +426,8 @@ class _DepartmentDetailsPageState extends State<DepartmentDetailsPage> {
                                 child: EmployeeCard(
                                   employee: emp,
 
-                                  // [LOGIC UI MỚI] Chỉ Admin mới thấy menu xóa (dấu 3 chấm)
-                                  // Nếu không phải Admin, truyền null để ẩn menu đi
                                   onMenuTap:
-                                      (_currentUserRole == 'COMPANY_ADMIN')
-                                      ? () => _updateMemberDept(emp, 0)
-                                      : null,
-
+                                      null, // Luôn truyền null để ẩn nút 3 chấm đi
                                   onTap: () {
                                     Navigator.push(
                                       context,

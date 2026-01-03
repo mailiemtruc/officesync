@@ -610,34 +610,10 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
   Widget _buildSearchAndFilter() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Row(
-        children: [
-          Expanded(
-            child: _buildSearchBar(
-              hint: _isEmployeesTab
-                  ? 'Search name, employee ID...'
-                  : 'Search name, department ID...',
-            ),
-          ),
-          const SizedBox(width: 12),
-          Container(
-            width: 45,
-            height: 45,
-            decoration: BoxDecoration(
-              color: const Color(0xFFF5F5F5),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFE0E0E0), width: 1),
-            ),
-            child: IconButton(
-              icon: Icon(
-                PhosphorIcons.funnel(PhosphorIconsStyle.regular),
-                color: const Color(0xFF555252),
-                size: 20,
-              ),
-              onPressed: () {},
-            ),
-          ),
-        ],
+      child: _buildSearchBar(
+        hint: _isEmployeesTab
+            ? 'Search name, employee ID...'
+            : 'Search name, department ID...',
       ),
     );
   }
@@ -652,6 +628,10 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
       ),
       child: TextField(
         controller: _searchController,
+        // Cập nhật UI liên tục khi gõ để hiện/ẩn nút xóa
+        onChanged: (value) {
+          setState(() {});
+        },
         decoration: InputDecoration(
           hintText: hint,
           hintStyle: const TextStyle(
@@ -664,6 +644,34 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
             color: const Color(0xFF757575),
             size: 20,
           ),
+          // [ĐÃ SỬA] Nút xóa dùng PhosphorIcons + Giao diện hình tròn đẹp
+          suffixIcon: _searchController.text.isNotEmpty
+              ? Padding(
+                  padding: const EdgeInsets.all(10.0), // Padding để nút nhỏ gọn
+                  child: GestureDetector(
+                    onTap: () {
+                      _searchController.clear();
+                      setState(() {}); // Cập nhật UI để ẩn nút
+
+                      // Hủy debounce cũ và load lại danh sách gốc
+                      if (_debounce?.isActive ?? false) _debounce!.cancel();
+                      _fetchData(keyword: '');
+                    },
+                    child: Container(
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFC4C4C4), // Màu nền xám bo tròn
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        // Nếu ".x" báo lỗi, hãy thử đổi thành ".x_" hoặc ".close"
+                        PhosphorIcons.x(PhosphorIconsStyle.bold),
+                        size: 12,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                )
+              : null,
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(vertical: 10),
         ),

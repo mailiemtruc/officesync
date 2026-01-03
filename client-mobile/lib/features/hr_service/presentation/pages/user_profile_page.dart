@@ -2,20 +2,19 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:officesync/features/communication_service/data/newsfeed_api.dart';
-//notification
-import 'package:officesync/features/notification_service/notification_service.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:http/http.dart' as http;
+// Ví dụ đường dẫn, hãy sửa lại cho đúng nơi bạn lưu file confirm_bottom_sheet.dart
+import '../../widgets/confirm_bottom_sheet.dart';
+import 'package:officesync/features/notification_service/notification_service.dart';
 import 'change_password_page.dart';
 import '../../../../core/config/app_colors.dart';
 import 'edit_profile_page.dart';
 import '../../domain/repositories/employee_repository_impl.dart';
 import '../../data/datasources/employee_remote_data_source.dart';
 import '../../data/models/employee_model.dart';
-// [MỚI] Import WebSocketService để ngắt kết nối
 import '../../../../core/services/websocket_service.dart';
 
 class UserProfilePage extends StatefulWidget {
@@ -31,13 +30,22 @@ class _UserProfilePageState extends State<UserProfilePage> {
   EmployeeModel? _detailedEmployee;
   bool _isLoadingProfile = false;
   bool _isUploading = false;
+
+  // [SỬA] Thêm biến lưu file ảnh local để hiển thị ngay lập tức
+  File? _localAvatarFile;
+
   final ImagePicker _picker = ImagePicker();
   final _storage = const FlutterSecureStorage();
   final _newsfeedApi = NewsfeedApi();
 
+  late final EmployeeRepositoryImpl _repository;
+
   @override
   void initState() {
     super.initState();
+    _repository = EmployeeRepositoryImpl(
+      remoteDataSource: EmployeeRemoteDataSource(),
+    );
     _fetchEmployeeDetail();
   }
 
@@ -82,7 +90,10 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
   // --- LOGIC LẤY DATA ---
   Future<void> _fetchEmployeeDetail() async {
-    setState(() => _isLoadingProfile = true);
+    // Chỉ hiện loading toàn trang khi chưa có dữ liệu lần đầu
+    if (_detailedEmployee == null) {
+      setState(() => _isLoadingProfile = true);
+    }
     try {
       final String? userId = await _getUserIdSafe();
       if (userId == null) {
@@ -90,10 +101,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
         return;
       }
 
-      final repo = EmployeeRepositoryImpl(
-        remoteDataSource: EmployeeRemoteDataSource(),
-      );
-      final employees = await repo.getEmployees(userId);
+      final employees = await _repository.getEmployees(userId);
 
       String? emailToFind = widget.userInfo['email'];
       EmployeeModel? found;
@@ -136,7 +144,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
     }
   }
 
-  // --- LOGIC UPLOAD ẢNH ---
+  // --- LOGIC UPLOAD ẢNH (ĐÃ SỬA) ---
   Future<void> _pickImage(ImageSource source) async {
     Navigator.pop(context);
     try {
@@ -145,7 +153,16 @@ class _UserProfilePageState extends State<UserProfilePage> {
         imageQuality: 80,
       );
       if (image != null) {
-        _uploadAvatar(File(image.path));
+        final file = File(image.path);
+
+        // [SỬA] Hiển thị ảnh ngay lập tức (Optimistic UI)
+        setState(() {
+          _localAvatarFile = file;
+          _isUploading = true;
+        });
+
+        // Tiến hành upload
+        _uploadAvatar(file);
       }
     } catch (e) {
       print("Error picking image: $e");
@@ -153,100 +170,93 @@ class _UserProfilePageState extends State<UserProfilePage> {
   }
 
   Future<void> _uploadAvatar(File file) async {
-    setState(() => _isUploading = true);
+    // Không cần setState _isUploading ở đây nữa vì đã set ở trên
     try {
-      // IP 10.0.2.2 cho Emulator, máy thật dùng IP LAN
-      var request = http.MultipartRequest(
-        'POST',
-        Uri.parse('http://10.0.2.2:8090/api/files/upload'),
-      );
-      request.files.add(await http.MultipartFile.fromPath('file', file.path));
-
-      var streamedResponse = await request.send();
-      var response = await http.Response.fromStream(streamedResponse);
-
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> data = jsonDecode(response.body);
-        String fileUrl = data['url'];
-        print("--> Upload Storage success: $fileUrl");
-        await _updateAvatarUrlInProfile(fileUrl);
-      } else {
-        throw Exception("Upload failed: ${response.body}");
-      }
+      String fileUrl = await _repository.uploadFile(file);
+      print("--> Upload Repository success: $fileUrl");
+      await _updateAvatarUrlInProfile(fileUrl);
     } catch (e) {
       print("Upload error: $e");
-      ScaffoldMessenger.of(context).showSnackBar(
-        // [TIẾNG ANH]
-        SnackBar(
-          content: Text("Upload failed: $e"),
-          backgroundColor: Colors.red,
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _isUploading = false);
+      if (mounted) {
+        // [SỬA] Nếu lỗi, revert lại ảnh cũ
+        setState(() {
+          _localAvatarFile = null;
+          _isUploading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              "Upload failed: ${e.toString().replaceAll('Exception: ', '')}",
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
   Future<void> _updateAvatarUrlInProfile(String avatarUrl) async {
     if (_detailedEmployee == null) return;
     try {
-      final url = Uri.parse(
-        'http://10.0.2.2:8081/api/employees/${_detailedEmployee!.id}',
-      );
-      final response = await http.put(
-        url,
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
-          "fullName": _detailedEmployee!.fullName,
-          "phone": _detailedEmployee!.phone,
-          "dateOfBirth": _detailedEmployee!.dateOfBirth,
-          "avatarUrl": avatarUrl,
-        }),
+      final success = await _repository.updateEmployee(
+        _detailedEmployee!.id ?? "",
+        _detailedEmployee!.id ?? "",
+        _detailedEmployee!.fullName,
+        _detailedEmployee!.phone,
+        _detailedEmployee!.dateOfBirth,
+        avatarUrl: avatarUrl,
       );
 
-      if (response.statusCode == 200) {
+      if (success) {
         print("--> Update HR Profile success!");
-        // ✅ THÊM DÒNG NÀY: Cập nhật cache ngay lập tức
         await _updateLocalUserStorage(avatarUrl);
-        // ✅ 2. [THÊM DÒNG NÀY] Bắn tin sang Communication Service ngay!
-        await _newsfeedApi.syncUserAvatar(avatarUrl);
-        ScaffoldMessenger.of(context).showSnackBar(
-          // [TIẾNG ANH]
-          const SnackBar(
-            content: Text("Profile picture updated successfully!"),
-            backgroundColor: Colors.green,
-          ),
-        );
-        _fetchEmployeeDetail();
-      } else {
-        if (response.body.contains("No changes detected")) {
-          print("No changes detected.");
-        } else {
-          throw Exception("Update HR failed: ${response.body}");
+
+        _newsfeedApi.syncUserAvatar(avatarUrl).catchError((e) {
+          print("⚠️ Sync Newsfeed error (background): $e");
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Profile picture updated successfully!"),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+
+        // Reload data
+        await _fetchEmployeeDetail();
+
+        // [SỬA] Sau khi reload xong dữ liệu mới, xóa ảnh local đi để dùng ảnh từ URL
+        if (mounted) {
+          setState(() {
+            _localAvatarFile = null;
+            _isUploading = false;
+          });
         }
       }
     } catch (e) {
       print("Error saving profile: $e");
+      if (mounted) {
+        setState(() => _isUploading = false);
+      }
     }
   }
 
-  // ✅ THÊM HÀM NÀY XUỐNG DƯỚI CÙNG
   Future<void> _updateLocalUserStorage(String newAvatarUrl) async {
     try {
       String? userInfoStr = await _storage.read(key: 'user_info');
       if (userInfoStr != null) {
         Map<String, dynamic> userMap = jsonDecode(userInfoStr);
-        userMap['avatarUrl'] = newAvatarUrl; // Cập nhật link mới
+        userMap['avatarUrl'] = newAvatarUrl;
         await _storage.write(key: 'user_info', value: jsonEncode(userMap));
-        print("--> Đã cập nhật Avatar mới vào SecureStorage");
       }
     } catch (e) {
-      print("Lỗi cập nhật Storage: $e");
+      print("Error updating local storage: $e");
     }
   }
 
   // --- UI & DIALOGS ---
-  // [QUAN TRỌNG] HÀM ĐĂNG XUẤT ĐÃ SỬA
   Future<void> _handleLogout() async {
     try {
       // -----------------------------------------------------------
@@ -261,13 +271,8 @@ class _UserProfilePageState extends State<UserProfilePage> {
         }
       }
       // -----------------------------------------------------------
-      // 1. Xóa dữ liệu local
       await _storage.deleteAll();
-
-      // 2. Ngắt kết nối WebSocket
       WebSocketService().disconnect();
-
-      // 3. Chuyển về màn hình đăng nhập
       if (mounted) {
         Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
       }
@@ -284,9 +289,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (context) {
         return Container(
-          padding: const EdgeInsets.symmetric(vertical: 20),
           decoration: const BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.vertical(top: Radius.circular(27)),
@@ -294,61 +299,101 @@ class _UserProfilePageState extends State<UserProfilePage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              ListTile(
-                leading: Icon(
-                  PhosphorIcons.camera(PhosphorIconsStyle.regular),
-                  color: AppColors.primary,
-                  size: 24,
-                ),
-                // [TIẾNG ANH]
-                title: const Text(
-                  'Take a photo',
-                  style: TextStyle(
-                    color: AppColors.primary,
-                    fontSize: 18,
-                    fontFamily: 'Inter',
-                    fontWeight: FontWeight.w600,
+              // Thanh kéo (Drag Handle)
+              const SizedBox(height: 12),
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE0E0E0),
+                    borderRadius: BorderRadius.circular(2),
                   ),
                 ),
-                onTap: () => _pickImage(ImageSource.camera),
               ),
-              ListTile(
-                leading: Icon(
-                  PhosphorIcons.image(PhosphorIconsStyle.regular),
-                  color: AppColors.primary,
-                  size: 24,
-                ),
-                // [TIẾNG ANH]
-                title: const Text(
-                  'Choose from gallery',
-                  style: TextStyle(
-                    color: AppColors.primary,
-                    fontSize: 18,
-                    fontFamily: 'Inter',
-                    fontWeight: FontWeight.w600,
+              const SizedBox(height: 12),
+
+              // 1. Take a photo
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => _pickImage(ImageSource.camera),
+                  // [SỬA] Đổi sang màu xám
+                  splashColor: Colors.grey.withOpacity(0.2),
+                  highlightColor: Colors.grey.withOpacity(0.1),
+                  child: ListTile(
+                    leading: Icon(
+                      PhosphorIcons.camera(PhosphorIconsStyle.regular),
+                      color: AppColors.primary,
+                      size: 24,
+                    ),
+                    title: const Text(
+                      'Take a photo',
+                      style: TextStyle(
+                        color: AppColors.primary,
+                        fontSize: 18,
+                        fontFamily: 'Inter',
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
                 ),
-                onTap: () => _pickImage(ImageSource.gallery),
+              ),
+
+              // 2. Choose from gallery
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => _pickImage(ImageSource.gallery),
+                  // [SỬA] Đổi sang màu xám
+                  splashColor: Colors.grey.withOpacity(0.2),
+                  highlightColor: Colors.grey.withOpacity(0.1),
+                  child: ListTile(
+                    leading: Icon(
+                      PhosphorIcons.image(PhosphorIconsStyle.regular),
+                      color: AppColors.primary,
+                      size: 24,
+                    ),
+                    title: const Text(
+                      'Choose from gallery',
+                      style: TextStyle(
+                        color: AppColors.primary,
+                        fontSize: 18,
+                        fontFamily: 'Inter',
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
               ),
               const SizedBox(height: 10),
-              ListTile(
-                leading: Icon(
-                  PhosphorIcons.x(PhosphorIconsStyle.regular),
-                  color: const Color(0xFFFF0000),
-                  size: 24,
-                ),
-                // [TIẾNG ANH]
-                title: const Text(
-                  'Cancel',
-                  style: TextStyle(
-                    color: Color(0xFFFF0000),
-                    fontSize: 18,
-                    fontFamily: 'Inter',
-                    fontWeight: FontWeight.w600,
+
+              // 3. Cancel (Giữ nguyên hiệu ứng màu đỏ)
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => Navigator.pop(context),
+                  splashColor: const Color(0xFFFF0000).withOpacity(0.1),
+                  highlightColor: const Color(0xFFFF0000).withOpacity(0.05),
+                  child: ListTile(
+                    leading: Icon(
+                      PhosphorIcons.x(PhosphorIconsStyle.regular),
+                      color: const Color(0xFFFF0000),
+                      size: 24,
+                    ),
+                    title: const Text(
+                      'Cancel',
+                      style: TextStyle(
+                        color: Color(0xFFFF0000),
+                        fontSize: 18,
+                        fontFamily: 'Inter',
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
                 ),
-                onTap: () => Navigator.pop(context),
               ),
+              const SizedBox(height: 20),
             ],
           ),
         );
@@ -360,95 +405,19 @@ class _UserProfilePageState extends State<UserProfilePage> {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
+      isScrollControlled: true, // Để hiển thị đẹp trên các màn hình khác nhau
       builder: (context) {
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 30),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(27)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Log Out',
-                style: TextStyle(
-                  color: AppColors.primary,
-                  fontSize: 24,
-                  fontFamily: 'Inter',
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Are you sure you want to log out?',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.black,
-                  fontSize: 16,
-                  fontFamily: 'Inter',
-                  fontWeight: FontWeight.w400,
-                ),
-              ),
-              const SizedBox(height: 32),
-              Row(
-                children: [
-                  Expanded(
-                    child: SizedBox(
-                      height: 50,
-                      child: ElevatedButton(
-                        onPressed: () => Navigator.pop(context),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFC9D5FF),
-                          foregroundColor: AppColors.primary,
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(50),
-                          ),
-                        ),
-                        child: const Text(
-                          'Cancel',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                            fontFamily: 'Inter',
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 20),
-                  Expanded(
-                    child: SizedBox(
-                      height: 50,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          Navigator.pop(context);
-                          _handleLogout();
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(50),
-                          ),
-                        ),
-                        child: const Text(
-                          'Log out',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                            fontFamily: 'Inter',
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
+        return ConfirmBottomSheet(
+          title: 'Log Out',
+          message: 'Are you sure you want to log out?',
+          confirmText: 'Log out',
+          cancelText: 'Cancel',
+          // Bạn có thể dùng AppColors.primary hoặc Colors.red để cảnh báo hành động đăng xuất
+          confirmColor: AppColors.primary,
+          onConfirm: () {
+            Navigator.pop(context); // Đóng BottomSheet trước
+            _handleLogout(); // Sau đó thực hiện Logout
+          },
         );
       },
     );
@@ -464,7 +433,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
     return Scaffold(
       backgroundColor: Colors.white,
-      // [XÓA] Bỏ AppBar
       body: ScrollConfiguration(
         behavior: const ScrollBehavior().copyWith(overscroll: false),
         child: SafeArea(
@@ -472,14 +440,10 @@ class _UserProfilePageState extends State<UserProfilePage> {
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 600),
               child: SingleChildScrollView(
-                // [SỬA 1] Padding top = 0
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 30),
                 child: Column(
                   children: [
-                    // [SỬA 2] Khoảng cách chuẩn
                     const SizedBox(height: 20),
-
-                    // [SỬA 3] Custom Header
                     Row(
                       children: [
                         IconButton(
@@ -488,7 +452,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
                             color: AppColors.primary,
                             size: 24,
                           ),
-                          // Logic back về Dashboard giữ nguyên
                           onPressed: () => Navigator.pushNamedAndRemoveUntil(
                             context,
                             '/dashboard',
@@ -501,7 +464,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
                               'PERSONAL INFORMATION',
                               style: TextStyle(
                                 color: AppColors.primary,
-                                fontSize: 22, // Giảm size xíu nếu chữ dài
+                                fontSize: 22,
                                 fontFamily: 'Inter',
                                 fontWeight: FontWeight.w700,
                               ),
@@ -512,13 +475,13 @@ class _UserProfilePageState extends State<UserProfilePage> {
                       ],
                     ),
                     const SizedBox(height: 24),
-
-                    // Header Section (Avatar + Tên) giữ nguyên
+                    // [SỬA] Truyền localImage xuống
                     _HeaderSection(
                       fullName: fullName,
                       role: role,
                       avatarUrl: avatarUrl,
                       isUploading: _isUploading,
+                      localImage: _localAvatarFile,
                       onCameraTap: () => _showImagePickerOptions(context),
                     ),
                     const SizedBox(height: 24),
@@ -555,17 +518,24 @@ class _HeaderSection extends StatelessWidget {
   final String role;
   final String? avatarUrl;
   final bool isUploading;
+  final File? localImage;
 
   const _HeaderSection({
+    super.key,
     this.onCameraTap,
     required this.fullName,
     required this.role,
     this.avatarUrl,
     this.isUploading = false,
+    this.localImage,
   });
 
   @override
   Widget build(BuildContext context) {
+    // Định nghĩa màu sắc thống nhất cho avatar mặc định
+    final placeholderBgColor = Colors.grey[200];
+    final placeholderIconColor = Colors.grey[400];
+
     return Column(
       children: [
         Stack(
@@ -582,13 +552,17 @@ class _HeaderSection extends StatelessWidget {
                     offset: const Offset(0, 4),
                   ),
                 ],
-                color: const Color(0xFFE2E8F0),
+                // [SỬA 1] Đổi màu nền container thành xám nhạt chuẩn
+                color: placeholderBgColor,
               ),
               child: ClipOval(
-                child: isUploading
-                    ? const Padding(
-                        padding: EdgeInsets.all(35),
-                        child: CircularProgressIndicator(strokeWidth: 3),
+                // Chỉ hiển thị ảnh, bỏ hoàn toàn phần loading đè lên
+                child: localImage != null
+                    ? Image.file(
+                        localImage!,
+                        fit: BoxFit.cover,
+                        width: 110,
+                        height: 110,
                       )
                     : (avatarUrl != null && avatarUrl!.isNotEmpty)
                     ? Image.network(
@@ -596,33 +570,49 @@ class _HeaderSection extends StatelessWidget {
                         fit: BoxFit.cover,
                         width: 110,
                         height: 110,
-                        errorBuilder: (ctx, err, stack) => const Icon(
+                        // [SỬA 2a] Đổi màu icon khi lỗi load ảnh
+                        errorBuilder: (ctx, err, stack) => Icon(
                           Icons.person,
                           size: 60,
-                          color: Colors.grey,
+                          color: placeholderIconColor,
                         ),
                       )
-                    : const Icon(Icons.person, size: 60, color: Colors.grey),
+                    // [SỬA 2b] Đổi màu icon mặc định khi chưa có ảnh
+                    : Icon(Icons.person, size: 60, color: placeholderIconColor),
               ),
             ),
+
+            // Nút Camera
             Positioned(
               bottom: 0,
               right: 0,
               child: Material(
-                color: AppColors.primary,
+                color: isUploading
+                    ? Colors.grey
+                    : AppColors.primary, // Đổi màu xám nếu đang upload
                 shape: const CircleBorder(),
                 child: InkWell(
                   customBorder: const CircleBorder(),
-                  onTap: onCameraTap,
+                  // Nếu đang upload thì khóa nút lại (null) để ko bấm lung tung
+                  onTap: isUploading ? null : onCameraTap,
                   child: Container(
                     padding: const EdgeInsets.all(7),
                     width: 32,
                     height: 32,
-                    child: Icon(
-                      PhosphorIcons.camera(PhosphorIconsStyle.fill),
-                      color: Colors.white,
-                      size: 18,
-                    ),
+                    child: isUploading
+                        // Thay icon máy ảnh bằng cái chấm nhỏ xíu đang nhảy
+                        ? const Padding(
+                            padding: EdgeInsets.all(2.0),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Icon(
+                            PhosphorIcons.camera(PhosphorIconsStyle.fill),
+                            color: Colors.white,
+                            size: 18,
+                          ),
                   ),
                 ),
               ),
@@ -654,6 +644,7 @@ class _HeaderSection extends StatelessWidget {
     );
   }
 }
+// --- CÁC WIDGET DƯỚI ĐÂY GIỮ NGUYÊN ---
 
 class _InfoSection extends StatelessWidget {
   final Map<String, dynamic> userInfo;
@@ -716,7 +707,7 @@ class _InfoSection extends StatelessWidget {
                 const SizedBox(height: 24),
                 _InfoRow(
                   icon: PhosphorIcons.identificationCard(),
-                  label: 'Employee Code',
+                  label: 'Employee ID',
                   value: empCodeDisplay,
                 ),
                 const SizedBox(height: 24),

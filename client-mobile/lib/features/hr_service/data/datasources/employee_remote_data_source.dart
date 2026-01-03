@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import '../models/employee_model.dart';
 import '../models/department_model.dart';
@@ -6,6 +7,7 @@ import '../models/department_model.dart';
 class EmployeeRemoteDataSource {
   static const String baseUrl = 'http://10.0.2.2:8081/api';
 
+  static const String storageUrl = 'http://10.0.2.2:8090/api/files/upload';
   // 1. TẠO NHÂN VIÊN
   Future<bool> createEmployee(
     EmployeeModel employee,
@@ -242,6 +244,30 @@ class EmployeeRemoteDataSource {
       }
     } catch (e) {
       print("Delete Error: $e");
+      rethrow;
+    }
+  }
+
+  // [MỚI] Hàm Upload File chuẩn chỉnh
+  Future<String> uploadFile(File file) async {
+    try {
+      final url = Uri.parse(storageUrl);
+      print("--> Uploading file to: $storageUrl");
+
+      var request = http.MultipartRequest('POST', url);
+      request.files.add(await http.MultipartFile.fromPath('file', file.path));
+
+      var streamedResponse = await request.send();
+      var response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = jsonDecode(response.body);
+        return data['url']; // Trả về URL ảnh
+      } else {
+        throw Exception('Upload failed: ${response.body}');
+      }
+    } catch (e) {
+      print("Error uploading file: $e");
       rethrow;
     }
   }

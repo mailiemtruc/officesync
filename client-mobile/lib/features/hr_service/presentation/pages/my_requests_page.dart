@@ -12,7 +12,6 @@ import 'dart:async';
 import 'create_request_page.dart';
 import 'request_detail_page.dart';
 
-// [MỚI] Enum loại lọc
 enum FilterType { none, date, month, year }
 
 class MyRequestsPage extends StatefulWidget {
@@ -54,7 +53,7 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
   @override
   void dispose() {
     if (_unsubscribeFn != null) {
-      _unsubscribeFn(unsubscribeHeaders: {});
+      _unsubscribeFn(unsubscribeHeaders: const <String, String>{});
     }
     _searchController.dispose();
     _debounce?.cancel();
@@ -530,36 +529,99 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
     _fetchRequests();
   }
 
-  // --- WIDGET SEARCH BAR ---
-  Widget _buildSearchBar() => Container(
-    height: 45,
-    decoration: BoxDecoration(
-      color: const Color(0xFFF5F5F5),
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: const Color(0xFFE0E0E0)),
-    ),
-    child: TextField(
-      controller: _searchController,
-      onChanged: _onSearchChanged,
-      decoration: InputDecoration(
-        hintText: 'Search requests...',
-        hintStyle: const TextStyle(
-          color: Color(0xFF9E9E9E),
-          fontSize: 14,
-          fontWeight: FontWeight.w300,
-        ),
-        prefixIcon: Icon(
-          PhosphorIcons.magnifyingGlass(),
-          color: const Color(0xFF757575),
-          size: 20,
-        ),
-        border: InputBorder.none,
-        contentPadding: const EdgeInsets.symmetric(vertical: 10),
+  Widget _buildSearchBar() {
+    return Container(
+      height: 45,
+      decoration: BoxDecoration(
+        color: const Color(0xFFF5F5F5),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE0E0E0), width: 1),
       ),
-    ),
-  );
+      child: TextField(
+        controller: _searchController,
+        // [MỚI] Cập nhật UI để hiện/ẩn nút X khi gõ
+        onChanged: (val) {
+          _onSearchChanged(val);
+          setState(() {});
+        },
+        decoration: InputDecoration(
+          hintText: 'Search requests...',
+          hintStyle: const TextStyle(
+            color: Color(0xFF9E9E9E),
+            fontSize: 14,
+            fontWeight: FontWeight.w300,
+          ),
+          prefixIcon: Icon(
+            PhosphorIcons.magnifyingGlass(),
+            color: const Color(0xFF757575),
+            size: 20,
+          ),
+          // [MỚI] Nút Xóa hình tròn (Đồng bộ giao diện)
+          suffixIcon: _searchController.text.isNotEmpty
+              ? Padding(
+                  padding: const EdgeInsets.all(10.0),
+                  child: GestureDetector(
+                    onTap: () {
+                      _searchController.clear();
+                      setState(() {}); // Cập nhật UI ẩn nút X
 
-  // [CẬP NHẬT] Nút Filter đẹp hơn, hiển thị Text
+                      // Hủy debounce cũ và load lại danh sách gốc ngay lập tức
+                      if (_debounce?.isActive ?? false) _debounce!.cancel();
+                      _fetchRequests();
+                    },
+                    child: Container(
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFC4C4C4), // Màu nền xám
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        PhosphorIcons.x(PhosphorIconsStyle.bold),
+                        size: 12,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                )
+              : null,
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(vertical: 10),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    String message = _searchController.text.isNotEmpty
+        ? "No requests found matching '${_searchController.text}'"
+        : "No requests found";
+
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // [ĐÃ SỬA] Dùng Icon Clipboard có dấu tick để giống ảnh mẫu
+          Icon(
+            PhosphorIcons.clipboardText(PhosphorIconsStyle.regular),
+            size: 64, // Kích thước lớn hơn chút cho rõ
+            color: const Color(0xFFE5E7EB), // Màu xám rất nhạt (giống ảnh)
+          ),
+          const SizedBox(height: 16),
+          Text(
+            message,
+            style: const TextStyle(
+              color: Color(0xFF9CA3AF), // Màu chữ xám vừa phải
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
+              fontFamily: 'Inter',
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  // [CẬP NHẬT] Nút Filter có hiệu ứng nhấn (Ripple Effect)
   Widget _buildFilterButton() {
     final bool hasFilter =
         _filterType != FilterType.none && _selectedDate != null;
@@ -575,57 +637,71 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
       }
     }
 
-    return GestureDetector(
-      onTap: _onFilterTap,
-      child: Container(
-        width: hasFilter ? null : 45, // Tự co giãn nếu có text
-        height: 45,
-        padding: EdgeInsets.symmetric(horizontal: hasFilter ? 12 : 0),
-        decoration: BoxDecoration(
-          color: hasFilter ? const Color(0xFFECF1FF) : const Color(0xFFF5F5F5),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: hasFilter
-                ? const Color(0xFF2260FF)
-                : const Color(0xFFE0E0E0),
-          ),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              hasFilter
-                  ? PhosphorIconsFill.funnel
-                  : PhosphorIconsRegular.funnel,
-              color: hasFilter
-                  ? const Color(0xFF2260FF)
-                  : const Color(0xFF555252),
-              size: 20,
-            ),
+    // Màu sắc nền và viền
+    final bgColor = hasFilter
+        ? const Color(0xFFECF1FF)
+        : const Color(0xFFF5F5F5);
+    final borderColor = hasFilter
+        ? const Color(0xFF2260FF)
+        : const Color(0xFFE0E0E0);
 
-            if (hasFilter) ...[
-              const SizedBox(width: 8),
-              Text(
-                dateText,
-                style: const TextStyle(
-                  color: Color(0xFF2260FF),
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  fontFamily: 'Inter',
-                ),
+    return Material(
+      color: bgColor,
+
+      // Tạo viền thông qua Shape của Material để không bị InkWell đè lên
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: borderColor, width: 1),
+      ),
+      child: InkWell(
+        onTap: _onFilterTap,
+        borderRadius: BorderRadius.circular(12),
+        // Mới (Màu xám)
+        splashColor: Colors.grey.withOpacity(0.2),
+        highlightColor: Colors.grey.withOpacity(0.1),
+        child: Container(
+          // Tự co giãn nếu có text, nếu không thì cố định 45
+          width: hasFilter ? null : 45,
+          height: 45,
+          padding: EdgeInsets.symmetric(horizontal: hasFilter ? 12 : 0),
+          alignment: Alignment.center,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                hasFilter
+                    ? PhosphorIconsFill.funnel
+                    : PhosphorIconsRegular.funnel,
+                color: hasFilter
+                    ? const Color(0xFF2260FF)
+                    : const Color(0xFF555252),
+                size: 20,
               ),
-              const SizedBox(width: 8),
-              InkWell(
-                onTap: _clearFilter,
-                child: const Icon(
-                  Icons.close,
-                  size: 18,
-                  color: Color(0xFF2260FF),
+              if (hasFilter) ...[
+                const SizedBox(width: 8),
+                Text(
+                  dateText,
+                  style: const TextStyle(
+                    color: Color(0xFF2260FF),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    fontFamily: 'Inter',
+                  ),
                 ),
-              ),
+                const SizedBox(width: 8),
+                // Nút xóa dùng GestureDetector riêng để không kích hoạt InkWell cha
+                GestureDetector(
+                  onTap: _clearFilter,
+                  child: const Icon(
+                    Icons.close,
+                    size: 18,
+                    color: Color(0xFF2260FF),
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -785,31 +861,9 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
                   child: _isLoading
                       ? const Center(child: CircularProgressIndicator())
                       : _filteredRequests.isEmpty
+                      // [ĐÃ SỬA] Gọi hàm hiển thị rỗng đồng bộ
+                      ? _buildEmptyState()
                       // [ĐÃ SỬA] Đồng bộ giao diện "Rỗng" giống trang Manager
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons
-                                    .assignment_turned_in_outlined, // Icon giống Manager
-                                size: 48, // Kích thước 48 giống Manager
-                                color: Colors
-                                    .grey[300], // Màu xám 300 giống Manager
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                "No requests found",
-                                style: TextStyle(
-                                  color: Colors
-                                      .grey[400], // Màu chữ xám 400 giống Manager
-                                  fontFamily:
-                                      'Inter', // Giữ font Inter cho đồng bộ App
-                                ),
-                              ),
-                            ],
-                          ),
-                        )
                       : ListView.builder(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 24,

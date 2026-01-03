@@ -27,9 +27,11 @@ class RequestModel {
   final String requesterId; // ID nhân viên
   final String requesterAvatar;
   final String requesterDept;
+  final String? requesterRole; // [MỚI] Thêm trường này
   // [MỚI] Thêm các trường này
   final String? approverName;
   final DateTime? updatedAt;
+
   RequestModel({
     this.id,
     this.requestCode,
@@ -47,6 +49,7 @@ class RequestModel {
     this.requesterId = '',
     this.requesterAvatar = '',
     this.requesterDept = '',
+    this.requesterRole, // [MỚI]
     this.approverName,
     this.updatedAt,
   });
@@ -74,7 +77,10 @@ class RequestModel {
     if (json['approver'] != null) {
       appName = json['approver']['fullName'];
     }
-
+    String? role;
+    if (json['requester'] != null && json['requester'] is Map) {
+      role = json['requester']['role'];
+    }
     return RequestModel(
       id: json['id'],
       requestCode: json['requestCode'] ?? '',
@@ -96,6 +102,7 @@ class RequestModel {
       requesterId: rId,
       requesterAvatar: rAvatar,
       requesterDept: rDept,
+      requesterRole: role, // [MỚI] Map dữ liệu role
       // [MỚI] Map dữ liệu vào
       approverName: appName,
       updatedAt: json['updatedAt'] != null

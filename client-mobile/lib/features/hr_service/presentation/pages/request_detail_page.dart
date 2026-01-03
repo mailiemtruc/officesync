@@ -1215,10 +1215,16 @@ class _FullScreenImageViewer extends StatelessWidget {
         backgroundColor: Colors.black.withOpacity(0.5),
         iconTheme: const IconThemeData(color: Colors.white),
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: () => Navigator.pop(context),
-        ),
+        automaticallyImplyLeading:
+            false, // [QUAN TRỌNG] Tắt nút back mặc định bên trái
+        // [MỚI] Dùng actions để nút nằm bên phải
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: () => Navigator.pop(context),
+          ),
+          const SizedBox(width: 8), // Căn lề phải một chút
+        ],
       ),
       body: PageView.builder(
         controller: controller,

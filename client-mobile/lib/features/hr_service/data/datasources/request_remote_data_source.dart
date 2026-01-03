@@ -147,25 +147,35 @@ class RequestRemoteDataSource {
 
       final response = await http.post(
         url,
-        headers: {
-          "Content-Type": "application/json",
-          "X-User-Id": approverId, // Header xác thực người duyệt
-        },
-        body: jsonEncode({
-          "status": status, // "APPROVED" hoặc "REJECTED"
-          "comment": comment,
-        }),
+        headers: {"Content-Type": "application/json", "X-User-Id": approverId},
+        body: jsonEncode({"status": status, "comment": comment}),
       );
 
       if (response.statusCode == 200) {
         return true;
       } else {
-        print("Failed: ${response.body}");
-        return false;
+        // [SỬA] Đọc tin nhắn lỗi từ Backend trả về
+        // Backend trả về: ResponseEntity.badRequest().body(Map.of("message", e.getMessage())); (Cần check lại Controller Backend có bọc JSON không)
+        // Nếu Controller Backend trả về string thô hoặc JSON, hãy parse ở đây.
+
+        // Giả sử backend trả JSON { "message": "Lỗi gì đó..." } hoặc text thô
+        String errorMessage = "Failed to process request";
+        try {
+          final errorJson = jsonDecode(response.body);
+          if (errorJson['message'] != null) {
+            errorMessage = errorJson['message'];
+          }
+        } catch (_) {
+          errorMessage = response.body; // Nếu không phải JSON thì lấy text thô
+        }
+
+        throw Exception(
+          errorMessage,
+        ); // Ném lỗi để UI bắt được và hiện SnackBar
       }
     } catch (e) {
       print("Error processing request: $e");
-      rethrow;
+      rethrow; // Ném tiếp lỗi ra ngoài
     }
   }
 

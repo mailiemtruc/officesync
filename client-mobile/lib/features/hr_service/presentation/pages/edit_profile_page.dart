@@ -4,10 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:http/http.dart' as http;
-
 import '../../../../core/config/app_colors.dart';
-import '../../../../core/widgets/custom_button.dart'; // Giả định bạn có widget này
 import '../../../../core/widgets/custom_text_field.dart';
 import '../../data/models/employee_model.dart';
 import '../../domain/repositories/employee_repository_impl.dart';
@@ -31,7 +28,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
   bool _isLoading = false;
   bool _isUploadingAvatar = false;
   String? _currentAvatarUrl; // Lưu URL avatar hiện tại
-
+  // [MỚI] Biến theo dõi xem có thay đổi dữ liệu (đặc biệt là avatar) chưa
+  bool _hasUpdates = false;
   late final EmployeeRepositoryImpl _repository;
   final ImagePicker _picker = ImagePicker();
 
@@ -104,65 +102,45 @@ class _EditProfilePageState extends State<EditProfilePage> {
     }
   }
 
+  // [ĐÃ SỬA] Hàm upload và cập nhật biến _hasUpdates
   Future<void> _uploadAndAutoSaveAvatar(File file) async {
     setState(() => _isUploadingAvatar = true);
     try {
-      // 1. Upload ảnh lên Storage Service (Port 8090)
-      var request = http.MultipartRequest(
-        'POST',
-        Uri.parse('http://10.0.2.2:8090/api/files/upload'),
+      // 1. Upload ảnh qua Repository
+      String newAvatarUrl = await _repository.uploadFile(file);
+      print("--> Upload Repository success: $newAvatarUrl");
+
+      // 2. Cập nhật UI tạm thời
+      setState(() {
+        _currentAvatarUrl = newAvatarUrl;
+        _hasUpdates = true; // [QUAN TRỌNG] Đánh dấu là đã có thay đổi
+      });
+
+      // 3. Gọi API cập nhật thông tin nhân viên
+      await _repository.updateEmployee(
+        widget.user.id ?? "",
+        widget.user.id ?? "",
+        widget.user.fullName,
+        widget.user.phone,
+        widget.user.dateOfBirth,
+        avatarUrl: newAvatarUrl,
       );
-      request.files.add(await http.MultipartFile.fromPath('file', file.path));
 
-      var streamedResponse = await request.send();
-      var response = await http.Response.fromStream(streamedResponse);
-
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> data = jsonDecode(response.body);
-        String newAvatarUrl = data['url'];
-        print("--> Upload Storage success: $newAvatarUrl");
-
-        // 2. Cập nhật UI ngay lập tức
-        setState(() {
-          _currentAvatarUrl = newAvatarUrl;
-        });
-
-        // 3. [QUAN TRỌNG] TỰ ĐỘNG GỌI HR SERVICE ĐỂ LƯU AVATAR MỚI
-        // Lưu ý: Ta dùng thông tin GỐC (widget.user) cho các trường text
-        // để tránh lưu nhầm những gì người dùng đang gõ dở dang.
-
-        String dbDob = widget.user.dateOfBirth;
-        // Logic parse ngày sinh cũ để gửi đi cho đúng định dạng
-        // (Nếu Repository của bạn tự xử lý thì tốt, nếu không thì parse lại cho chắc)
-
-        // Trong _uploadAndAutoSaveAvatar
-        await _repository.updateEmployee(
-          widget.user.id ??
-              "", // [MỚI] Tham số 1: Chính là ID của user đang login
-          widget.user.id ?? "", // Tham số 2: ID target (cũng là chính họ)
-          widget.user.fullName, // Tham số 3
-          widget.user.phone, // Tham số 4
-          widget.user.dateOfBirth, // Tham số 5
-          avatarUrl: newAvatarUrl,
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Profile picture updated successfully!"),
+            backgroundColor: Colors.green,
+          ),
         );
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("Profile picture updated successfully!"),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
-      } else {
-        throw Exception("Upload failed: ${response.body}");
       }
     } catch (e) {
       print("Auto-save avatar error: $e");
       if (mounted) {
+        String msg = e.toString().replaceAll("Exception: ", "");
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("Failed to update avatar: $e"),
+            content: Text("Failed to update avatar: $msg"),
             backgroundColor: Colors.red,
           ),
         );
@@ -242,9 +220,9 @@ class _EditProfilePageState extends State<EditProfilePage> {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (context) {
         return Container(
-          padding: const EdgeInsets.symmetric(vertical: 20),
           decoration: const BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.vertical(top: Radius.circular(27)),
@@ -252,58 +230,99 @@ class _EditProfilePageState extends State<EditProfilePage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              ListTile(
-                leading: Icon(
-                  PhosphorIcons.camera(PhosphorIconsStyle.regular),
-                  color: AppColors.primary,
-                  size: 24,
-                ),
-                title: const Text(
-                  'Take a photo',
-                  style: TextStyle(
-                    color: AppColors.primary,
-                    fontSize: 18,
-                    fontFamily: 'Inter',
-                    fontWeight: FontWeight.w600,
+              // Thanh kéo (Drag Handle) - Đồng bộ
+              const SizedBox(height: 12),
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE0E0E0),
+                    borderRadius: BorderRadius.circular(2),
                   ),
                 ),
-                onTap: () => _pickImage(ImageSource.camera),
               ),
-              ListTile(
-                leading: Icon(
-                  PhosphorIcons.image(PhosphorIconsStyle.regular),
-                  color: AppColors.primary,
-                  size: 24,
-                ),
-                title: const Text(
-                  'Choose from gallery',
-                  style: TextStyle(
-                    color: AppColors.primary,
-                    fontSize: 18,
-                    fontFamily: 'Inter',
-                    fontWeight: FontWeight.w600,
+              const SizedBox(height: 12),
+
+              // 1. Take a photo - Đồng bộ hiệu ứng xám
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => _pickImage(ImageSource.camera),
+                  splashColor: Colors.grey.withOpacity(0.2),
+                  highlightColor: Colors.grey.withOpacity(0.1),
+                  child: ListTile(
+                    leading: Icon(
+                      PhosphorIcons.camera(PhosphorIconsStyle.regular),
+                      color: AppColors.primary,
+                      size: 24,
+                    ),
+                    title: const Text(
+                      'Take a photo',
+                      style: TextStyle(
+                        color: AppColors.primary,
+                        fontSize: 18,
+                        fontFamily: 'Inter',
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
                 ),
-                onTap: () => _pickImage(ImageSource.gallery),
+              ),
+
+              // 2. Choose from gallery - Đồng bộ hiệu ứng xám
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => _pickImage(ImageSource.gallery),
+                  splashColor: Colors.grey.withOpacity(0.2),
+                  highlightColor: Colors.grey.withOpacity(0.1),
+                  child: ListTile(
+                    leading: Icon(
+                      PhosphorIcons.image(PhosphorIconsStyle.regular),
+                      color: AppColors.primary,
+                      size: 24,
+                    ),
+                    title: const Text(
+                      'Choose from gallery',
+                      style: TextStyle(
+                        color: AppColors.primary,
+                        fontSize: 18,
+                        fontFamily: 'Inter',
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
               ),
               const SizedBox(height: 10),
-              ListTile(
-                leading: Icon(
-                  PhosphorIcons.x(PhosphorIconsStyle.regular),
-                  color: const Color(0xFFFF0000),
-                  size: 24,
-                ),
-                title: const Text(
-                  'Cancel',
-                  style: TextStyle(
-                    color: Color(0xFFFF0000),
-                    fontSize: 18,
-                    fontFamily: 'Inter',
-                    fontWeight: FontWeight.w600,
+
+              // 3. Cancel - Giữ nguyên hiệu ứng đỏ
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => Navigator.pop(context),
+                  splashColor: const Color(0xFFFF0000).withOpacity(0.1),
+                  highlightColor: const Color(0xFFFF0000).withOpacity(0.05),
+                  child: ListTile(
+                    leading: Icon(
+                      PhosphorIcons.x(PhosphorIconsStyle.regular),
+                      color: const Color(0xFFFF0000),
+                      size: 24,
+                    ),
+                    title: const Text(
+                      'Cancel',
+                      style: TextStyle(
+                        color: Color(0xFFFF0000),
+                        fontSize: 18,
+                        fontFamily: 'Inter',
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
                 ),
-                onTap: () => Navigator.pop(context),
               ),
+              const SizedBox(height: 20),
             ],
           ),
         );
@@ -336,20 +355,16 @@ class _EditProfilePageState extends State<EditProfilePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      // [XÓA] Bỏ AppBar
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 600),
             child: SingleChildScrollView(
-              // [SỬA 1] Padding top = 0
               padding: const EdgeInsets.fromLTRB(24, 0, 24, 30),
               child: Column(
                 children: [
-                  // [SỬA 2] Khoảng cách chuẩn
                   const SizedBox(height: 20),
-
-                  // [SỬA 3] Custom Header
+                  // [ĐÃ SỬA] Header
                   Row(
                     children: [
                       IconButton(
@@ -358,7 +373,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
                           color: AppColors.primary,
                           size: 24,
                         ),
-                        onPressed: () => Navigator.of(context).pop(),
+                        // [QUAN TRỌNG] Trả về biến _hasUpdates khi nhấn nút Back
+                        onPressed: () => Navigator.of(context).pop(_hasUpdates),
                       ),
                       const Expanded(
                         child: Center(

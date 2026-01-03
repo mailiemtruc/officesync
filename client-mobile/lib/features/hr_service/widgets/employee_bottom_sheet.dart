@@ -93,7 +93,7 @@ class EmployeeBottomSheet extends StatelessWidget {
                             children: [
                               TextSpan(
                                 text:
-                                    'Employee Code: ${employee.employeeCode ?? "N/A"}',
+                                    'Employee ID: ${employee.employeeCode ?? "N/A"}',
                               ),
                               const TextSpan(text: '  |  '),
                               TextSpan(

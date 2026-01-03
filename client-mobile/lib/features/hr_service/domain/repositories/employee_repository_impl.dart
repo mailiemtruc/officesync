@@ -2,6 +2,7 @@ import '../../domain/repositories/employee_repository.dart';
 import '../../data/datasources/employee_remote_data_source.dart';
 import '../../data/models/employee_model.dart';
 import '../../data/models/department_model.dart';
+import 'dart:io'; // Import File
 
 class EmployeeRepositoryImpl implements EmployeeRepository {
   final EmployeeRemoteDataSource remoteDataSource;
@@ -105,5 +106,11 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
   @override
   Future<List<EmployeeModel>> getEmployeesByDepartment(int departmentId) async {
     return await remoteDataSource.getEmployeesByDepartment(departmentId);
+  }
+
+  // [MỚI] Implement hàm upload
+  @override
+  Future<String> uploadFile(File file) async {
+    return await remoteDataSource.uploadFile(file);
   }
 }

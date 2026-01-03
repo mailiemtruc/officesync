@@ -10,7 +10,6 @@ import '../../data/datasources/employee_remote_data_source.dart';
 import '../../domain/repositories/employee_repository_impl.dart';
 import '../../domain/repositories/employee_repository.dart';
 import '../../data/models/department_model.dart';
-import '../../data/models/employee_model.dart'; // [MỚI] Import để dùng EmployeeModel
 import '../../../../core/config/app_colors.dart';
 import '../../widgets/selection_bottom_sheet.dart';
 
