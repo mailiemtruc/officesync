@@ -5,14 +5,13 @@ import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
 import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import com.fasterxml.jackson.databind.ObjectMapper; // <--- Nhớ import dòng này
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule; // <--- Import để parse ngày tháng (LocalDate)
 
 @Configuration
 public class RabbitMQConfig {
 
-    // Tên hàng đợi riêng của Service Newsfeed
     public static final String QUEUE_NEWSFEED_USER_SYNC = "newsfeed.user.sync.queue";
-    
-    // Tên Exchange và Routing Key PHẢI KHỚP với bên Core Service
     public static final String EXCHANGE_INTERNAL = "internal.exchange";
     public static final String ROUTING_KEY_COMPANY_CREATE = "company.create";
 
@@ -26,7 +25,6 @@ public class RabbitMQConfig {
         return new TopicExchange(EXCHANGE_INTERNAL);
     }
 
-    // Gắn hàng đợi này vào Exchange để nhận tin nhắn
     @Bean
     public Binding bindingNewsfeed(Queue newsfeedUserQueue, TopicExchange internalExchange) {
         return BindingBuilder.bind(newsfeedUserQueue).to(internalExchange).with(ROUTING_KEY_COMPANY_CREATE);
@@ -35,5 +33,14 @@ public class RabbitMQConfig {
     @Bean
     public MessageConverter jsonMessageConverter() {
         return new Jackson2JsonMessageConverter();
+    }
+
+    // ✅✅✅ THÊM ĐOẠN NÀY ĐỂ FIX LỖI "Could not be found"
+    @Bean
+    public ObjectMapper objectMapper() {
+        ObjectMapper mapper = new ObjectMapper();
+        // Đăng ký module để xử lý LocalDate/LocalDateTime (tránh lỗi parse ngày tháng sau này)
+        mapper.registerModule(new JavaTimeModule());
+        return mapper;
     }
 }
