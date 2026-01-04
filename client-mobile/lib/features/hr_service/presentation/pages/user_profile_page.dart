@@ -12,6 +12,7 @@ import 'package:officesync/features/notification_service/notification_service.da
 import 'change_password_page.dart';
 import '../../../../core/config/app_colors.dart';
 import 'edit_profile_page.dart';
+import '../../domain/repositories/employee_repository.dart';
 import '../../domain/repositories/employee_repository_impl.dart';
 import '../../data/datasources/employee_remote_data_source.dart';
 import '../../data/models/employee_model.dart';
@@ -38,7 +39,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
   final _storage = const FlutterSecureStorage();
   final _newsfeedApi = NewsfeedApi();
 
-  late final EmployeeRepositoryImpl _repository;
+  late final EmployeeRepository _repository;
 
   @override
   void initState() {

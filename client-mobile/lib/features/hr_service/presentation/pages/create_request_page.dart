@@ -1,20 +1,19 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'dart:ui' as ui;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:image_picker/image_picker.dart';
-
-// Import Department
-import '../../domain/repositories/department_repository.dart';
 import '../../data/datasources/department_remote_data_source.dart';
-
-// Import Request & Config
 import '../../../../core/config/app_colors.dart';
 import '../../data/datasources/request_remote_data_source.dart';
 import '../../domain/repositories/request_repository_impl.dart';
+import '../../domain/repositories/request_repository.dart';
 import '../../data/models/request_model.dart';
+import '../../domain/repositories/department_repository_impl.dart';
+import '../../domain/repositories/department_repository.dart';
 
 class CreateRequestPage extends StatefulWidget {
   const CreateRequestPage({super.key});
@@ -47,7 +46,7 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
   // --- LOGIC SYSTEM ---
   bool _isSubmitting = false;
   final _storage = const FlutterSecureStorage();
-  late final RequestRepositoryImpl _repository;
+  late final RequestRepository _repository;
   late final DepartmentRepository _departmentRepository;
 
   // Tên phòng HR (Lấy từ server)
@@ -60,7 +59,7 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
       remoteDataSource: RequestRemoteDataSource(),
     );
 
-    _departmentRepository = DepartmentRepository(
+    _departmentRepository = DepartmentRepositoryImpl(
       remoteDataSource: DepartmentRemoteDataSource(),
     );
 

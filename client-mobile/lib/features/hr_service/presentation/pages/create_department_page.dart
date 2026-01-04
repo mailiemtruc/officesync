@@ -7,8 +7,8 @@ import '../../../../core/config/app_colors.dart';
 import '../../data/models/employee_model.dart';
 import '../../data/models/department_model.dart';
 import '../../data/datasources/department_remote_data_source.dart';
+import '../../domain/repositories/department_repository_impl.dart';
 import '../../domain/repositories/department_repository.dart';
-
 // [QUAN TRỌNG] Các trang chọn
 import 'select_manager_page.dart';
 import 'add_members_page.dart';
@@ -35,7 +35,7 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
   @override
   void initState() {
     super.initState();
-    _departmentRepository = DepartmentRepository(
+    _departmentRepository = DepartmentRepositoryImpl(
       remoteDataSource: DepartmentRemoteDataSource(),
     );
     // [ĐÃ XÓA] Không gọi _fetchAllEmployees() nữa vì dùng Server-side search

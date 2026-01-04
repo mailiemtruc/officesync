@@ -9,6 +9,7 @@ import '../../data/models/employee_model.dart';
 import '../../widgets/employee_card.widget.dart';
 
 import '../../domain/repositories/employee_repository_impl.dart';
+import '../../domain/repositories/employee_repository.dart';
 import '../../data/datasources/employee_remote_data_source.dart';
 
 class AddMembersPage extends StatefulWidget {
@@ -26,7 +27,7 @@ class AddMembersPage extends StatefulWidget {
 }
 
 class _AddMembersPageState extends State<AddMembersPage> {
-  late final EmployeeRepositoryImpl _repository;
+  late final EmployeeRepository _repository;
   final _storage = const FlutterSecureStorage();
 
   List<EmployeeModel> _displayList = [];

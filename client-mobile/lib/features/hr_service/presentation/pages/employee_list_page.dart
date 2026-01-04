@@ -1,20 +1,20 @@
 import 'dart:async'; // Dùng cho Debounce
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:officesync/features/hr_service/domain/repositories/employee_repository.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-// --- IMPORTS ---
 import '../../../../core/config/app_colors.dart';
 import '../../data/models/employee_model.dart';
 import '../../data/models/department_model.dart';
 import '../../domain/repositories/employee_repository_impl.dart';
-import '../../domain/repositories/employee_repository.dart';
 import '../../data/datasources/employee_remote_data_source.dart';
 // Import Department Repository & DataSource
 import '../../domain/repositories/department_repository.dart';
 import '../../data/datasources/department_remote_data_source.dart';
-
+import '../../domain/repositories/department_repository_impl.dart';
+import '../../domain/repositories/department_repository.dart';
 import '../../widgets/employee_card.widget.dart';
 import '../../widgets/department_card.widget.dart';
 import '../../widgets/department_bottom_sheet.dart'; // Đảm bảo đã import cái này
@@ -22,7 +22,7 @@ import '../../widgets/employee_bottom_sheet.dart';
 import 'add_employee_page.dart';
 import 'create_department_page.dart';
 import 'department_details_page.dart';
-import 'edit_profile_emloyee_page.dart';
+
 import 'employee_profile_page.dart';
 
 class EmployeeListPage extends StatefulWidget {
@@ -63,7 +63,7 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
     _employeeRepository = EmployeeRepositoryImpl(
       remoteDataSource: EmployeeRemoteDataSource(),
     );
-    _departmentRepository = DepartmentRepository(
+    _departmentRepository = DepartmentRepositoryImpl(
       remoteDataSource: DepartmentRemoteDataSource(),
     );
 

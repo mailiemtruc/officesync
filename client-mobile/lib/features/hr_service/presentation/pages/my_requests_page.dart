@@ -8,6 +8,7 @@ import '../../../../core/config/app_colors.dart';
 import '../../data/models/request_model.dart';
 import '../../data/datasources/request_remote_data_source.dart';
 import '../../domain/repositories/request_repository_impl.dart';
+import '../../domain/repositories/request_repository.dart';
 import 'dart:async';
 import 'create_request_page.dart';
 import 'request_detail_page.dart';
@@ -27,7 +28,7 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
   bool _isLoading = true;
 
   final _storage = const FlutterSecureStorage();
-  late final RequestRepositoryImpl _repository;
+  late final RequestRepository _repository;
 
   // Biến Socket
   bool _isSocketInitialized = false;

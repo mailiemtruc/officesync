@@ -10,6 +10,7 @@ import '../../widgets/confirm_bottom_sheet.dart';
 import '../../widgets/selection_bottom_sheet.dart';
 import '../../domain/repositories/employee_repository_impl.dart';
 import '../../data/datasources/employee_remote_data_source.dart';
+import '../../domain/repositories/employee_repository.dart';
 
 class EditProfileEmployeePage extends StatefulWidget {
   final EmployeeModel employee;
@@ -33,7 +34,7 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
 
   DepartmentModel? _selectedDepartmentObj;
   late TextEditingController _emailController;
-  late final EmployeeRepositoryImpl _repository;
+  late final EmployeeRepository _repository;
   bool _isLoading = false;
 
   List<DepartmentModel> _realDepartments = [];

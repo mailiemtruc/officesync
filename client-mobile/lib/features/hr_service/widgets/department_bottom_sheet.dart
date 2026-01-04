@@ -2,12 +2,11 @@ import 'dart:convert'; // [MỚI] Để parse JSON user_info
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart'; // [MỚI] Import storage
-
+import '../domain/repositories/department_repository_impl.dart';
 import '../data/models/department_model.dart';
 import 'confirm_bottom_sheet.dart';
 import '../presentation/pages/edit_department_page.dart';
 import '../presentation/pages/department_details_page.dart';
-import '../domain/repositories/department_repository.dart';
 import '../data/datasources/department_remote_data_source.dart';
 
 class DepartmentBottomSheet extends StatelessWidget {
@@ -59,7 +58,7 @@ class DepartmentBottomSheet extends StatelessWidget {
           }
 
           // 2. Gọi API Xóa
-          final repo = DepartmentRepository(
+          final repo = DepartmentRepositoryImpl(
             remoteDataSource: DepartmentRemoteDataSource(),
           );
 

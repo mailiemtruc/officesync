@@ -17,6 +17,7 @@ import '../../../../core/config/app_colors.dart';
 import '../../data/models/request_model.dart';
 import '../../widgets/confirm_bottom_sheet.dart';
 import '../../domain/repositories/request_repository_impl.dart';
+import '../../domain/repositories/request_repository.dart';
 import '../../data/datasources/request_remote_data_source.dart';
 
 class RequestDetailPage extends StatefulWidget {
@@ -29,7 +30,7 @@ class RequestDetailPage extends StatefulWidget {
 }
 
 class _RequestDetailPageState extends State<RequestDetailPage> {
-  late final RequestRepositoryImpl _repository;
+  late final RequestRepository _repository;
   final _storage = const FlutterSecureStorage();
   bool _isCancelling = false;
 

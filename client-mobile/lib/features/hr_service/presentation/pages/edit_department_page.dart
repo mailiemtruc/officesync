@@ -5,13 +5,15 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../../../core/config/app_colors.dart';
 import '../../data/models/department_model.dart';
 import '../../data/models/employee_model.dart';
-import '../../domain/repositories/department_repository.dart';
 import '../../data/datasources/department_remote_data_source.dart';
 import '../../domain/repositories/employee_repository_impl.dart';
+import '../../domain/repositories/employee_repository.dart';
 import '../../data/datasources/employee_remote_data_source.dart';
 import '../../widgets/confirm_bottom_sheet.dart';
 import 'select_manager_page.dart';
 import 'department_details_page.dart';
+import '../../domain/repositories/department_repository_impl.dart';
+import '../../domain/repositories/department_repository.dart';
 
 class EditDepartmentPage extends StatefulWidget {
   final DepartmentModel department;
@@ -32,7 +34,7 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
   List<EmployeeModel> _departmentMembers = [];
 
   late final DepartmentRepository _deptRepo;
-  late final EmployeeRepositoryImpl _empRepo;
+  late final EmployeeRepository _empRepo;
   final _storage = const FlutterSecureStorage();
 
   // [MỚI] Biến lưu ID người dùng hiện tại
@@ -45,7 +47,7 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
     _nameController = TextEditingController(text: widget.department.name);
     _selectedManager = widget.department.manager;
 
-    _deptRepo = DepartmentRepository(
+    _deptRepo = DepartmentRepositoryImpl(
       remoteDataSource: DepartmentRemoteDataSource(),
     );
     _empRepo = EmployeeRepositoryImpl(

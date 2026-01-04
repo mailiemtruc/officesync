@@ -12,6 +12,7 @@ import '../../../../core/services/websocket_service.dart';
 import '../../data/models/request_model.dart';
 import '../../widgets/confirm_bottom_sheet.dart';
 import '../../domain/repositories/request_repository_impl.dart';
+import '../../domain/repositories/request_repository.dart';
 import '../../data/datasources/request_remote_data_source.dart';
 
 class ManagerRequestReviewPage extends StatefulWidget {
@@ -25,7 +26,7 @@ class ManagerRequestReviewPage extends StatefulWidget {
 class _ManagerRequestReviewPageState extends State<ManagerRequestReviewPage> {
   final TextEditingController _rejectReasonController = TextEditingController();
 
-  late final RequestRepositoryImpl _repository;
+  late final RequestRepository _repository;
   final _storage = const FlutterSecureStorage();
   bool _isProcessing = false;
   late RequestModel _currentRequest;

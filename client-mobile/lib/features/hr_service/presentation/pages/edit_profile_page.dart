@@ -8,6 +8,7 @@ import '../../../../core/config/app_colors.dart';
 import '../../../../core/widgets/custom_text_field.dart';
 import '../../data/models/employee_model.dart';
 import '../../domain/repositories/employee_repository_impl.dart';
+import '../../domain/repositories/employee_repository.dart';
 import '../../data/datasources/employee_remote_data_source.dart';
 
 class EditProfilePage extends StatefulWidget {
@@ -30,7 +31,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
   String? _currentAvatarUrl; // Lưu URL avatar hiện tại
   // [MỚI] Biến theo dõi xem có thay đổi dữ liệu (đặc biệt là avatar) chưa
   bool _hasUpdates = false;
-  late final EmployeeRepositoryImpl _repository;
+  late final EmployeeRepository _repository;
   final ImagePicker _picker = ImagePicker();
 
   @override

@@ -7,6 +7,7 @@ import '../../data/models/department_model.dart';
 import '../../data/models/employee_model.dart';
 import '../../widgets/employee_card.widget.dart';
 import '../../domain/repositories/employee_repository_impl.dart';
+import '../../domain/repositories/employee_repository.dart';
 import '../../data/datasources/employee_remote_data_source.dart';
 import 'add_members_page.dart';
 import 'employee_profile_page.dart';
@@ -23,7 +24,7 @@ class DepartmentDetailsPage extends StatefulWidget {
 class _DepartmentDetailsPageState extends State<DepartmentDetailsPage> {
   List<EmployeeModel> _members = [];
   bool _isLoading = true;
-  late final EmployeeRepositoryImpl _employeeRepo;
+  late final EmployeeRepository _employeeRepo;
 
   String? _currentUserId;
   String? _currentUserRole; // [MỚI] Biến để lưu quyền hạn (ADMIN/MANAGER/STAFF)
