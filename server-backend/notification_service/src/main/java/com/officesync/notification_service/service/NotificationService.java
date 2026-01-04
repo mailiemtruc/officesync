@@ -63,20 +63,31 @@ public class NotificationService {
         if (deviceOpt.isPresent()) {
             String token = deviceOpt.get().getFcmToken();
             try {
-                // Tạo message gửi sang Firebase
+                // 1. Cấu hình cho Android: Ép độ ưu tiên CAO NHẤT (High Priority)
+                // Để xuyên qua chế độ tiết kiệm pin (Doze Mode)
+                com.google.firebase.messaging.AndroidConfig androidConfig = com.google.firebase.messaging.AndroidConfig.builder()
+                        .setPriority(com.google.firebase.messaging.AndroidConfig.Priority.HIGH) // 👈 Quan trọng nhất
+                        .setNotification(com.google.firebase.messaging.AndroidNotification.builder()
+                                .setSound("default") // Rung chuông mặc định
+                                .setChannelId("high_importance_channel") // (Tùy chọn) Kênh thông báo quan trọng
+                                .build())
+                        .build();
+
+                // 2. Tạo message chèn cấu hình vào
                 Message message = Message.builder()
                         .setToken(token)
-                        .setNotification(Notification.builder()
+                        .setNotification(Notification.builder() // Cái này là hiển thị chung
                                 .setTitle(title)
                                 .setBody(body)
                                 .build())
-                        .putData("type", type) // Gửi kèm dữ liệu ẩn để App xử lý click
+                        .setAndroidConfig(androidConfig) // 👈 Gắn cấu hình Android vào đây
+                        .putData("type", type)
                         .putData("referenceId", String.valueOf(referenceId))
                         .build();
 
-                // Gửi ngay lập tức
+                // 3. Gửi ngay lập tức
                 FirebaseMessaging.getInstance().send(message);
-                System.out.println("--> Đã gửi FCM tới user " + userId);
+                System.out.println("--> Đã gửi FCM (High Priority) tới user " + userId);
             } catch (Exception e) {
                 System.err.println("Lỗi gửi Firebase: " + e.getMessage());
             }
