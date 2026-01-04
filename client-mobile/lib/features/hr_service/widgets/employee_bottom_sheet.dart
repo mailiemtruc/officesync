@@ -204,13 +204,14 @@ class EmployeeBottomSheet extends StatelessWidget {
                   isScrollControlled: true,
                   builder: (context) => ConfirmBottomSheet(
                     title: 'Delete Employee?',
-                    message:
-                        'This action cannot be undone. All data associated with ${employee.fullName} will be permanently deleted.',
+                    message: 'This action cannot be undone...',
                     confirmText: 'Delete',
                     confirmColor: const Color(0xFFDC2626),
-                    onConfirm: () {
+                    onConfirm: () async {
+                      // [SỬA] Thêm async
+                      // Gọi hàm xóa và đóng dialog
                       Navigator.pop(context);
-                      onDelete();
+                      onDelete(); // Logic thực tế nằm ở trang EmployeePage
                     },
                   ),
                 );
@@ -231,9 +232,10 @@ class EmployeeBottomSheet extends StatelessWidget {
       height: 46,
       alignment: Alignment.center,
       color: const Color(0xFFEFF1F5), // Màu nền xám
-      child: const Icon(
-        Icons.person,
-        color: Color(0xFF9CA3AF), // Màu icon xám đậm
+      child: Icon(
+        // [ĐÃ SỬA] Đổi sang Phosphor Icon
+        PhosphorIcons.user(PhosphorIconsStyle.fill),
+        color: const Color(0xFF9CA3AF), // Màu icon xám đậm
         size: 24,
       ),
     );

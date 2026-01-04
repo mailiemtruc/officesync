@@ -3,10 +3,10 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
-import org.springframework.dao.DataIntegrityViolationException; // [QUAN TRỌNG] Class sinh ID
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
+import org.springframework.dao.DataIntegrityViolationException; // [THÊM]
+import org.springframework.stereotype.Service; // [THÊM]
+import org.springframework.transaction.annotation.Transactional; // [THÊM]
+ 
 import com.officesync.hr_service.Config.SnowflakeIdGenerator;
 import com.officesync.hr_service.DTO.EmployeeSyncEvent;
 import com.officesync.hr_service.DTO.UserCreatedEvent;
@@ -15,12 +15,16 @@ import com.officesync.hr_service.Model.Department;
 import com.officesync.hr_service.Model.Employee;
 import com.officesync.hr_service.Model.EmployeeRole;
 import com.officesync.hr_service.Model.EmployeeStatus;
+import com.officesync.hr_service.Model.Request;
+import com.officesync.hr_service.Model.RequestAuditLog;
 import com.officesync.hr_service.Producer.EmployeeProducer;
-import com.officesync.hr_service.Repository.DepartmentRepository; // Import DTO mới
-import com.officesync.hr_service.Repository.EmployeeRepository; // Import Producer mới
+import com.officesync.hr_service.Repository.DepartmentRepository; // [THÊM]
+import com.officesync.hr_service.Repository.EmployeeRepository; // [THÊM]
+import com.officesync.hr_service.Repository.RequestAuditLogRepository; // [THÊM]
+import com.officesync.hr_service.Repository.RequestRepository; // [THÊM]
 
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j; // Import DTO mới
+import lombok.extern.slf4j.Slf4j;
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -28,8 +32,9 @@ public class EmployeeService {
 
     private final EmployeeRepository employeeRepository;
     private final DepartmentRepository departmentRepository;
-
-   private final SnowflakeIdGenerator idGenerator; // [QUAN TRỌNG] Inject bộ sinh ID
+    private final RequestRepository requestRepository;
+    private final RequestAuditLogRepository auditLogRepository;
+   private final SnowflakeIdGenerator idGenerator; 
    private final EmployeeProducer employeeProducer;
 
   // [SỬA] Thay tham số Long companyId -> Employee creator
@@ -452,24 +457,108 @@ public class EmployeeService {
     }
 
 
+   // [CẬP NHẬT BẢO MẬT + LOGIC XÓA]
     @Transactional
-    public void deleteEmployee(Long id) {
-        Employee employee = employeeRepository.findById(id)
+    public void deleteEmployee(Employee deleter, Long targetId) { // [SỬA] Thêm tham số deleter
+        
+        // 1. Tìm nhân viên cần xóa
+        Employee targetEmployee = employeeRepository.findById(targetId)
                 .orElseThrow(() -> new RuntimeException("Employee not found"));
 
-        // 1. Gửi sự kiện yêu cầu XÓA user sang Core (User sẽ bị xóa khỏi bảng users)
-        try {
-            // Sử dụng hàm sendEmployeeDeletedEvent đã có trong Producer
-            employeeProducer.sendEmployeeDeletedEvent(employee.getId()); 
-            log.info("--> Đã gửi lệnh xóa User ID {} sang Core", employee.getId());
-        } catch (Exception e) {
-            log.error("Lỗi gửi event xóa: {}", e.getMessage());
+        // =========================================================
+        // [BẢO MẬT] KIỂM TRA QUYỀN HẠN (Permission Check)
+        // =========================================================
+
+        // A. Không được tự xóa chính mình
+        if (deleter.getId().equals(targetId)) {
+            throw new RuntimeException("Hành động bị từ chối: Bạn không thể tự xóa tài khoản của chính mình.");
         }
 
-        // 2. Xóa khỏi DB của HR
-        employeeRepository.delete(employee);
+        // B. Phải cùng công ty
+        if (!deleter.getCompanyId().equals(targetEmployee.getCompanyId())) {
+            throw new RuntimeException("Lỗi bảo mật: Nhân viên này không thuộc công ty của bạn.");
+        }
+
+        // C. Kiểm tra phân quyền dựa trên vai trò của người bị xóa (Target)
+        if (targetEmployee.getRole() == EmployeeRole.MANAGER) {
+            // RULE: Nếu xóa Quản lý -> Chỉ Giám đốc (Admin) mới được phép
+            if (deleter.getRole() != EmployeeRole.COMPANY_ADMIN) {
+                throw new RuntimeException("Truy cập bị từ chối: Chỉ Giám đốc mới có quyền xóa Quản lý.");
+            }
+        } else {
+            // RULE: Nếu xóa Nhân viên (Staff)
+            if (deleter.getRole() == EmployeeRole.COMPANY_ADMIN) {
+                // Admin được quyền xóa tất cả -> OK
+            } else if (deleter.getRole() == EmployeeRole.MANAGER) {
+                // Manager chỉ được xóa nhân viên TRONG CÙNG PHÒNG BAN
+                if (targetEmployee.getDepartment() == null || 
+                    deleter.getDepartment() == null || 
+                    !targetEmployee.getDepartment().getId().equals(deleter.getDepartment().getId())) {
+                    
+                    throw new RuntimeException("Truy cập bị từ chối: Bạn chỉ được xóa nhân viên thuộc phòng ban mình quản lý.");
+                }
+            } else {
+                // Staff không có quyền xóa ai cả
+                throw new RuntimeException("Truy cập bị từ chối: Bạn không có quyền thực hiện thao tác này.");
+            }
+        }
+        // =========================================================
+
+        log.info("--> Bắt đầu quy trình xóa nhân viên ID: {} bởi User: {}", targetId, deleter.getId());
+
+        // 2. Xử lý Phòng ban (Nếu target đang là Manager -> Gỡ chức Manager)
+        java.util.Optional<Department> managedDept = departmentRepository.findByManagerId(targetId);
+        if (managedDept.isPresent()) {
+            Department dept = managedDept.get();
+            dept.setManager(null); // Set null để không vi phạm khóa ngoại
+            departmentRepository.save(dept);
+            log.info("--> Đã gỡ chức Manager khỏi phòng: {}", dept.getName());
+        }
+
+        // 3. Xử lý Đơn từ (Requests) mà nhân viên này là NGƯỜI TẠO (Requester)
+        // Yêu cầu: Xóa hết đơn của họ để sạch dữ liệu
+        List<Request> myRequests = requestRepository.findByRequesterId(targetId);
+        for (Request req : myRequests) {
+            // Trước khi xóa Request, phải xóa Audit Log của Request đó
+            List<RequestAuditLog> logs = auditLogRepository.findByRequestId(req.getId());
+            if (!logs.isEmpty()) {
+                auditLogRepository.deleteAll(logs);
+            }
+            // Sau đó mới xóa Request
+            requestRepository.delete(req);
+        }
+        log.info("--> Đã xóa {} đơn xin phép của nhân viên.", myRequests.size());
+
+        // 4. Xử lý Đơn từ mà nhân viên này là NGƯỜI DUYỆT (Approver)
+        // Yêu cầu: Không xóa đơn của người khác, chỉ gỡ tên người duyệt (Set null)
+        List<Request> approvedRequests = requestRepository.findByApproverId(targetId);
+        for (Request req : approvedRequests) {
+            req.setApprover(null);
+            requestRepository.save(req);
+        }
+
+        // 5. Xử lý Lịch sử (Audit Logs) mà nhân viên này là NGƯỜI THAO TÁC (Actor)
+        // (Xóa sạch log hành động của họ)
+        List<RequestAuditLog> actorLogs = auditLogRepository.findByActorId(targetId);
+        if (!actorLogs.isEmpty()) {
+            auditLogRepository.deleteAll(actorLogs);
+            log.info("--> Đã xóa {} dòng lịch sử hoạt động.", actorLogs.size());
+        }
+
+        // 6. Gửi sự kiện xóa sang Core Service (RabbitMQ)
+        try {
+            employeeProducer.sendEmployeeDeletedEvent(targetEmployee.getId());
+            log.info("--> Đã gửi lệnh xóa User ID {} sang Core", targetEmployee.getId());
+        } catch (Exception e) {
+            log.error("Lỗi gửi event xóa RabbitMQ: {}", e.getMessage());
+        }
+
+        // 7. Cuối cùng: Xóa nhân viên khỏi bảng employees
+        employeeRepository.delete(targetEmployee);
+        log.info("--> XÓA THÀNH CÔNG NHÂN VIÊN ID: {}", targetId);
     }
-    
+
+
     private void deleteOldAvatarFromStorage(String fileUrl) {
         if (fileUrl == null || fileUrl.isEmpty()) return;
 

@@ -468,16 +468,22 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
                           height: 110,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
+
+                            // [ĐÃ SỬA]
+                            // - Độ dày: 2 (như cũ)
+                            // - Màu: Colors.grey[200] (trùng màu nền avatar)
                             border: Border.all(
-                              color: const Color(0xFFD8DEEC),
+                              color: Colors.grey[300]!,
                               width: 2,
                             ),
-                            color: const Color(0xFFE2E8F0),
+
+                            color: Colors.grey[200], // Màu nền
+
                             boxShadow: [
                               BoxShadow(
                                 color: Colors.black.withOpacity(0.1),
                                 blurRadius: 10,
-                                offset: const Offset(0, 5),
+                                offset: const Offset(0, 4),
                               ),
                             ],
                           ),
@@ -485,7 +491,7 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
                             child: Icon(
                               PhosphorIcons.user(PhosphorIconsStyle.fill),
                               size: 60,
-                              color: const Color(0xFF94A3B8),
+                              color: Colors.grey[400],
                             ),
                           ),
                         ),

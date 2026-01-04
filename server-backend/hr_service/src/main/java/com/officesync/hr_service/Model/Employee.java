@@ -14,6 +14,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
+import lombok.ToString;
 @Entity
 @Table(name = "employees")
 @Data
@@ -48,6 +49,8 @@ public class Employee extends BaseEntity {
 
     @ManyToOne
     @JoinColumn(name = "department_id")
+    @EqualsAndHashCode.Exclude // [QUAN TRỌNG] Ngắt vòng lặp hashCode
+    @ToString.Exclude          // [QUAN TRỌNG] Ngắt vòng lặp toString
     private Department department;
 
     @Enumerated(EnumType.STRING)

@@ -1,5 +1,4 @@
 package com.officesync.hr_service.Service;
-
 import java.util.List;
 import java.util.Optional;
 import java.util.Random;
@@ -9,16 +8,18 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.officesync.hr_service.DTO.EmployeeSyncEvent;
+import com.officesync.hr_service.DTO.NotificationEvent;
 import com.officesync.hr_service.Model.Department;
 import com.officesync.hr_service.Model.Employee;
 import com.officesync.hr_service.Model.EmployeeRole;
+import com.officesync.hr_service.Model.Request;
 import com.officesync.hr_service.Producer.EmployeeProducer;
 import com.officesync.hr_service.Repository.DepartmentRepository;
 import com.officesync.hr_service.Repository.EmployeeRepository;
+import com.officesync.hr_service.Repository.RequestRepository;
 
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-
+import lombok.extern.slf4j.Slf4j; 
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -27,7 +28,7 @@ public class DepartmentService {
     private final DepartmentRepository departmentRepository;
     private final EmployeeRepository employeeRepository;
     private final EmployeeProducer employeeProducer;
-
+    private final RequestRepository requestRepository; 
     // [BẢO MẬT] Hàm check quyền dùng chung
     private void requireAdminRole(Employee actor) {
         if (actor.getRole() != EmployeeRole.COMPANY_ADMIN) {
@@ -94,6 +95,9 @@ public class DepartmentService {
             employeeRepository.save(newManager);
             syncEmployeeToCore(newManager);
             savedDept.setManager(newManager);
+           // [EN] Notification: Appoint Manager
+            sendNotification(newManager, "Manager Appointment", 
+                "Congratulations! You have been appointed as the Manager of " + savedDept.getName());
         }
 
         // 4. Xử lý Members
@@ -110,6 +114,13 @@ public class DepartmentService {
                         departmentRepository.save(oldDept.get());
                     }
                     emp.setRole(EmployeeRole.STAFF);
+                    // [EN] Notification: Demotion/Role Change
+                    sendNotification(emp, "Position Change", 
+                        "You have been transferred to " + savedDept.getName() + " with the role of Staff.");
+                }else {
+                    // [EN] Notification: Transfer
+                    sendNotification(emp, "Personnel Transfer", 
+                        "You have been added to department: " + savedDept.getName());
                 }
 
                 emp.setDepartment(savedDept);
@@ -151,6 +162,9 @@ public class DepartmentService {
                     oldManager.setRole(EmployeeRole.STAFF);
                     employeeRepository.save(oldManager);
                     syncEmployeeToCore(oldManager);
+                  // [EN] Notification: Dismiss Old Manager
+                    sendNotification(oldManager, "Manager Role Ended", 
+                        "You are no longer the Manager of " + currentDept.getName() + ". Current role: Staff.");
                 }
 
                 // Manager mới
@@ -179,6 +193,9 @@ public class DepartmentService {
                 syncEmployeeToCore(newManager);
                 
                 currentDept.setManager(newManager);
+                // [EN] Notification: Appoint New Manager
+                sendNotification(newManager, "Manager Appointment", 
+                    "Congratulations! You have been appointed as the Manager of " + currentDept.getName());
             }
         } else {
             // Bãi nhiệm
@@ -188,6 +205,9 @@ public class DepartmentService {
                 employeeRepository.save(oldManager);
                 syncEmployeeToCore(oldManager);
                 currentDept.setManager(null);
+              // [EN] Notification: Dismiss Manager
+                sendNotification(oldManager, "Manager Role Ended", 
+                    "You are no longer the Manager of " + currentDept.getName() + ".");
             }
         }
 
@@ -206,9 +226,23 @@ public class DepartmentService {
              throw new RuntimeException("Access Denied.");
         }
 
+        // --- [BƯỚC MỚI QUAN TRỌNG] XỬ LÝ CÁC ĐƠN TỪ (REQUESTS) ---
+        // Tìm tất cả đơn từ thuộc phòng ban này và set department = null
+        // (Tránh lỗi Foreign Key Constraint của Database)
+        List<Request> requests = requestRepository.findByDepartmentIdOrderByCreatedAtDesc(deptId);
+        
+        for (Request req : requests) {
+            req.setDepartment(null); // Gỡ bỏ liên kết phòng ban
+        }
+        requestRepository.saveAll(requests); // Lưu lại thay đổi
+        // ----------------------------------------------------------
+
+        // 2. Xử lý nhân viên (Logic cũ của bạn)
         List<Employee> employees = employeeRepository.findByDepartmentId(deptId);
         
         for (Employee emp : employees) {
+            String msg = "Department " + dept.getName() + " has been dissolved. Your personnel status is pending update.";
+            sendNotification(emp, "Department Dissolution", msg);
             emp.setDepartment(null);
             if (emp.getRole() == EmployeeRole.MANAGER) {
                 emp.setRole(EmployeeRole.STAFF);
@@ -216,9 +250,26 @@ public class DepartmentService {
             }
         }
         employeeRepository.saveAll(employees);
+        
+        // 3. Xóa phòng ban
         departmentRepository.delete(dept);
     }
 
+// [MỚI] Hàm helper để gửi thông báo (Tránh lặp code)
+    private void sendNotification(Employee receiver, String title, String body) {
+        try {
+            NotificationEvent event = new NotificationEvent(
+                receiver.getId(),
+                title,
+                body,
+                "SYSTEM", // Loại thông báo hệ thống
+                null      // Không cần ID tham chiếu cụ thể
+            );
+            employeeProducer.sendNotification(event);
+        } catch (Exception e) {
+            log.error("Lỗi gửi thông báo cho user {}: {}", receiver.getId(), e.getMessage());
+        }
+    }
     // Các hàm phụ trợ giữ nguyên
     private void syncEmployeeToCore(Employee emp) {
         try {

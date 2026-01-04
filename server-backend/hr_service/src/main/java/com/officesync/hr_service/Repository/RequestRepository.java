@@ -12,7 +12,11 @@ import com.officesync.hr_service.Model.RequestStatus;
 
 @Repository
 public interface RequestRepository extends JpaRepository<Request, Long> {
-
+  // [MỚI] Tìm tất cả đơn của người tạo (để xóa khi nhân viên nghỉ việc)
+    List<Request> findByRequesterId(Long requesterId);
+    // [MỚI] Tìm tất cả đơn mà người này là người duyệt (để gỡ tên)
+    List<Request> findByApproverId(Long approverId);
+    
    List<Request> findByRequesterIdAndIsHiddenFalseOrderByCreatedAtDesc(Long requesterId);
     // 2. Lấy danh sách đơn cần duyệt theo phòng ban (Dành cho Manager)
     List<Request> findByDepartmentIdAndStatus(Long departmentId, RequestStatus status);

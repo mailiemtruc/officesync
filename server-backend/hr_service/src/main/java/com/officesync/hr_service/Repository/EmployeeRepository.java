@@ -9,12 +9,13 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import com.officesync.hr_service.Model.Employee;
-
+import com.officesync.hr_service.Model.EmployeeRole;
 @Repository
 public interface EmployeeRepository extends JpaRepository<Employee, Long> {
     // Tìm nhân viên theo mã code
     Optional<Employee> findByEmployeeCode(String employeeCode);
-    
+    // Thêm vào trong interface EmployeeRepository
+   List<Employee> findByCompanyIdAndRole(Long companyId, EmployeeRole role);
     Optional<Employee> findByEmail(String email);
     // [MỚI] Thêm 2 hàm này để kiểm tra trùng lặp nhanh
     boolean existsByEmail(String email);
@@ -27,7 +28,6 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
 
     // Tìm theo Tên hoặc Mã nhân viên (không phân biệt hoa thường)
  List<Employee> findByFullNameContainingIgnoreCaseOrEmployeeCodeContainingIgnoreCase(String name, String code);
-
 // Tìm kiếm: Bắt buộc phải có companyId để đảm bảo tính riêng tư
     @Query("SELECT e FROM Employee e WHERE e.companyId = :companyId " +
            "AND (LOWER(e.fullName) LIKE LOWER(CONCAT('%', :keyword, '%')) " +

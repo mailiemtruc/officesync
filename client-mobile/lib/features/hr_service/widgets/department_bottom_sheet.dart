@@ -64,16 +64,33 @@ class DepartmentBottomSheet extends StatelessWidget {
           );
 
           try {
-            // [QUAN TRỌNG] Truyền userId vào hàm deleteDepartment (tham số thứ 1)
-            await repo.deleteDepartment(userId, department.id!);
+            // [SỬA LỖI]: Phải hứng kết quả trả về (true/false)
+            final bool success = await repo.deleteDepartment(
+              userId,
+              department.id!,
+            );
 
-            if (context.mounted) {
-              Navigator.pop(context); // Đóng Dialog Confirm
-              onDeleteSuccess(); // Refresh list ở trang chủ
+            if (!context.mounted) return;
+
+            // [LOGIC MỚI] Kiểm tra kết quả
+            if (success) {
+              Navigator.pop(context); // Đóng Dialog
+              onDeleteSuccess(); // Refresh list
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text('Department deleted successfully'),
                   backgroundColor: Colors.green,
+                ),
+              );
+            } else {
+              // Nếu thất bại (Server trả về false do lỗi 500)
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    'Failed to delete department. Please check dependencies.',
+                  ),
+                  backgroundColor: Colors.red,
                 ),
               );
             }

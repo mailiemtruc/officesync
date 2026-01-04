@@ -570,15 +570,19 @@ class _HeaderSection extends StatelessWidget {
                         fit: BoxFit.cover,
                         width: 110,
                         height: 110,
-                        // [SỬA 2a] Đổi màu icon khi lỗi load ảnh
+                        // [SỬA 1] Khi lỗi tải ảnh -> Dùng Phosphor Icon
                         errorBuilder: (ctx, err, stack) => Icon(
-                          Icons.person,
+                          PhosphorIcons.user(PhosphorIconsStyle.fill),
                           size: 60,
                           color: placeholderIconColor,
                         ),
                       )
-                    // [SỬA 2b] Đổi màu icon mặc định khi chưa có ảnh
-                    : Icon(Icons.person, size: 60, color: placeholderIconColor),
+                    // [SỬA 2] Khi chưa có ảnh -> Dùng Phosphor Icon
+                    : Icon(
+                        PhosphorIcons.user(PhosphorIconsStyle.fill),
+                        size: 60,
+                        color: placeholderIconColor,
+                      ),
               ),
             ),
 

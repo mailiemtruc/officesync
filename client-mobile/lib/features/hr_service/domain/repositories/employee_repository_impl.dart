@@ -76,10 +76,10 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
     );
   }
 
-  // [MỚI] Implement hàm xóa
+  // [SỬA] Implement hàm xóa có deleterId
   @override
-  Future<bool> deleteEmployee(String id) async {
-    return await remoteDataSource.deleteEmployee(id);
+  Future<bool> deleteEmployee(String deleterId, String targetId) async {
+    return await remoteDataSource.deleteEmployee(deleterId, targetId);
   }
 
   // [MỚI] Thêm hàm này vào đây để sửa lỗi thiếu implementation

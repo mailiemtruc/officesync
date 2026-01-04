@@ -550,10 +550,18 @@ class _AvatarEditSection extends StatelessWidget {
                     fit: BoxFit.cover,
                     width: 110,
                     height: 110, // [Đồng bộ] Kích thước 110
-                    errorBuilder: (ctx, err, stack) =>
-                        const Icon(Icons.person, size: 60, color: Colors.grey),
+                    errorBuilder: (ctx, err, stack) => Icon(
+                      PhosphorIcons.user(PhosphorIconsStyle.fill),
+                      size: 60,
+                      color: Colors.grey,
+                    ),
                   )
-                : const Icon(Icons.person, size: 60, color: Colors.grey),
+                // [SỬA 2]
+                : Icon(
+                    PhosphorIcons.user(PhosphorIconsStyle.fill),
+                    size: 60,
+                    color: Colors.grey,
+                  ),
           ),
         ),
 

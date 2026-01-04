@@ -212,30 +212,39 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
                       ),
                       const SizedBox(height: 32),
 
-                      // Avatar Department
+                      // [ĐÃ SỬA] Avatar Department đồng bộ màu với AddEmployeePage
                       Center(
                         child: Container(
                           width: 110,
                           height: 110,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
+
+                            // [ĐỒNG BỘ 1] Viền màu xám đậm hơn (grey[300])
                             border: Border.all(
-                              color: const Color(0xFFD8DEEC),
+                              color: Colors.grey[300]!,
                               width: 2,
                             ),
-                            color: const Color(0xFFE2E8F0),
+
+                            // [ĐỒNG BỘ 2] Nền màu xám nhạt (grey[200])
+                            color: Colors.grey[200],
+
                             boxShadow: [
                               BoxShadow(
                                 color: Colors.black.withOpacity(0.1),
                                 blurRadius: 10,
-                                offset: const Offset(0, 5),
+                                offset: const Offset(
+                                  0,
+                                  4,
+                                ), // Chỉnh offset 0,4 cho khớp chuẩn
                               ),
                             ],
                           ),
                           child: Icon(
                             PhosphorIcons.buildings(PhosphorIconsStyle.fill),
                             size: 60,
-                            color: const Color(0xFF94A3B8),
+                            // [ĐỒNG BỘ 3] Màu icon xám (grey[400])
+                            color: Colors.grey[400],
                           ),
                         ),
                       ),
@@ -284,14 +293,15 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
                                     color: Colors.grey[200],
                                     shape: BoxShape.circle,
                                   ),
-                                  child: const Icon(
-                                    Icons.person,
+                                  // [ĐÃ SỬA] Dùng Phosphor Icon
+                                  child: Icon(
+                                    PhosphorIcons.user(PhosphorIconsStyle.fill),
                                     color: Colors.grey,
+                                    size: 24,
                                   ),
                                 ),
                                 const SizedBox(width: 16),
 
-                                // [SỬA] Thêm Expanded để đẩy mũi tên sang phải
                                 const Expanded(
                                   child: Text(
                                     'Select Manager',
@@ -317,21 +327,28 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
                                         ? Image.network(
                                             _selectedManager!.avatarUrl!,
                                             fit: BoxFit.cover,
+                                            // [ĐÃ SỬA] Icon lỗi tải ảnh
                                             errorBuilder: (ctx, err, stack) =>
-                                                const Icon(
-                                                  Icons.person,
+                                                Icon(
+                                                  PhosphorIcons.user(
+                                                    PhosphorIconsStyle.fill,
+                                                  ),
                                                   color: AppColors.primary,
+                                                  size: 24,
                                                 ),
                                           )
-                                        : const Icon(
-                                            Icons.person,
+                                        // [ĐÃ SỬA] Icon mặc định khi không có ảnh
+                                        : Icon(
+                                            PhosphorIcons.user(
+                                              PhosphorIconsStyle.fill,
+                                            ),
                                             color: AppColors.primary,
+                                            size: 24,
                                           ),
                                   ),
                                 ),
                                 const SizedBox(width: 16),
 
-                                // [SỬA] Expanded này giờ sẽ chiếm toàn bộ khoảng trống còn lại
                                 Expanded(
                                   child: Column(
                                     crossAxisAlignment:
@@ -348,13 +365,11 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
                                       ),
                                       const SizedBox(height: 4),
                                       Text(
-                                        // Hiển thị code đầy đủ
                                         'Employee Code: ${_selectedManager!.employeeCode ?? "N/A"}',
                                         style: const TextStyle(
                                           color: Color(0xFF6B7280),
                                           fontSize: 13,
-                                          fontWeight:
-                                              FontWeight.w500, // Đậm hơn xíu
+                                          fontWeight: FontWeight.w500,
                                         ),
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
@@ -364,9 +379,7 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
                                 ),
                               ],
 
-                              const SizedBox(
-                                width: 8,
-                              ), // Khoảng cách nhỏ trước mũi tên
+                              const SizedBox(width: 8),
                               const Icon(
                                 Icons.arrow_forward_ios,
                                 size: 16,

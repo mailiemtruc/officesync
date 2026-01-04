@@ -167,10 +167,19 @@ class EmployeeProfilePage extends StatelessWidget {
                 ? Image.network(
                     employee.avatarUrl!,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) =>
-                        const Icon(Icons.person, size: 60, color: Colors.grey),
+                    // [SỬA 1] Bỏ const, dùng PhosphorIcons
+                    errorBuilder: (_, __, ___) => Icon(
+                      PhosphorIcons.user(PhosphorIconsStyle.fill),
+                      size: 60,
+                      color: Colors.grey,
+                    ),
                   )
-                : const Icon(Icons.person, size: 60, color: Colors.grey),
+                // [SỬA 2] Bỏ const, dùng PhosphorIcons
+                : Icon(
+                    PhosphorIcons.user(PhosphorIconsStyle.fill),
+                    size: 60,
+                    color: Colors.grey,
+                  ),
           ),
         ),
         const SizedBox(height: 16),

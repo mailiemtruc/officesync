@@ -1,13 +1,17 @@
 package com.officesync.hr_service.Service;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set; 
 
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional; 
 
+import com.officesync.hr_service.DTO.NotificationEvent;
 import com.officesync.hr_service.Model.Department;
 import com.officesync.hr_service.Model.Employee;
 import com.officesync.hr_service.Model.EmployeeRole;
@@ -32,40 +36,116 @@ public class RequestService {
     private final DepartmentRepository departmentRepository; 
     private final EmployeeProducer employeeProducer;
    private final SimpMessagingTemplate messagingTemplate;
-    // --- 1. TẠO ĐƠN MỚI (AUTO-ROUTE TO HR) ---
+   // --- 1. TẠO ĐƠN MỚI ---
     @Transactional
     public Request createRequest(Long userId, Request requestData) {
         // A. Lấy thông tin người tạo đơn
         Employee requester = employeeRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
-        // B. Tìm phòng ban HR
-        Department hrDept = departmentRepository.findByCompanyIdAndIsHrTrue(requester.getCompanyId())
-                .orElseThrow(() -> new RuntimeException(
-                    "LỖI CẤU HÌNH: Công ty chưa thiết lập Phòng Nhân Sự (is_hr=true). Vui lòng liên hệ Admin."
-                ));
-        // C. Setup thông tin tự động
+        
+        // B. Lấy phòng ban
+        Department userDept = requester.getDepartment();
+        if (userDept == null) {
+            throw new RuntimeException("Lỗi: Bạn chưa thuộc về phòng ban nào.");
+        }
+
+        // C. Setup thông tin
         requestData.setRequester(requester);
-        requestData.setDepartment(hrDept);
+        requestData.setDepartment(userDept);
         requestData.setCompanyId(requester.getCompanyId());
         requestData.setStatus(RequestStatus.PENDING);
         requestData.setCreatedAt(LocalDateTime.now());
         requestData.setUpdatedAt(LocalDateTime.now());
-        // D. Gọi hàm Retry để lưu Request (tránh trùng mã)
+
+        // D. Lưu Request
         Request savedRequest = saveRequestWithRetry(requestData);
-       if (savedRequest != null) {
+
+        if (savedRequest != null) {
             saveAuditLog(savedRequest, requester, "CREATED", "Request submitted successfully");
-            // [FIX REALTIME 1] Bắn tin "NEW_REQUEST" cho Manager
-            // Manager đang lắng nghe tại: /topic/company/{companyId}/requests
+            
+            // [SOCKET] Reload danh sách
             try {
                 String destination = "/topic/company/" + requester.getCompanyId() + "/requests";
-                log.info("--> [WS] Bắn tin 'NEW_REQUEST' tới: {}", destination);
-                // Gửi chuỗi "NEW_REQUEST" để App Manager biết mà reload list
                 messagingTemplate.convertAndSend(destination, "NEW_REQUEST"); 
             } catch (Exception e) {
                 log.error("Lỗi gửi WS Create: {}", e.getMessage());
             }
+
+            // --- E. LOGIC GỬI THÔNG BÁO (NOTIFICATION) ---
+            
+            // 1. Xác định danh sách người nhận (Đã cập nhật Rule C)
+            List<Employee> receivers = determineReceivers(requester, userDept);
+
+           // 2. Send Notification
+            for (Employee receiver : receivers) {
+                if (receiver.getId().equals(requester.getId())) continue;
+
+                // [EN] Translated Content
+                String title = "New Leave Request";
+                String roleName = (requester.getRole() == EmployeeRole.MANAGER) ? "Manager " : "Employee ";
+                String deptName = userDept.getName();
+                
+                // Ex: "Employee John Doe (IT Dept) has submitted a new request."
+                String body = roleName + requester.getFullName() + " (" + deptName + ") has submitted a new request.";
+                
+                NotificationEvent event = new NotificationEvent(
+                    receiver.getId(),
+                    title,
+                    body,
+                    "REQUEST",          
+                    savedRequest.getId() 
+                );
+                
+                employeeProducer.sendNotification(event);
+            }
         }
         return savedRequest;
+    }
+
+    /**
+     * [LOGIC MỚI] Xác định người nhận thông báo
+     */
+    private List<Employee> determineReceivers(Employee requester, Department dept) {
+        Long companyId = requester.getCompanyId();
+        // Dùng Set để tự động loại bỏ người trùng (VD: Manager phòng đó cũng nằm trong HR)
+        Set<Employee> receivers = new HashSet<>(); 
+
+        // RULE A: Người tạo là MANAGER -> Chỉ gửi ADMIN
+        if (requester.getRole() == EmployeeRole.MANAGER) {
+            receivers.addAll(employeeRepository.findByCompanyIdAndRole(companyId, EmployeeRole.COMPANY_ADMIN));
+        }
+        
+        // RULE B: Người tạo là NHÂN VIÊN PHÒNG HR -> Chỉ gửi HR MANAGER
+        else if (Boolean.TRUE.equals(dept.getIsHr())) {
+             if (dept.getManager() != null) {
+                 receivers.add(dept.getManager());
+             } else {
+                 receivers.addAll(employeeRepository.findByCompanyIdAndRole(companyId, EmployeeRole.COMPANY_ADMIN));
+             }
+        }
+
+        // RULE C: NHÂN VIÊN THƯỜNG (Phòng khác) -> Gửi MANAGER PHÒNG ĐÓ + TOÀN BỘ PHÒNG HR
+        else {
+            // 1. Gửi cho Manager trực tiếp của phòng đó
+            if (dept.getManager() != null) {
+                receivers.add(dept.getManager());
+            }
+
+            // 2. [MỚI] Gửi cho TOÀN BỘ phòng HR (Bao gồm Manager HR và Nhân viên HR)
+            Department hrDept = departmentRepository.findByCompanyIdAndIsHrTrue(companyId).orElse(null);
+            if (hrDept != null) {
+                // Tìm tất cả nhân viên thuộc phòng HR
+                List<Employee> hrEmployees = employeeRepository.findByDepartmentId(hrDept.getId());
+                receivers.addAll(hrEmployees);
+            }
+            
+            // Fallback: Nếu cả Manager trực tiếp lẫn phòng HR đều không có ai -> Gửi Admin
+            if (receivers.isEmpty()) {
+                receivers.addAll(employeeRepository.findByCompanyIdAndRole(companyId, EmployeeRole.COMPANY_ADMIN));
+            }
+        }
+
+        return new ArrayList<>(receivers);
     }
     // Hàm hỗ trợ retry khi trùng mã Request Code
     private Request saveRequestWithRetry(Request request) {
@@ -161,6 +241,22 @@ public class RequestService {
             messagingTemplate.convertAndSend(companyDest, savedRequest);
         } catch (Exception e) {
             log.error("Lỗi gửi WebSocket: " + e.getMessage());
+        }
+        // [EN] SEND NOTIFICATION TO REQUESTER
+        Employee requester = savedRequest.getRequester();
+        if (!requester.getId().equals(approverId)) {
+            String statusEn = (newStatus == RequestStatus.APPROVED) ? "APPROVED" : "REJECTED";
+            String title = "Request Status Update";
+            String body = "Your request has been " + statusEn + " by " + approver.getFullName();
+
+            NotificationEvent event = new NotificationEvent(
+                requester.getId(),
+                title,
+                body,
+                "REQUEST",
+                savedRequest.getId()
+            );
+            employeeProducer.sendNotification(event);
         }
         return savedRequest;
     }

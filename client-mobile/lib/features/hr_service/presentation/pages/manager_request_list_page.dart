@@ -1212,20 +1212,22 @@ class _ManagerRequestCard extends StatelessWidget {
                             height: 46,
                             fit: BoxFit.cover,
                             errorBuilder: (context, error, stackTrace) {
-                              return const Center(
+                              // [SỬA 1] Bỏ 'const', thay Icons.person bằng PhosphorIcons
+                              return Center(
                                 child: Icon(
-                                  Icons.person,
-                                  color: Color(0xFF9CA3AF),
+                                  PhosphorIcons.user(PhosphorIconsStyle.fill),
+                                  color: const Color(0xFF9CA3AF),
                                   size: 24,
                                 ),
                               );
                             },
                           ),
                         )
-                      : const Center(
+                      // [SỬA 2] Bỏ 'const', thay Icons.person bằng PhosphorIcons
+                      : Center(
                           child: Icon(
-                            Icons.person,
-                            color: Color(0xFF9CA3AF),
+                            PhosphorIcons.user(PhosphorIconsStyle.fill),
+                            color: const Color(0xFF9CA3AF),
                             size: 24,
                           ),
                         ),

@@ -66,6 +66,15 @@ public class RabbitMQConfig {
     public static final String FILE_DELETE_ROUTING_KEY = "file.delete";
     public static final String FILE_DELETE_QUEUE = "file.delete.queue";
     public static final String EMPLOYEE_DELETE_ROUTING_KEY = "employee.delete";
+    // [MỚI] Cấu hình cho Notification
+    public static final String NOTIFICATION_EXCHANGE = "notification.exchange";
+    public static final String NOTIFICATION_ROUTING_KEY = "notification.send";
+
+    @Bean
+    public TopicExchange notificationExchange() {
+        return new TopicExchange(NOTIFICATION_EXCHANGE);
+    }
+    
     @Bean
     public TopicExchange employeeExchange() {
         return new TopicExchange(EMPLOYEE_EXCHANGE);

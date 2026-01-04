@@ -228,13 +228,17 @@ class EmployeeRemoteDataSource {
     }
   }
 
-  // [MỚI] XÓA NHÂN VIÊN
-  Future<bool> deleteEmployee(String id) async {
+  // [SỬA LẠI] Thêm tham số deleterId
+  Future<bool> deleteEmployee(String deleterId, String targetId) async {
     try {
-      final url = Uri.parse('$baseUrl/employees/$id');
-      print("--> Deleting Employee ID: $id");
+      final url = Uri.parse('$baseUrl/employees/$targetId');
+      print("--> Deleting Employee ID: $targetId by User: $deleterId");
 
-      final response = await http.delete(url);
+      final response = await http.delete(
+        url,
+        // [QUAN TRỌNG] Bổ sung Header X-User-Id
+        headers: {"Content-Type": "application/json", "X-User-Id": deleterId},
+      );
 
       if (response.statusCode == 200) {
         return true;

@@ -276,8 +276,20 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
         confirmColor: const Color(0xFFDC2626),
         onConfirm: () async {
           Navigator.pop(context);
+
+          // [FIX LỖI] Kiểm tra user id hiện tại
+          if (_currentUserId == null) {
+            _showErrorSnackBar("Session error. Please login again.");
+            return;
+          }
+
           setState(() => _isLoading = true);
-          bool success = await _repository.deleteEmployee(widget.employee.id!);
+
+          // [FIX LỖI] Truyền 2 tham số: (deleterId, targetId)
+          bool success = await _repository.deleteEmployee(
+            _currentUserId!, // Người xóa (bạn)
+            widget.employee.id!, // Người bị xóa
+          );
 
           if (mounted) {
             setState(() => _isLoading = false);
@@ -392,14 +404,16 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
                           ? Image.network(
                               widget.employee.avatarUrl!,
                               fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => const Icon(
-                                Icons.person,
+                              // [SỬA 1]
+                              errorBuilder: (_, __, ___) => Icon(
+                                PhosphorIcons.user(PhosphorIconsStyle.fill),
                                 size: 60,
                                 color: Colors.grey,
                               ),
                             )
-                          : const Icon(
-                              Icons.person,
+                          // [SỬA 2]
+                          : Icon(
+                              PhosphorIcons.user(PhosphorIconsStyle.fill),
                               size: 60,
                               color: Colors.grey,
                             ),

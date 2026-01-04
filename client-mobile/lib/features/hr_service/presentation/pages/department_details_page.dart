@@ -72,15 +72,32 @@ class _DepartmentDetailsPageState extends State<DepartmentDetailsPage> {
     }
 
     try {
+      // 1. Lấy danh sách thành viên mới nhất từ API
       final deptMembers = await _employeeRepo.getEmployeesByDepartment(
         _currentDept.id!,
       );
 
       if (mounted) {
         setState(() {
+          // 2. Cập nhật danh sách hiển thị (trừ Manager ra nếu cần)
           _members = deptMembers
               .where((e) => e.id != _currentDept.manager?.id)
               .toList();
+
+          // [SỬA LỖI TẠI ĐÂY]
+          // 3. Cập nhật lại _currentDept với số lượng thành viên mới (deptMembers.length)
+          // Vì DepartmentModel là final, ta phải tạo instance mới copy dữ liệu cũ + memberCount mới
+          _currentDept = DepartmentModel(
+            id: _currentDept.id,
+            name: _currentDept.name,
+            code: _currentDept.code,
+            color: _currentDept.color,
+            manager: _currentDept.manager,
+            isHr: _currentDept.isHr,
+            memberIds: _currentDept.memberIds,
+            memberCount: deptMembers.length, // <--- Cập nhật số lượng mới nhất
+          );
+
           _isLoading = false;
         });
       }

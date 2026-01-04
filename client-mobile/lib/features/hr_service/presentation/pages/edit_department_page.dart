@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-
 import '../../../../core/config/app_colors.dart';
 import '../../data/models/department_model.dart';
 import '../../data/models/employee_model.dart';
@@ -647,13 +646,18 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
                       ? Image.network(
                           emp.avatarUrl!,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => const Icon(
-                            Icons.person,
+                          // [SỬA 1]
+                          errorBuilder: (_, __, ___) => Icon(
+                            PhosphorIcons.user(PhosphorIconsStyle.fill),
                             size: 20,
                             color: Colors.grey,
                           ),
                         )
-                      : const Icon(Icons.person, size: 20, color: Colors.grey),
+                      : Icon(
+                          PhosphorIcons.user(PhosphorIconsStyle.fill),
+                          size: 20,
+                          color: Colors.grey,
+                        ),
                 ),
               ),
             );
@@ -710,12 +714,13 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
                       width: 46,
                       height: 46,
                       fit: BoxFit.cover,
+                      // [SỬA 3]
                       errorBuilder: (_, __, ___) => Container(
                         width: 46,
                         height: 46,
                         color: AppColors.primary.withOpacity(0.1),
-                        child: const Icon(
-                          Icons.person,
+                        child: Icon(
+                          PhosphorIcons.user(PhosphorIconsStyle.fill),
                           color: AppColors.primary,
                         ),
                       ),
@@ -724,7 +729,10 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
                       width: 46,
                       height: 46,
                       color: AppColors.primary.withOpacity(0.1),
-                      child: const Icon(Icons.person, color: AppColors.primary),
+                      child: Icon(
+                        PhosphorIcons.user(PhosphorIconsStyle.fill),
+                        color: AppColors.primary,
+                      ),
                     ),
             ),
             const SizedBox(width: 16),

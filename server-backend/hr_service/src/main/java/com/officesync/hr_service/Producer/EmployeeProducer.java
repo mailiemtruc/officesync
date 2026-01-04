@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.officesync.hr_service.Config.RabbitMQConfig;
 import com.officesync.hr_service.DTO.EmployeeSyncEvent;
+import com.officesync.hr_service.DTO.NotificationEvent;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -74,4 +75,21 @@ public class EmployeeProducer {
             fileName // String sẵn rồi thì cứ gửi
         );
     }
+   // [MỚI] Hàm gửi thông báo - SỬA LẠI
+public void sendNotification(NotificationEvent event) {
+    try {
+        log.info("--> [RabbitMQ] Pushing Notification to User: {}", event.getUserId());
+        
+        // SAI: String jsonMessage = objectMapper.writeValueAsString(event); 
+        // ĐÚNG: Gửi thẳng Object event. Converter sẽ tự biến nó thành JSON chuẩn.
+        
+        rabbitTemplate.convertAndSend(
+            RabbitMQConfig.NOTIFICATION_EXCHANGE,
+            RabbitMQConfig.NOTIFICATION_ROUTING_KEY,
+            event 
+        );
+    } catch (Exception e) {
+        log.error("Lỗi gửi Notification Event: {}", e.getMessage());
+    }
+}
 }

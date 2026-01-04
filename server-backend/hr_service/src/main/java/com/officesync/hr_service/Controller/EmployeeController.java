@@ -86,11 +86,24 @@ public class EmployeeController {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }
     }
-    // [MỚI] API Xóa (Vẫn cần thêm cái này vì Update không thay thế được Delete)
-    @DeleteMapping("/{id}")
-    public ResponseEntity<?> deleteEmployee(@PathVariable Long id) {
-        employeeService.deleteEmployee(id);
-        return ResponseEntity.ok(Map.of("message", "Employee deleted successfully"));
+   @DeleteMapping("/{id}")
+    public ResponseEntity<?> deleteEmployee(
+            @RequestHeader("X-User-Id") Long deleterId, // [1] Lấy ID người đang thao tác
+            @PathVariable Long id // [2] ID của nhân viên bị xóa
+    ) {
+        try {
+            // Bước 1: Tìm thông tin người thực hiện (Deleter)
+            Employee deleter = employeeRepository.findById(deleterId)
+                    .orElseThrow(() -> new RuntimeException("User not found (Deleter)"));
+
+            // Bước 2: Gọi Service với 2 tham số để check quyền
+            employeeService.deleteEmployee(deleter, id);
+            
+            return ResponseEntity.ok(Map.of("message", "Xóa nhân viên thành công"));
+        } catch (RuntimeException e) {
+            // Trả về lỗi 400 kèm thông báo lý do (ví dụ: "Truy cập bị từ chối...")
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
     }
    
 

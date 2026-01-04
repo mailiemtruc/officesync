@@ -202,10 +202,11 @@ class EmployeeCard extends StatelessWidget {
     return Container(
       alignment: Alignment.center,
       color: const Color(0xFFEFF1F5), // Màu nền xám nhạt
-      child: const Icon(
-        Icons.person,
-        color: Color(0xFF9CA3AF), // Màu icon xám đậm hơn
-        size: 24, // Size icon bên này để 24 là vừa với khung 46
+      child: Icon(
+        // [ĐÃ SỬA] Đổi sang Phosphor Icon để đồng bộ
+        PhosphorIcons.user(PhosphorIconsStyle.fill),
+        color: const Color(0xFF9CA3AF),
+        size: 24,
       ),
     );
   }

@@ -634,23 +634,23 @@ class _ManagerRequestReviewPageState extends State<ManagerRequestReviewPage> {
                       width: 46,
                       height: 46,
                       fit: BoxFit.cover,
+                      // [SỬA 1]
                       errorBuilder: (context, error, stackTrace) {
-                        // Nếu link ảnh lỗi -> Hiện icon mặc định
-                        return const Center(
+                        return Center(
                           child: Icon(
-                            Icons.person,
-                            color: Color(0xFF9CA3AF),
+                            PhosphorIcons.user(PhosphorIconsStyle.fill),
+                            color: const Color(0xFF9CA3AF),
                             size: 24,
                           ),
                         );
                       },
                     ),
                   )
-                : const Center(
-                    // Nếu không có link ảnh -> Hiện icon mặc định ngay
+                : Center(
+                    // [SỬA 2]
                     child: Icon(
-                      Icons.person,
-                      color: Color(0xFF9CA3AF), // Màu icon xám đậm hơn nền
+                      PhosphorIcons.user(PhosphorIconsStyle.fill),
+                      color: const Color(0xFF9CA3AF),
                       size: 24,
                     ),
                   ),

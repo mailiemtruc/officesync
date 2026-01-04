@@ -230,7 +230,12 @@ class DepartmentCard extends StatelessWidget {
     return Container(
       alignment: Alignment.center,
       color: const Color(0xFFEFF1F5),
-      child: const Icon(Icons.person, color: Color(0xFF9CA3AF), size: 24),
+      child: Icon(
+        // [ĐÃ SỬA] Đổi sang Phosphor Icon
+        PhosphorIcons.user(PhosphorIconsStyle.fill),
+        color: const Color(0xFF9CA3AF), // Màu icon xám đậm
+        size: 24,
+      ),
     );
   }
 }

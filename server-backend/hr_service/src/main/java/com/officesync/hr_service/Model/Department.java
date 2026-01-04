@@ -1,5 +1,4 @@
 package com.officesync.hr_service.Model;
-
 import java.util.List;
 
 import org.hibernate.annotations.Formula; // [QUAN TRỌNG] Import Formula
@@ -19,7 +18,7 @@ import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
-
+import lombok.ToString;
 @Entity
 @Table(name = "departments")
 @Data
@@ -54,5 +53,7 @@ public class Department extends BaseEntity {
 
     @OneToMany(mappedBy = "department", fetch = FetchType.LAZY)
     @JsonIgnore
+    @EqualsAndHashCode.Exclude // [QUAN TRỌNG]
+    @ToString.Exclude          // [QUAN TRỌNG]
     private List<Employee> employees;
 }

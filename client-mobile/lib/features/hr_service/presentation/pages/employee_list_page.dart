@@ -255,9 +255,23 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
     _fetchData(keyword: _searchController.text);
   }
 
-  Future<void> _handleDeleteEmployee(String id) async {
+  Future<void> _handleDeleteEmployee(String targetId) async {
+    // Đổi tên tham số thành targetId cho rõ
     try {
-      bool success = await _employeeRepository.deleteEmployee(id);
+      // [FIX LỖI] Kiểm tra null
+      if (_currentUserId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Session expired. Please login again.")),
+        );
+        return;
+      }
+
+      // [FIX LỖI] Truyền 2 tham số: (Người xóa, Người bị xóa)
+      bool success = await _employeeRepository.deleteEmployee(
+        _currentUserId!,
+        targetId,
+      );
+
       if (mounted) {
         if (success) {
           ScaffoldMessenger.of(context).showSnackBar(

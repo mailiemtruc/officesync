@@ -1,0 +1,3 @@
+com\officesync\notification_service\config\RabbitMQConfig.class
+com\officesync\notification_service\consumer\NotificationConsumer.class
+com\officesync\notification_service\DTO\NotificationEvent.class
