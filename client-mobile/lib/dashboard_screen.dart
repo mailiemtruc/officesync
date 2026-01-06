@@ -459,6 +459,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
 
                     // ======================= TASK_SERVICE ==============================
+                    _buildMenuItem(
+                      context,
+                      title: 'Attendance', // Chấm công
+                      icon: PhosphorIconsFill.mapPin, // Icon định vị check-in
+                      color: const Color(0xFFEC4899), // Màu Hồng
+                      route:
+                          '/attendance', // Route sang màn hình AttendanceScreen
+                      width: itemWidth,
+                    ),
+
+                    if (role == 'COMPANY_ADMIN' ||
+                        role == 'MANAGER' ||
+                        role == 'SUPER_ADMIN')
+                      _buildMenuItem(
+                        context,
+                        title: 'HR Attendance', // Bảng công tổng hợp
+                        icon: PhosphorIconsFill.chartBar, // Icon biểu đồ
+                        color: Colors.indigo,
+                        route: '/manager_attendance', // Route mới
+                        width: itemWidth,
+                        arguments: role, // Truyền role sang màn hình quản lý
+                      ),
                   ],
                 );
               },
@@ -476,9 +498,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     required Color color,
     required String route,
     required double width,
-    // ======================= TASK_SERVICE ==============================
-    Object? arguments,
-    // ======================= TASK_SERVICE ==============================
+    Object? arguments, // Tham số này đã được khai báo
   }) {
     return Container(
       width: width,
@@ -499,7 +519,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         borderRadius: BorderRadius.circular(20),
         child: InkWell(
           onTap: () {
-            Navigator.pushNamed(context, route);
+            // [ĐÃ SỬA] Truyền arguments vào đây
+            Navigator.pushNamed(context, route, arguments: arguments);
           },
           borderRadius: BorderRadius.circular(20),
           child: Padding(

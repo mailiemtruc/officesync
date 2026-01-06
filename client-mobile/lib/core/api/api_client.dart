@@ -1,4 +1,4 @@
-import 'dart:convert'; // [MỚI] Thêm import này để dùng jsonDecode
+import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -23,18 +23,14 @@ class ApiClient {
 
   final _storage = const FlutterSecureStorage();
 
-  // [ĐÃ SỬA] Hàm này giờ sẽ lấy thêm User ID để gửi Header
   Future<Options> _getOptions() async {
     String? token = await _storage.read(key: 'auth_token');
-
-    // Đọc thông tin user từ bộ nhớ (đã lưu lúc Login)
     String? userInfoStr = await _storage.read(key: 'user_info');
     String? userId;
 
     if (userInfoStr != null) {
       try {
         final userData = jsonDecode(userInfoStr);
-        // Lấy ID ra để gửi cho Backend (Lưu ý: Backend nhận Long nên mình gửi String số)
         userId = userData['id'].toString();
       } catch (e) {
         print("Lỗi đọc user info: $e");
@@ -45,56 +41,94 @@ class ApiClient {
       headers: {
         'Content-Type': 'application/json',
         if (token != null) 'Authorization': 'Bearer $token',
-
-        // [QUAN TRỌNG] Gửi kèm ID để Note Service (và các service khác) biết ai đang gọi
         if (userId != null) 'X-User-Id': userId,
       },
     );
   }
 
-  // --- CORE & NOTE SERVICE METHODS ---
+  // --- CORE & NOTE SERVICE METHODS (ĐÃ SỬA) ---
 
-  Future<Response> post(String path, {dynamic data}) async {
+  // [SỬA] Thêm tham số queryParameters và options
+  Future<Response> post(
+    String path, {
+    dynamic data,
+    Map<String, dynamic>? queryParameters,
+    Options? options, // <--- Nhận options từ bên ngoài
+  }) async {
     try {
-      final options = await _getOptions();
-      // Dio thông minh: Nếu 'path' bắt đầu bằng http (ví dụ noteUrl),
-      // nó sẽ bỏ qua baseUrl mặc định (8080) và dùng url đầy đủ đó.
-      return await _dio.post(path, data: data, options: options);
+      // 1. Lấy Options mặc định (có Token)
+      final baseOptions = await _getOptions();
+
+      // 2. Nếu có options bên ngoài truyền vào (ví dụ Header riêng), thì merge vào baseOptions
+      if (options != null && options.headers != null) {
+        baseOptions.headers?.addAll(options.headers!);
+      }
+
+      return await _dio.post(
+        path,
+        data: data,
+        queryParameters: queryParameters,
+        options: baseOptions, // Dùng options đã merge
+      );
     } on DioException catch (e) {
       throw Exception(_handleError(e));
     }
   }
 
-  Future<Response> get(String path) async {
+  // [SỬA] Thêm tham số queryParameters và options
+  Future<Response> get(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+    Options? options, // <--- Nhận options từ bên ngoài
+  }) async {
     try {
-      final options = await _getOptions();
-      return await _dio.get(path, options: options);
+      final baseOptions = await _getOptions();
+
+      if (options != null && options.headers != null) {
+        baseOptions.headers?.addAll(options.headers!);
+      }
+
+      return await _dio.get(
+        path,
+        queryParameters: queryParameters,
+        options: baseOptions,
+      );
     } on DioException catch (e) {
       throw Exception(_handleError(e));
     }
   }
 
-  Future<Response> put(String path, {dynamic data}) async {
+  // [SỬA] Thêm tham số options
+  Future<Response> put(String path, {dynamic data, Options? options}) async {
     try {
-      final options = await _getOptions();
-      return await _dio.put(path, data: data, options: options);
+      final baseOptions = await _getOptions();
+
+      if (options != null && options.headers != null) {
+        baseOptions.headers?.addAll(options.headers!);
+      }
+
+      return await _dio.put(path, data: data, options: baseOptions);
     } on DioException catch (e) {
       throw Exception(_handleError(e));
     }
   }
 
-  Future<Response> delete(String path) async {
+  // [SỬA] Thêm tham số options
+  Future<Response> delete(String path, {Options? options}) async {
     try {
-      final options = await _getOptions();
-      return await _dio.delete(path, options: options);
+      final baseOptions = await _getOptions();
+
+      if (options != null && options.headers != null) {
+        baseOptions.headers?.addAll(options.headers!);
+      }
+
+      return await _dio.delete(path, options: baseOptions);
     } on DioException catch (e) {
       throw Exception(_handleError(e));
     }
   }
 
-  // --- STORAGE SERVICE METHODS (Port 8090) ---
-  // (Phần này giữ nguyên không đổi)
-
+  // --- STORAGE SERVICE METHODS ---
   Future<String> uploadImageToStorage(String filePath) async {
     try {
       final storageDio = Dio(
@@ -126,7 +160,6 @@ class ApiClient {
   }
 
   // --- ERROR HANDLING ---
-
   String _handleError(DioException e) {
     if (e.response != null) {
       if (e.response!.data is String) {

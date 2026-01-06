@@ -38,4 +38,10 @@ public class Company {
 
     @Column(name = "description", length = 1000)
     private String description;
+
+    private Double latitude;
+    private Double longitude;
+    private Double allowedRadius; // Bán kính (m)
+    private String wifiBssid;     // MAC Address
+    private String wifiSsid;      // Tên Wifi
 }

@@ -10,6 +10,7 @@ import 'features/core_service/presentation/pages/otp_verification_screen.dart';
 import 'dashboard_screen.dart';
 import 'features/hr_service/presentation/pages/user_profile_page.dart';
 import 'features/attendance_service/presentation/pages/attendance_screen.dart';
+import 'features/attendance_service/presentation/pages/manager_attendance_screen.dart';
 
 // --- THÊM IMPORT CÁC TRANG MỚI ---
 import 'features/hr_service/presentation/pages/my_requests_page.dart';
@@ -147,6 +148,12 @@ class OfficeSyncApp extends StatelessWidget {
         '/notes': (context) => const NoteListScreen(),
 
         '/attendance': (context) => const AttendanceScreen(),
+        '/manager_attendance': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments;
+          // Mặc định fallback là HR_MANAGER nếu không nhận được args
+          String role = args is String ? args : 'HR_MANAGER';
+          return ManagerAttendanceScreen(userRole: role);
+        },
 
         // ======================= TASK_SERVICE ==============================
         // Logic phân quyền: Route này nhận 'role' từ Dashboard gửi sang

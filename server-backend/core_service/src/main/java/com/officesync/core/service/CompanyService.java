@@ -9,6 +9,7 @@ import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import com.officesync.core.dto.CompanyConfigEvent;
 import com.officesync.core.model.Company;
 import com.officesync.core.repository.CompanyRepository;
 import com.officesync.core.repository.UserRepository;
@@ -18,6 +19,7 @@ public class CompanyService {
 
     @Autowired private CompanyRepository companyRepository;
     @Autowired private UserRepository userRepository;
+    @Autowired private RabbitMQProducer rabbitProducer;
 
     // --- Cho Admin ---
     public Map<String, Long> getSystemStats() {
@@ -71,11 +73,48 @@ public class CompanyService {
     }
 
     public Company updateMyCompany(Long companyId, Map<String, Object> req) {
+        // 1. Lấy thông tin công ty hiện tại
         Company company = getMyCompany(companyId);
+
+        // 2. Cập nhật thông tin cơ bản
         if (req.containsKey("name")) company.setName((String) req.get("name"));
         if (req.containsKey("industry")) company.setIndustry((String) req.get("industry"));
         if (req.containsKey("description")) company.setDescription((String) req.get("description"));
         if (req.containsKey("logoUrl")) company.setLogoUrl((String) req.get("logoUrl"));
-        return companyRepository.save(company);
+
+        // 3. Cập nhật thông tin Chấm công (Attendance Config)
+        if (req.containsKey("latitude") && req.get("latitude") != null) {
+            company.setLatitude(Double.valueOf(req.get("latitude").toString()));
+        }
+        if (req.containsKey("longitude") && req.get("longitude") != null) {
+            company.setLongitude(Double.valueOf(req.get("longitude").toString()));
+        }
+        if (req.containsKey("allowedRadius") && req.get("allowedRadius") != null) {
+            company.setAllowedRadius(Double.valueOf(req.get("allowedRadius").toString()));
+        }
+        if (req.containsKey("wifiBssid")) company.setWifiBssid((String) req.get("wifiBssid"));
+        if (req.containsKey("wifiSsid")) company.setWifiSsid((String) req.get("wifiSsid"));
+
+        // 4. Lưu vào Database (Core Service)
+        Company updated = companyRepository.save(company);
+
+        // 5. [QUAN TRỌNG] Bắn Event sang Attendance Service để đồng bộ
+        try {
+            CompanyConfigEvent event = new CompanyConfigEvent(
+                updated.getId(),
+                updated.getName() + " - HQ", // Tên văn phòng mặc định
+                updated.getLatitude(),
+                updated.getLongitude(),
+                updated.getAllowedRadius() != null ? updated.getAllowedRadius() : 100.0, // Default 100m
+                updated.getWifiBssid(),
+                updated.getWifiSsid()
+            );
+            rabbitProducer.sendCompanyConfigEvent(event);
+        } catch (Exception e) {
+            // Log lỗi nếu bắn event thất bại nhưng không chặn flow chính
+            System.err.println("Lỗi gửi event chấm công: " + e.getMessage());
+        }
+
+        return updated;
     }
 }

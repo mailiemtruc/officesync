@@ -1,15 +1,19 @@
 package com.officesync.attendance_service.service;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.util.List;
+
+import org.springframework.stereotype.Service;
+
 import com.officesync.attendance_service.model.Attendance;
 import com.officesync.attendance_service.model.OfficeConfig;
 import com.officesync.attendance_service.repository.AttendanceRepository;
 import com.officesync.attendance_service.repository.OfficeConfigRepository;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-
-import java.time.LocalDateTime;
-import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -19,81 +23,75 @@ public class AttendanceService {
     private final AttendanceRepository attendanceRepo;
     private final OfficeConfigRepository officeConfigRepo;
 
-    // Hàm xử lý Check-in chính
-    public Attendance processCheckIn(Long userId, Double lat, Double lng, String bssid) {
-        // [Giả định] Vì service này tách biệt, ta tạm lấy config của Company ID = 2 (FPT)
-        // Trong thực tế: Bạn có thể gọi API sang Core để lấy companyId của user này.
-        Long companyId = 2L;
+    public Attendance processCheckIn(Long userId, Long companyId, Double lat, Double lng, String bssid) {
+        
+        // --- 1. KIỂM TRA SỐ LẦN CHẤM CÔNG HÔM NAY ---
+        LocalDateTime startOfDay = LocalDate.now().atStartOfDay(); // 00:00:00 hôm nay
+        LocalDateTime endOfDay = LocalDate.now().atTime(LocalTime.MAX); // 23:59:59 hôm nay
 
-        // 1. Lấy danh sách văn phòng
+        List<Attendance> todayRecords = attendanceRepo.findByUserIdAndCheckInTimeBetween(userId, startOfDay, endOfDay);
+
+        if (todayRecords.size() >= 2) {
+            throw new RuntimeException("You have completed your timekeeping for today (Entry/Exit counts are sufficient).");
+        }
+
+        // Xác định loại chấm công:
+        // - Nếu chưa có bản ghi nào -> CHECK_IN
+        // - Nếu đã có 1 bản ghi -> CHECK_OUT
+        String attendanceType = todayRecords.isEmpty() ? "CHECK_IN" : "CHECK_OUT";
+
+        // --- 2. LOGIC KIỂM TRA VỊ TRÍ & WIFI (GIỮ NGUYÊN) ---
         List<OfficeConfig> offices = officeConfigRepo.findByCompanyId(companyId);
         if (offices.isEmpty()) {
-            throw new RuntimeException("Hệ thống chưa cấu hình vị trí văn phòng!");
+            throw new RuntimeException("The company hasn't configured the office location yet!");
         }
 
         boolean isValid = false;
         String matchedLocation = "Unknown";
 
-        // 2. So khớp vị trí & Wifi
         for (OfficeConfig office : offices) {
-            log.info("Checking office: {} | Setup BSSID: {}", office.getOfficeName(), office.getWifiBssid());
-            log.info("Client BSSID: {}", bssid);
-
-            // A. Check Wifi (BSSID) - Không phân biệt hoa thường
             boolean isWifiMatch = false;
             if (office.getWifiBssid() != null && bssid != null) {
-                // Loại bỏ dấu hai chấm nếu có để so sánh chuẩn hơn (tùy định dạng)
                 String cleanServerBssid = office.getWifiBssid().replace(":", "").toLowerCase();
                 String cleanClientBssid = bssid.replace(":", "").toLowerCase();
-
-                if (cleanClientBssid.equals(cleanServerBssid)) {
-                    isWifiMatch = true;
-                }
+                if (cleanClientBssid.equals(cleanServerBssid)) isWifiMatch = true;
             }
 
-            // B. Check GPS (Khoảng cách)
             double distance = calculateHaversineDistance(lat, lng, office.getLatitude(), office.getLongitude());
-            log.info("Distance to {}: {} meters", office.getOfficeName(), distance);
-
             boolean isGpsMatch = distance <= office.getAllowedRadius();
 
-            // C. Quyết định: Cần CẢ HAI hoặc MỘT TRONG HAI?
-            // Ở đây tôi để logic: Phải đúng WIFI và gần đúng GPS (Bảo mật cao)
             if (isWifiMatch && isGpsMatch) {
                 isValid = true;
                 matchedLocation = office.getOfficeName();
                 break;
             }
-
-            // Nếu muốn nới lỏng: Chỉ cần đúng Wifi là được (vì Wifi khó fake hơn GPS)
-            // if (isWifiMatch) { isValid = true; matchedLocation = office.getOfficeName(); break; }
         }
 
         if (!isValid) {
-            throw new RuntimeException("Check-in thất bại: Bạn không ở văn phòng hoặc sai Wifi công ty.");
+            throw new RuntimeException("Check-in failed: Incorrect location or Wi-Fi network.");
         }
 
-        // 3. Lưu lại
+        // --- 3. LƯU LẠI ---
         Attendance att = new Attendance();
         att.setUserId(userId);
         att.setCompanyId(companyId);
         att.setCheckInTime(LocalDateTime.now());
         att.setLocationName(matchedLocation);
         att.setDeviceBssid(bssid);
-        att.setStatus("ON_TIME"); // Logic tính muộn làm sau
+        att.setType(attendanceType); // [MỚI] Lưu loại (Vào hoặc Ra)
+        att.setStatus("ON_TIME"); // Logic tính muộn có thể phát triển thêm dựa vào attendanceType
 
         return attendanceRepo.save(att);
     }
 
-    // Công thức tính khoảng cách giữa 2 tọa độ (Trả về mét)
     private double calculateHaversineDistance(double lat1, double lon1, double lat2, double lon2) {
-        final int R = 6371; // Bán kính trái đất (km)
+        final int R = 6371; 
         double latDistance = Math.toRadians(lat2 - lat1);
         double lonDistance = Math.toRadians(lon2 - lon1);
         double a = Math.sin(latDistance / 2) * Math.sin(latDistance / 2)
                 + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
                 * Math.sin(lonDistance / 2) * Math.sin(lonDistance / 2);
         double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        return R * c * 1000; // Đổi ra mét
+        return R * c * 1000; 
     }
 }

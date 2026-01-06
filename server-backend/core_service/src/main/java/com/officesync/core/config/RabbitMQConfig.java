@@ -32,6 +32,8 @@ public class RabbitMQConfig {
     // Wildcard # sẽ hứng tất cả: employee.create, employee.update, employee.delete
     public static final String ROUTING_KEY_EMPLOYEE_WILDCARD = "employee.#"; 
 
+    public static final String ROUTING_KEY_COMPANY_CONFIG = "company.config.update";
+
     // --- BEAN DEFINITIONS ---
 
     @Bean

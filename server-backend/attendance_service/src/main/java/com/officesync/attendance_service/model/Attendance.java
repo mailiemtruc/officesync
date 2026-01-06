@@ -29,5 +29,6 @@ public class Attendance {
 
     private String locationName; // Tên văn phòng lúc check-in
     private String deviceBssid;  // BSSID của thiết bị lúc check-in
+    private String type;
     private String status;       // ON_TIME, LATE...
 }

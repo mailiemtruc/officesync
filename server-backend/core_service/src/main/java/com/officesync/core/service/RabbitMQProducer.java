@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.databind.ObjectMapper; // [MỚI]
 import com.officesync.core.config.RabbitMQConfig;
+import com.officesync.core.dto.CompanyConfigEvent;
 import com.officesync.core.dto.UserCreatedEvent;
 import com.officesync.core.dto.UserStatusChangedEvent;
 
@@ -55,6 +56,21 @@ public class RabbitMQProducer {
             );
         } catch (Exception e) {
             LOGGER.error("Lỗi parse JSON StatusChange: " + e.getMessage());
+        }
+    }
+
+    // Thêm hàm gửi event Config
+    public void sendCompanyConfigEvent(CompanyConfigEvent event) {
+        try {
+            String jsonMessage = objectMapper.writeValueAsString(event);
+            rabbitTemplate.convertAndSend(
+                RabbitMQConfig.EXCHANGE_INTERNAL,
+                RabbitMQConfig.ROUTING_KEY_COMPANY_CONFIG,
+                jsonMessage
+            );
+            LOGGER.info("--> Đã gửi cấu hình chấm công cho Company ID: " + event.getCompanyId());
+        } catch (Exception e) {
+            LOGGER.error("Lỗi gửi Config Event: " + e.getMessage());
         }
     }
 }
