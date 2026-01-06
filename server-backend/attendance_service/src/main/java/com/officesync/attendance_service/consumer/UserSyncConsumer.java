@@ -44,10 +44,10 @@ public class UserSyncConsumer {
             user.setDepartmentName(event.getDepartmentName());
 
             userRepo.save(user);
-            log.info("--> [Attendance] Đã đồng bộ user: {}", event.getEmail());
+            log.info("--> [Attendance] User has been synchronized: {}", event.getEmail());
 
         } catch (Exception e) {
-            log.error("Lỗi đồng bộ User trong Attendance Service: {}", e.getMessage());
+            log.error("User synchronization error in Attendance Service: {}", e.getMessage());
             e.printStackTrace();
         }
     }

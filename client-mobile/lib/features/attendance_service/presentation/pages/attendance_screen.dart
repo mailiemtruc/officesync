@@ -6,7 +6,6 @@ import 'package:geolocator/geolocator.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:intl/intl.dart';
-import 'package:dio/dio.dart';
 
 import '../../data/attendance_api.dart';
 import '../../data/models/attendance_model.dart';
@@ -25,6 +24,8 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   final _storage = const FlutterSecureStorage();
 
   static const Color primaryColor = Color(0xFF2260FF);
+  // [ĐỔI] Màu nền giống trang Note cho đồng bộ
+  static const Color bgColor = Color(0xFFF2F2F7);
 
   bool _isLoading = false;
   String? _currentBssid;
@@ -37,7 +38,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   String _dateString = "";
   Timer? _timer;
 
-  // [MỚI] Biến quản lý tháng đang xem
+  // Biến quản lý tháng đang xem
   DateTime _selectedDate = DateTime.now();
 
   // Biến lịch sử
@@ -96,20 +97,18 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     }
   }
 
-  // [ĐÃ SỬA] Load lịch sử theo Tháng/Năm đang chọn
   void _refreshHistory() {
     if (_userId != null) {
       setState(() {
         _historyFuture = _api.getHistory(
           _userId!,
-          _selectedDate.month, // Truyền tháng
-          _selectedDate.year, // Truyền năm
+          _selectedDate.month,
+          _selectedDate.year,
         );
       });
     }
   }
 
-  // [MỚI] Hàm thay đổi tháng
   void _changeMonth(int monthsToAdd) {
     setState(() {
       _selectedDate = DateTime(
@@ -117,7 +116,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         _selectedDate.month + monthsToAdd,
       );
     });
-    _refreshHistory(); // Gọi lại API lấy dữ liệu tháng mới
+    _refreshHistory();
   }
 
   Future<void> _initializeLocationAndWifi() async {
@@ -160,16 +159,17 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           title: "Success!",
           message: "Checked in at: ${result.locationName}",
         );
-        _refreshHistory(); // Reload lại list sau khi chấm công
+        _refreshHistory();
       }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         CustomSnackBar.show(
           context,
           title: "Failed",
           message: e.toString(),
           isError: true,
         );
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -178,85 +178,207 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FD),
-      appBar: AppBar(
-        title: const Text(
-          "ATTENDANCE",
-          style: TextStyle(
-            color: primaryColor,
-            fontWeight: FontWeight.w800,
-            fontFamily: 'Inter',
-            fontSize: 22,
-          ),
-        ),
-        centerTitle: true,
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(
-            Icons.arrow_back_ios_new,
-            color: primaryColor,
-            size: 20,
-          ),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
+      backgroundColor: bgColor,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0),
-          child: Column(
-            children: [
-              const SizedBox(height: 10),
-              _buildClock(),
-              const SizedBox(height: 20),
+        child: Column(
+          children: [
+            // 1. Header Cố định
+            _buildCustomHeader(),
 
-              WifiStatusCard(
-                bssid: _currentBssid,
-                lat: _currentPosition?.latitude,
-                lng: _currentPosition?.longitude,
-                isLoading: _currentPosition == null && _currentBssid == null,
-              ),
-
-              const SizedBox(height: 20),
-
-              // [MỚI] Thanh chọn tháng
-              _buildMonthSelector(),
-
-              const SizedBox(height: 15),
-
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  "Recent Activity",
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey[800],
-                    fontFamily: 'Inter',
+            // 2. Nội dung chính (Dùng CustomScrollView để Lazy Loading thật sự)
+            Expanded(
+              child: CustomScrollView(
+                physics: const BouncingScrollPhysics(),
+                slivers: [
+                  // Phần trên List (Clock, Wifi, Month...) -> Dùng SliverToBoxAdapter
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                      child: Column(
+                        children: [
+                          const SizedBox(height: 10),
+                          _buildClock(),
+                          const SizedBox(height: 20),
+                          WifiStatusCard(
+                            bssid: _currentBssid,
+                            lat: _currentPosition?.latitude,
+                            lng: _currentPosition?.longitude,
+                            isLoading:
+                                _currentPosition == null &&
+                                _currentBssid == null,
+                          ),
+                          const SizedBox(height: 20),
+                          _buildMonthSelector(),
+                          const SizedBox(height: 20),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              "Recent Activity",
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey[800],
+                                fontFamily: 'Inter',
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
+
+                  // Phần List (Lazy Loading thật sự) -> Dùng FutureBuilder + SliverList
+                  FutureBuilder<List<AttendanceModel>>(
+                    future: _historyFuture,
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const SliverToBoxAdapter(
+                          child: Padding(
+                            padding: EdgeInsets.only(top: 20),
+                            child: Center(
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          ),
+                        );
+                      } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                        return SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 40),
+                            child: Column(
+                              children: [
+                                Icon(
+                                  Icons.history,
+                                  size: 40,
+                                  color: Colors.grey[300],
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  "No history for this month",
+                                  style: TextStyle(color: Colors.grey[400]),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }
+
+                      final history = snapshot.data!;
+                      return SliverPadding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        sliver: SliverList(
+                          delegate: SliverChildBuilderDelegate((
+                            context,
+                            index,
+                          ) {
+                            final item = history[index];
+                            final DateTime checkInTime =
+                                DateTime.tryParse(item.checkInTime) ??
+                                DateTime.now();
+
+                            // Logic header ngày
+                            bool showHeader = true;
+                            if (index > 0) {
+                              final DateTime prevTime = DateTime.parse(
+                                history[index - 1].checkInTime,
+                              );
+                              if (DateFormat('dd/MM/yyyy').format(prevTime) ==
+                                  DateFormat(
+                                    'dd/MM/yyyy',
+                                  ).format(checkInTime)) {
+                                showHeader = false;
+                              }
+                            }
+
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (showHeader)
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 8.0,
+                                    ),
+                                    child: Text(
+                                      _getDateLabel(checkInTime),
+                                      style: TextStyle(
+                                        color: Colors.grey[600],
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ),
+                                _buildHistoryItemCard(item, checkInTime),
+                              ],
+                            );
+                          }, childCount: history.length),
+                        ),
+                      );
+                    },
+                  ),
+
+                  // Khoảng trắng đệm dưới cùng (Để không bị nút che mất item cuối)
+                  const SliverToBoxAdapter(child: SizedBox(height: 20)),
+                ],
               ),
-              const SizedBox(height: 10),
+            ),
 
-              Expanded(child: _buildHistoryList()),
-
-              const SizedBox(height: 15),
-
-              _buildCheckInButton(),
-              const SizedBox(height: 20),
-            ],
-          ),
+            // 3. Footer (Nút dính đáy)
+            Container(
+              padding: const EdgeInsets.fromLTRB(24, 10, 24, 20),
+              color: bgColor,
+              child: _buildCheckInButton(),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  // [MỚI] Widget chọn tháng
+  // [MỚI] Header giống hệt trang Note/Manager
+  Widget _buildCustomHeader() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+      color: bgColor,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          // Nút Back to & đẹp
+          IconButton(
+            icon: const Icon(
+              Icons.arrow_back_ios,
+              color: primaryColor,
+              size: 24, // Tăng kích thước
+            ),
+            onPressed: () => Navigator.pop(context),
+          ),
+
+          // Title
+          const Expanded(
+            child: Text(
+              "ATTENDANCE",
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 24, // Chữ to
+                fontWeight: FontWeight.w800, // Chữ đậm
+                color: primaryColor,
+                fontFamily: 'Inter',
+                letterSpacing: 0.5,
+              ),
+            ),
+          ),
+
+          // Widget rỗng bên phải để cân bằng với nút Back
+          const SizedBox(width: 48),
+        ],
+      ),
+    );
+  }
+
   Widget _buildMonthSelector() {
     final String displayDate = DateFormat('MMMM yyyy').format(_selectedDate);
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(30),
@@ -295,7 +417,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
               color: Colors.grey,
             ),
             onPressed: () {
-              // Không cho chọn tháng tương lai
               final now = DateTime.now();
               if (_selectedDate.month < now.month ||
                   _selectedDate.year < now.year) {
@@ -387,6 +508,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     );
   }
 
+  // Sửa lại Widget này để dùng shrinkWrap vì nằm trong SingleScrollView
   Widget _buildHistoryList() {
     return FutureBuilder<List<AttendanceModel>>(
       future: _historyFuture,
@@ -419,8 +541,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         final history = snapshot.data!;
 
         return ListView.builder(
+          shrinkWrap: true, // [QUAN TRỌNG] Để cuộn được trong SingleScrollView
+          physics: const NeverScrollableScrollPhysics(), // Tắt cuộn riêng
           itemCount: history.length,
-          physics: const BouncingScrollPhysics(),
           itemBuilder: (context, index) {
             final item = history[index];
             final DateTime checkInTime =

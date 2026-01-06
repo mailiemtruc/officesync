@@ -8,9 +8,10 @@ class AttendanceApi {
   final ApiClient _apiClient = ApiClient();
 
   // URL Service Chấm công (Port 8083)
+  // Nếu chạy máy thật: thay 10.0.2.2 bằng IP LAN (VD: 192.168.1.x)
   static const String _serviceUrl = 'http://10.0.2.2:8083/api/attendance';
 
-  // 1. Hàm Check-in (Giữ nguyên)
+  // 1. Hàm Check-in
   Future<AttendanceModel> checkIn(
     int companyId,
     double lat,
@@ -34,7 +35,7 @@ class AttendanceApi {
     }
   }
 
-  // 2. [ĐÃ SỬA] Hàm lấy lịch sử chấm công theo Tháng/Năm
+  // 2. Hàm lấy lịch sử chấm công cá nhân (User thường)
   Future<List<AttendanceModel>> getHistory(
     int userId,
     int month,
@@ -43,14 +44,10 @@ class AttendanceApi {
     try {
       final response = await _apiClient.get(
         '$_serviceUrl/history',
-        // [MỚI] Truyền tháng và năm lên Server qua Query Params
-        // URL thực tế sẽ là: .../history?month=1&year=2026
         queryParameters: {'month': month, 'year': year},
-        // Truyền User ID vào Header
         options: Options(headers: {'X-User-Id': userId}),
       );
 
-      // Convert dữ liệu JSON trả về (List) thành List<AttendanceModel>
       if (response.data is List) {
         return (response.data as List)
             .map((e) => AttendanceModel.fromJson(e))
@@ -58,18 +55,17 @@ class AttendanceApi {
       }
       return [];
     } catch (e) {
-      // Nếu lỗi thì trả về danh sách rỗng để không crash app
       print("Error fetching history: $e");
       return [];
     }
   }
 
-  // [MỚI] Hàm lấy bảng công tổng hợp (Dành cho Manager)
+  // 3. [QUAN TRỌNG] Hàm lấy bảng công tổng hợp (Dành cho Manager/Admin)
   Future<List<AttendanceModel>> getManagerAllAttendance(
-    int userId, // [THÊM] Cần ID của Manager để Backend biết thuộc công ty nào
-    String userRole,
-    int month,
-    int year,
+    int userId, // [THAM SỐ 1]: int
+    String userRole, // [THAM SỐ 2]: String
+    int month, // [THAM SỐ 3]: int
+    int year, // [THAM SỐ 4]: int
   ) async {
     try {
       final response = await _apiClient.get(
@@ -77,8 +73,8 @@ class AttendanceApi {
         queryParameters: {'month': month, 'year': year},
         options: Options(
           headers: {
-            'X-User-Id': userId, // [THÊM] Gửi ID
-            'X-User-Role': userRole, // Gửi Role
+            'X-User-Id': userId, // Truyền ID người quản lý
+            'X-User-Role': userRole, // Truyền Role để Backend check quyền
           },
         ),
       );

@@ -38,7 +38,7 @@ public class CompanyConfigConsumer {
             // 2. [MỚI] Parse từ String sang Object
             CompanyConfigEvent event = objectMapper.readValue(cleanJson, CompanyConfigEvent.class);
             
-            log.info("--> [Attendance] Đang xử lý update cho Company ID: {}", event.getCompanyId());
+            log.info("--> [Attendance] Processing an update for the Company ID: {}", event.getCompanyId());
 
             // 3. Logic lưu DB (Giữ nguyên như cũ)
             List<OfficeConfig> configs = officeRepo.findByCompanyId(event.getCompanyId());
@@ -61,10 +61,10 @@ public class CompanyConfigConsumer {
 
             // Lưu xuống DB
             officeRepo.save(config);
-            log.info("--> Đã lưu cấu hình chấm công thành công!");
+            log.info("--> Timekeeping configuration successfully saved!");
 
         } catch (Exception e) {
-            log.error("Lỗi xử lý config event: {}", e.getMessage());
+            log.error("Event configuration handling error: {}", e.getMessage());
             e.printStackTrace(); // In stack trace để dễ debug nếu json sai format
         }
     }
