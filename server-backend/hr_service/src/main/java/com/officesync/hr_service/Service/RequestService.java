@@ -5,12 +5,10 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set; 
-
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional; 
-
 import com.officesync.hr_service.DTO.NotificationEvent;
 import com.officesync.hr_service.Model.Department;
 import com.officesync.hr_service.Model.Employee;
@@ -23,9 +21,11 @@ import com.officesync.hr_service.Repository.DepartmentRepository;
 import com.officesync.hr_service.Repository.EmployeeRepository;
 import com.officesync.hr_service.Repository.RequestAuditLogRepository;
 import com.officesync.hr_service.Repository.RequestRepository;
-
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -38,6 +38,10 @@ public class RequestService {
    private final SimpMessagingTemplate messagingTemplate;
    // --- 1. TẠO ĐƠN MỚI ---
     @Transactional
+    @Caching(evict = {
+        @CacheEvict(value = "request_list_user", key = "#userId"),
+        @CacheEvict(value = "request_list_manager", allEntries = true) 
+    })
     public Request createRequest(Long userId, Request requestData) {
         // A. Lấy thông tin người tạo đơn
         Employee requester = employeeRepository.findById(userId)
@@ -168,6 +172,11 @@ public class RequestService {
 
    // --- 2. DUYỆT ĐƠN (ĐÃ SỬA LOGIC PHÂN QUYỀN CHẶT CHẼ) ---
     @Transactional
+    @Caching(evict = {
+        @CacheEvict(value = "request_detail", key = "#requestId"), // Xóa cache chi tiết
+        @CacheEvict(value = "request_list_user", allEntries = true), // Xóa list user (để họ thấy trạng thái mới)
+        @CacheEvict(value = "request_list_manager", allEntries = true) // Xóa list manager
+    })
     public Request approveRequest(Long requestId, Long approverId, RequestStatus newStatus, String comment) {
         Request request = requestRepository.findById(requestId)
                 .orElseThrow(() -> new RuntimeException("Request not found"));
@@ -262,6 +271,7 @@ public class RequestService {
     }
 
 // --- 3. LẤY DANH SÁCH DUYỆT (ĐÃ SỬA LỖI HIỂN THỊ) ---
+@Cacheable(value = "request_list_manager", key = "'manager_' + #managerId", condition = "#search == null && #day == null && #month == null && #year == null", sync = true)
     public List<Request> getRequestsForManager(Long requesterId, String keyword, Integer day, Integer month, Integer year) {
         Employee requester = employeeRepository.findById(requesterId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
@@ -308,6 +318,11 @@ public class RequestService {
 
 
   @Transactional
+  @Caching(evict = {
+        @CacheEvict(value = "request_detail", key = "#requestId"),
+        @CacheEvict(value = "request_list_user", key = "#userId"),
+        @CacheEvict(value = "request_list_manager", allEntries = true)
+    })
     public void cancelRequest(Long requestId, Long userId) {
         Request request = requestRepository.findById(requestId)
                 .orElseThrow(() -> new RuntimeException("Request not found"));
@@ -402,7 +417,8 @@ public class RequestService {
     }
 
 // 2. Sửa hàm getMyRequests (Dùng cho Nhân viên xem đơn của mình)
-public List<Request> getMyRequests(Long userId, String keyword,Integer day, Integer month, Integer year) {
+  @Cacheable(value = "request_list_user", key = "#userId", condition = "#search == null && #day == null && #month == null && #year == null", sync = true)
+   public List<Request> getMyRequests(Long userId, String keyword,Integer day, Integer month, Integer year) {
     String searchKey = (keyword != null && !keyword.trim().isEmpty()) ? keyword.trim() : null;
     
     return requestRepository.searchRequestsForEmployee(

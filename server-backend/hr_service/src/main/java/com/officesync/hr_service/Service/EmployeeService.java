@@ -22,7 +22,9 @@ import com.officesync.hr_service.Repository.DepartmentRepository; // [THÊM]
 import com.officesync.hr_service.Repository.EmployeeRepository; // [THÊM]
 import com.officesync.hr_service.Repository.RequestAuditLogRepository; // [THÊM]
 import com.officesync.hr_service.Repository.RequestRepository; // [THÊM]
-
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 @Service
@@ -38,6 +40,7 @@ public class EmployeeService {
    private final EmployeeProducer employeeProducer;
 
   // [SỬA] Thay tham số Long companyId -> Employee creator
+  @CacheEvict(value = "employees", allEntries = true)
     public Employee createEmployee(Employee newEmployee, Employee creator, Long departmentId, String password) {
         
         // 1. KIỂM TRA QUYỀN HẠN (Permission Check)
@@ -262,8 +265,8 @@ public class EmployeeService {
         int randomNum = (int) (Math.random() * 1000000);
         return String.format("NV%06d", randomNum);
     }
-
- public List<Employee> getAllEmployeesByRequester(Long requesterId) {
+   @Cacheable(value = "employees", key = "#requesterId", sync = true)
+    public List<Employee> getAllEmployeesByRequester(Long requesterId) {
         // 1. Xác định người gọi
         Employee requester = employeeRepository.findById(requesterId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
@@ -293,6 +296,10 @@ public class EmployeeService {
 
    // [CẬP NHẬT] Thêm tham số 'Employee updater' vào đầu hàm
     @Transactional
+    @Caching(evict = {
+        @CacheEvict(value = "employee_detail", key = "#id"),      // Xóa cache chi tiết ID đó
+        @CacheEvict(value = "employees", allEntries = true)       // Xóa cache danh sách tổng
+    })
     public Employee updateEmployee(
             Employee updater, // <--- Người thực hiện sửa
             Long id, 
@@ -468,6 +475,10 @@ public class EmployeeService {
 
    // [CẬP NHẬT BẢO MẬT + LOGIC XÓA]
     @Transactional
+    @Caching(evict = {
+        @CacheEvict(value = "employee_detail", key = "#targetId"),
+        @CacheEvict(value = "employees", allEntries = true)
+    })
     public void deleteEmployee(Employee deleter, Long targetId) { // [SỬA] Thêm tham số deleter
         
         // 1. Tìm nhân viên cần xóa

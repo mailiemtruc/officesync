@@ -40,17 +40,17 @@ public class RabbitMQConfig {
         mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
         return mapper;
     }
-
+// [SỬA LỖI] Inject ObjectMapper vào để khởi tạo Converter chuẩn
     @Bean
-    public MessageConverter converter(ObjectMapper objectMapper) {
+    public MessageConverter jsonMessageConverter(ObjectMapper objectMapper) {
         return new Jackson2JsonMessageConverter(objectMapper);
     }
 
     @Bean
-    public RabbitTemplate amqpTemplate(ConnectionFactory connectionFactory, MessageConverter converter) {
-        RabbitTemplate rabbitTemplate = new RabbitTemplate(connectionFactory);
-        rabbitTemplate.setMessageConverter(converter);
-        return rabbitTemplate;
+    public RabbitTemplate rabbitTemplate(ConnectionFactory connectionFactory, MessageConverter jsonMessageConverter) {
+        RabbitTemplate template = new RabbitTemplate(connectionFactory);
+        template.setMessageConverter(jsonMessageConverter);
+        return template;
     }
 
     // =========================================================
