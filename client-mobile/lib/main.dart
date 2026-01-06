@@ -9,6 +9,7 @@ import 'features/core_service/presentation/pages/forgot_password_screen.dart';
 import 'features/core_service/presentation/pages/otp_verification_screen.dart';
 import 'dashboard_screen.dart';
 import 'features/hr_service/presentation/pages/user_profile_page.dart';
+import 'features/attendance_service/presentation/pages/attendance_screen.dart';
 
 // --- THÊM IMPORT CÁC TRANG MỚI ---
 import 'features/hr_service/presentation/pages/my_requests_page.dart';
@@ -144,6 +145,8 @@ class OfficeSyncApp extends StatelessWidget {
         '/manager_requests': (context) => const ManagerRequestListPage(),
         '/employees': (context) => const EmployeeListPage(),
         '/notes': (context) => const NoteListScreen(),
+
+        '/attendance': (context) => const AttendanceScreen(),
 
         // ======================= TASK_SERVICE ==============================
         // Logic phân quyền: Route này nhận 'role' từ Dashboard gửi sang
