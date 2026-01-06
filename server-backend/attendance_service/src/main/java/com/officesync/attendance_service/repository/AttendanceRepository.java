@@ -20,4 +20,10 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
     List<Attendance> findByUserIdOrderByCheckInTimeDesc(Long userId);
 
     List<Attendance> findByCheckInTimeBetweenOrderByCheckInTimeDesc(LocalDateTime start, LocalDateTime end);
+
+    List<Attendance> findByCompanyIdAndCheckInTimeBetweenOrderByCheckInTimeDesc(
+        Long companyId, 
+        LocalDateTime start, 
+        LocalDateTime end
+    );
 }

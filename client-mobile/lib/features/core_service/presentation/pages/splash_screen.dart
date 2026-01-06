@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../../../core/config/app_colors.dart';
 import '../../../../dashboard_screen.dart';
 import '../../../../../core/services/websocket_service.dart';
+import 'login_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -28,6 +29,7 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _checkLoginStatus() async {
+    // Giữ nguyên delay logo
     await Future.delayed(const Duration(seconds: 3));
 
     if (!mounted) return;
@@ -40,7 +42,20 @@ class _SplashScreenState extends State<SplashScreen> {
     if (token != null && userInfoStr != null) {
       try {
         final Map<String, dynamic> userData = jsonDecode(userInfoStr);
+
+        // --- [BẮT ĐẦU ĐOẠN CẦN THÊM] ---
+        // Kiểm tra xem userId đã được lưu riêng chưa. Nếu chưa thì trích xuất từ user_info ra lưu lại.
+        String? currentUserId = await storage.read(key: 'userId');
+        if (currentUserId == null && userData['id'] != null) {
+          await storage.write(key: 'userId', value: userData['id'].toString());
+          print(
+            "✅ Auto Login: Đã khôi phục UserID thành công: ${userData['id']}",
+          );
+        }
+        // --- [KẾT THÚC ĐOẠN CẦN THÊM] ---
+
         WebSocketService().connect();
+
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
@@ -48,10 +63,19 @@ class _SplashScreenState extends State<SplashScreen> {
           ),
         );
       } catch (e) {
-        Navigator.pushReplacementNamed(context, '/register');
+        print("Lỗi parse user info: $e");
+        // Nếu lỗi dữ liệu cũ, bắt đăng nhập lại cho an toàn
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const LoginScreen()),
+        );
       }
     } else {
-      Navigator.pushReplacementNamed(context, '/register');
+      // Chưa đăng nhập
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+      );
     }
   }
 

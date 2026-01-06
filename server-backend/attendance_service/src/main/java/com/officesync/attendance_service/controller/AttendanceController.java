@@ -15,7 +15,9 @@ import org.springframework.web.bind.annotation.RequestParam; // [MỚI]
 import org.springframework.web.bind.annotation.RestController;
 
 import com.officesync.attendance_service.model.Attendance;
+import com.officesync.attendance_service.model.AttendanceUser;
 import com.officesync.attendance_service.repository.AttendanceRepository;
+import com.officesync.attendance_service.repository.AttendanceUserRepository;
 import com.officesync.attendance_service.service.AttendanceService;
 
 import lombok.Data;
@@ -28,6 +30,7 @@ public class AttendanceController {
 
     private final AttendanceService attendanceService;
     private final AttendanceRepository attendanceRepo;
+    private final AttendanceUserRepository userRepo;
 
     @Data
     public static class CheckInRequest {
@@ -96,37 +99,53 @@ public class AttendanceController {
         return ResponseEntity.ok(history);
     }
 
-    // API 3: [MỚI] Quản lý xem bảng công tổng hợp
+    // --- API DÀNH CHO MANAGER ---
     @GetMapping("/manager/list")
-    public ResponseEntity<?> getAllAttendanceForManager(
-            @RequestHeader("X-User-Role") String userRole, // Lấy Role từ Header
+    public ResponseEntity<?> getListForManager(
+            @RequestHeader("X-User-Id") Long managerId, // ID người gọi API
+            @RequestHeader("X-User-Role") String userRole,
             @RequestParam(required = false) Integer month,
             @RequestParam(required = false) Integer year
     ) {
-        // 1. [SỬA ĐOẠN NÀY] KIỂM TRA QUYỀN CHẶT CHẼ HƠN
-        // Thay vì "MANAGER", ta yêu cầu "HR_MANAGER" (Quyền ảo do Client gửi lên sau khi đã check Main HR)
-        // Các quyền cấp cao như COMPANY_ADMIN, SUPER_ADMIN vẫn giữ nguyên.
-        if (!"COMPANY_ADMIN".equals(userRole) && 
-            !"HR_MANAGER".equals(userRole) && // <--- ĐỔI TỪ MANAGER THÀNH HR_MANAGER
-            !"SUPER_ADMIN".equals(userRole)) {
-            
-            return ResponseEntity.status(403).body(Map.of("error", "You do not have permission to access this data!"));
+        // 1. [BẢO MẬT] Chặn SUPER_ADMIN truy cập dữ liệu nghiệp vụ
+        if ("SUPER_ADMIN".equals(userRole)) {
+            return ResponseEntity.status(403)
+                    .body(Map.of("error", "Super Admins are not permitted to view private company data."));
         }
 
-        // 2. Xử lý thời gian (Giữ nguyên code cũ)
+        // 2. Xác định thời gian (Đầu tháng - Cuối tháng)
         if (month == null || year == null) {
             LocalDateTime now = LocalDateTime.now();
             month = now.getMonthValue();
             year = now.getYear();
         }
-
         YearMonth yearMonth = YearMonth.of(year, month);
-        LocalDateTime startOfMonth = yearMonth.atDay(1).atStartOfDay();
-        LocalDateTime endOfMonth = yearMonth.atEndOfMonth().atTime(23, 59, 59);
+        LocalDateTime start = yearMonth.atDay(1).atStartOfDay();
+        LocalDateTime end = yearMonth.atEndOfMonth().atTime(23, 59, 59);
 
-        // 3. Gọi Repo lấy tất cả (Giữ nguyên code cũ)
-        List<Attendance> allRecords = attendanceRepo.findByCheckInTimeBetweenOrderByCheckInTimeDesc(startOfMonth, endOfMonth);
+        // 3. Lấy thông tin Manager để tìm CompanyID
+        // Vì SUPER_ADMIN đã bị chặn ở trên, code chạy xuống đây chắc chắn là HR hoặc COMPANY_ADMIN
+        AttendanceUser manager = userRepo.findById(managerId).orElse(null);
+
+        if (manager == null) {
+            return ResponseEntity.status(400)
+                    .body(Map.of("error", "No management information was found in the timekeeping system."));
+        }
+
+        Long companyId = manager.getCompanyId();
         
-        return ResponseEntity.ok(allRecords);
+        // Kiểm tra kỹ hơn: Nếu user có role quản lý nhưng lại không thuộc công ty nào
+        if (companyId == null) {
+             return ResponseEntity.status(400)
+                    .body(Map.of("error", "This account has not been assigned to any company."));
+        }
+
+        // 4. Gọi Repository để lấy dữ liệu THEO COMPANY_ID
+        // Đảm bảo bạn đã khai báo hàm này trong AttendanceRepository nhé
+        List<Attendance> results = attendanceRepo.findByCompanyIdAndCheckInTimeBetweenOrderByCheckInTimeDesc(
+                companyId, start, end
+        );
+
+        return ResponseEntity.ok(results);
     }
 }

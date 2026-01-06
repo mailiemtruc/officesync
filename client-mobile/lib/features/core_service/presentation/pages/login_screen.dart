@@ -477,6 +477,11 @@ class _LoginScreenState extends State<LoginScreen> {
         await storage.write(key: 'auth_token', value: token);
         await storage.write(key: 'user_info', value: jsonEncode(user));
 
+        if (user['id'] != null) {
+          await storage.write(key: 'userId', value: user['id'].toString());
+          print("✅ Đã lưu UserID: ${user['id']} vào Storage");
+        }
+
         // [QUAN TRỌNG] KẾT NỐI SOCKET TẠI ĐÂY
         WebSocketService().connect();
 

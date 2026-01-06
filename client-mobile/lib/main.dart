@@ -150,8 +150,11 @@ class OfficeSyncApp extends StatelessWidget {
         '/attendance': (context) => const AttendanceScreen(),
         '/manager_attendance': (context) {
           final args = ModalRoute.of(context)?.settings.arguments;
-          // Fallback là 'MANAGER' vì Backend chấp nhận giá trị này
-          String role = args is String ? args : 'MANAGER';
+
+          // Sửa: Nếu không có args, mặc định lấy 'HR_MANAGER' để test cho dễ,
+          // hoặc lấy role từ Storage nếu có thể (nhưng cách truyền args là chuẩn nhất)
+          String role = args is String ? args : 'HR_MANAGER';
+
           return ManagerAttendanceScreen(userRole: role);
         },
 

@@ -66,6 +66,7 @@ class AttendanceApi {
 
   // [MỚI] Hàm lấy bảng công tổng hợp (Dành cho Manager)
   Future<List<AttendanceModel>> getManagerAllAttendance(
+    int userId, // [THÊM] Cần ID của Manager để Backend biết thuộc công ty nào
     String userRole,
     int month,
     int year,
@@ -74,8 +75,12 @@ class AttendanceApi {
       final response = await _apiClient.get(
         '$_serviceUrl/manager/list',
         queryParameters: {'month': month, 'year': year},
-        // [QUAN TRỌNG] Gửi Role lên để Backend kiểm tra
-        options: Options(headers: {'X-User-Role': userRole}),
+        options: Options(
+          headers: {
+            'X-User-Id': userId, // [THÊM] Gửi ID
+            'X-User-Role': userRole, // Gửi Role
+          },
+        ),
       );
 
       if (response.data is List) {
@@ -85,8 +90,8 @@ class AttendanceApi {
       }
       return [];
     } catch (e) {
-      print("Error fetching manager data: $e");
-      rethrow; // Ném lỗi để UI xử lý (hiện thông báo cấm truy cập)
+      print("Manager Fetch Error: $e");
+      return [];
     }
   }
 }

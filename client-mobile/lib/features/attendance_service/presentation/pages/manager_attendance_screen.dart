@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
 import 'package:intl/intl.dart';
 import '../../data/attendance_api.dart';
 import '../../data/models/attendance_model.dart';
 import '../../../../core/config/app_colors.dart'; // Nếu bạn có file màu chung, hoặc xóa dòng này dùng Colors cứng
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class ManagerAttendanceScreen extends StatefulWidget {
   final String userRole; // Truyền Role (HR_MANAGER hoặc DIRECTOR)
@@ -16,6 +18,7 @@ class ManagerAttendanceScreen extends StatefulWidget {
 
 class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
   final AttendanceApi _api = AttendanceApi();
+  final _storage = const FlutterSecureStorage();
 
   // Biến trạng thái
   DateTime _selectedDate = DateTime.now();
@@ -35,7 +38,40 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
   Future<void> _fetchData() async {
     setState(() => _isLoading = true);
     try {
+      String? userIdStr = await _storage.read(key: 'userId');
+
+      // [LOGIC MỚI] Nếu userId chưa có, thử tìm trong 'user_info' (Backup)
+      if (userIdStr == null) {
+        print("⚠️ Không tìm thấy key 'userId', đang thử lấy từ 'user_info'...");
+        String? userInfoStr = await _storage.read(key: 'user_info');
+
+        if (userInfoStr != null) {
+          try {
+            final userJson = jsonDecode(userInfoStr);
+            if (userJson['id'] != null) {
+              userIdStr = userJson['id'].toString();
+              // Lưu lại luôn để lần sau không phải tìm nữa
+              await _storage.write(key: 'userId', value: userIdStr);
+              print("✅ Đã khôi phục UserID: $userIdStr từ user_info");
+            }
+          } catch (e) {
+            print("❌ Lỗi parse user_info: $e");
+          }
+        }
+      }
+
+      // Kiểm tra lần cuối
+      if (userIdStr == null) {
+        print("⛔ Vẫn không tìm thấy User ID. Vui lòng đăng nhập lại.");
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      int userId = int.parse(userIdStr);
+      print("🚀 Đang gọi API với UserID: $userId");
+
       final data = await _api.getManagerAllAttendance(
+        userId,
         widget.userRole,
         _selectedDate.month,
         _selectedDate.year,
@@ -45,16 +81,9 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
         _records = data;
       });
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Lỗi tải dữ liệu: ${e.toString()}"),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      print("Error: $e");
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      setState(() => _isLoading = false);
     }
   }
 
