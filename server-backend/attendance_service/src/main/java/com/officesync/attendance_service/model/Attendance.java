@@ -1,5 +1,6 @@
 package com.officesync.attendance_service.model;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 import jakarta.persistence.Column;
@@ -31,4 +32,10 @@ public class Attendance {
     private String deviceBssid;  // BSSID của thiết bị lúc check-in
     private String type;
     private String status;       // ON_TIME, LATE...
+    private String fullName;
+    private String email;
+    private String phone;
+    private LocalDate dateOfBirth;
+    private String role;
+    private String departmentName;
 }

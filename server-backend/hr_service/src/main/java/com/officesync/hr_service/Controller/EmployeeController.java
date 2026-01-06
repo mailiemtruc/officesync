@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.officesync.hr_service.Model.Employee; // Nhớ import List
+import com.officesync.hr_service.Model.EmployeeRole;
 import com.officesync.hr_service.Repository.EmployeeRepository;
 import com.officesync.hr_service.Service.EmployeeService; // [MỚI]
 
@@ -194,5 +195,32 @@ public class EmployeeController {
         // Gọi Repository đã có sẵn hàm findByDepartmentId
         List<Employee> employees = employeeRepository.findByDepartmentId(deptId);
         return ResponseEntity.ok(employees);
+    }
+
+    // [MỚI] API kiểm tra quyền truy cập Attendance Manager
+    @GetMapping("/check-hr-permission")
+    public ResponseEntity<?> checkHrPermission(@RequestHeader("X-User-Id") Long requesterId) {
+        try {
+            Employee employee = employeeRepository.findById(requesterId)
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+
+            boolean isCompanyAdmin = employee.getRole() == EmployeeRole.COMPANY_ADMIN;
+            
+            // Logic kiểm tra: Là Manager VÀ Phòng ban đó có bật cờ isHr
+            boolean isHrManager = false;
+            if (employee.getRole() == EmployeeRole.MANAGER && employee.getDepartment() != null) {
+                isHrManager = Boolean.TRUE.equals(employee.getDepartment().getIsHr());
+            }
+            
+            // Trả về kết quả
+            return ResponseEntity.ok(Map.of(
+                "isCompanyAdmin", isCompanyAdmin,
+                "isHrManager", isHrManager,
+                "canAccessAttendance", (isCompanyAdmin || isHrManager)
+            ));
+
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
     }
 }

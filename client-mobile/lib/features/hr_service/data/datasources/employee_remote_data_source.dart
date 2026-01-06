@@ -3,9 +3,14 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import '../models/employee_model.dart';
 import '../models/department_model.dart';
+import '../../../../core/api/api_client.dart';
+import 'package:dio/dio.dart';
+import '../models/employee_model.dart';
 
 class EmployeeRemoteDataSource {
+  final ApiClient _apiClient = ApiClient();
   static const String baseUrl = 'http://10.0.2.2:8081/api';
+  static const String _baseUrl = 'http://10.0.2.2:8081/api/employees';
 
   static const String storageUrl = 'http://10.0.2.2:8090/api/files/upload';
   // 1. TẠO NHÂN VIÊN
@@ -273,6 +278,26 @@ class EmployeeRemoteDataSource {
     } catch (e) {
       print("Error uploading file: $e");
       rethrow;
+    }
+  }
+
+  // [MỚI] Hàm kiểm tra quyền HR Manager
+  Future<bool> checkHrPermission(int userId) async {
+    try {
+      final response = await _apiClient.get(
+        '$_baseUrl/check-hr-permission',
+        options: Options(headers: {'X-User-Id': userId}),
+      );
+
+      // Backend trả về: { "canAccessAttendance": true/false }
+      if (response.data != null &&
+          response.data['canAccessAttendance'] != null) {
+        return response.data['canAccessAttendance'] as bool;
+      }
+      return false;
+    } catch (e) {
+      print("Error checking HR permission: $e");
+      return false; // Mặc định chặn nếu lỗi mạng
     }
   }
 }

@@ -260,6 +260,8 @@ import 'features/hr_service/presentation/pages/user_profile_page.dart';
 // ✅ [THÊM DÒNG NÀY] Import service thông báo
 import 'features/notification_service/notification_service.dart';
 
+import 'features/hr_service/data/datasources/employee_remote_data_source.dart';
+
 class DashboardScreen extends StatefulWidget {
   final Map<String, dynamic> userInfo;
 
@@ -274,6 +276,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // [SỬA LỖI] Dùng IndexedStack để giữ trạng thái trang, tránh reload khi chuyển tab
   late List<Widget> _pages;
+  bool _canAccessHrAttendance = false;
 
   @override
   void initState() {
@@ -300,6 +303,57 @@ class _DashboardScreenState extends State<DashboardScreen> {
     } catch (e) {
       print("--> Lỗi khi khởi tạo thông báo: $e");
     }
+    _checkPermission();
+  }
+
+  // [MỚI] Hàm logic kiểm tra quyền từ Server
+  Future<void> _checkPermission() async {
+    final String role = widget.userInfo['role'] ?? 'STAFF';
+
+    // Trường hợp 1: Nếu là Admin/Super Admin -> Luôn cho phép
+    if (role == 'COMPANY_ADMIN' || role == 'SUPER_ADMIN') {
+      if (mounted) {
+        setState(() {
+          _canAccessHrAttendance = true;
+          // Cập nhật lại _pages để UI Menu render lại nút mới (nếu cần thiết với IndexedStack)
+          _updatePages(role);
+        });
+      }
+      return;
+    }
+
+    // Trường hợp 2: Nếu là Manager -> Cần hỏi Server xem phòng ban có phải là HR không
+    if (role == 'MANAGER') {
+      int userId = int.tryParse(widget.userInfo['id'].toString()) ?? 0;
+
+      // Gọi API qua DataSource
+      final dataSource = EmployeeRemoteDataSource();
+      final canAccess = await dataSource.checkHrPermission(userId);
+
+      if (mounted) {
+        setState(() {
+          _canAccessHrAttendance = canAccess;
+          _updatePages(role); // Cập nhật lại giao diện
+        });
+      }
+    } else {
+      // Trường hợp 3: Staff -> Chặn
+      if (mounted) {
+        setState(() {
+          _canAccessHrAttendance = false;
+          _updatePages(role);
+        });
+      }
+    }
+  }
+
+  // Hàm hỗ trợ cập nhật lại danh sách trang (để Menu nhận biến _canAccessHrAttendance mới)
+  void _updatePages(String role) {
+    _pages = [
+      _buildHomeByRole(role),
+      _buildMenuPage(role),
+      UserProfilePage(userInfo: widget.userInfo),
+    ];
   }
 
   @override
@@ -469,17 +523,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       width: itemWidth,
                     ),
 
-                    if (role == 'COMPANY_ADMIN' ||
-                        role == 'MANAGER' ||
-                        role == 'SUPER_ADMIN')
+                    if (_canAccessHrAttendance)
                       _buildMenuItem(
                         context,
-                        title: 'HR Attendance', // Bảng công tổng hợp
-                        icon: PhosphorIconsFill.chartBar, // Icon biểu đồ
+                        title: 'HR Attendance',
+                        icon: PhosphorIconsFill.chartBar,
                         color: Colors.indigo,
-                        route: '/manager_attendance', // Route mới
+                        route: '/manager_attendance',
                         width: itemWidth,
-                        arguments: role, // Truyền role sang màn hình quản lý
+
+                        // [SỬA QUAN TRỌNG] Logic gửi "Quyền ảo" sang màn hình ManagerAttendanceScreen
+                        // Nếu là Manager thường nhưng đã qua được vòng check _canAccessHrAttendance -> Gửi "HR_MANAGER"
+                        // Nếu là Admin -> Giữ nguyên role gốc ("COMPANY_ADMIN")
+                        arguments: (role == 'MANAGER') ? 'HR_MANAGER' : role,
                       ),
                   ],
                 );

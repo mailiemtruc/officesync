@@ -1,4 +1,4 @@
-package com.officesync.core.dto;
+package com.officesync.attendance_service.dto;
 
 import java.time.LocalDate;
 
@@ -13,7 +13,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class EmployeeSyncEvent {
-    private Long id;
+    private Long id; // [MỚI] Thêm trường này để đồng bộ Update/Delete
     private String email;
     private String fullName;
     private String phone;
@@ -21,5 +21,6 @@ public class EmployeeSyncEvent {
     private Long companyId;
     private String role;
     private String status;
-    private String password; // Nhận mật khẩu thô từ HR
+    private String password; // [MỚI] Khôi phục lại trường này
+    private String departmentName;
 }

@@ -103,13 +103,17 @@ public class AttendanceController {
             @RequestParam(required = false) Integer month,
             @RequestParam(required = false) Integer year
     ) {
-        // 1. KIỂM TRA QUYỀN (Quan trọng)
-        // Chỉ cho phép COMPANY_ADMIN, MANAGER và SUPER_ADMIN
-        if (!"COMPANY_ADMIN".equals(userRole) && !"MANAGER".equals(userRole) && !"SUPER_ADMIN".equals(userRole)) {
+        // 1. [SỬA ĐOẠN NÀY] KIỂM TRA QUYỀN CHẶT CHẼ HƠN
+        // Thay vì "MANAGER", ta yêu cầu "HR_MANAGER" (Quyền ảo do Client gửi lên sau khi đã check Main HR)
+        // Các quyền cấp cao như COMPANY_ADMIN, SUPER_ADMIN vẫn giữ nguyên.
+        if (!"COMPANY_ADMIN".equals(userRole) && 
+            !"HR_MANAGER".equals(userRole) && // <--- ĐỔI TỪ MANAGER THÀNH HR_MANAGER
+            !"SUPER_ADMIN".equals(userRole)) {
+            
             return ResponseEntity.status(403).body(Map.of("error", "You do not have permission to access this data!"));
         }
 
-        // 2. Xử lý thời gian (giống hàm getHistory)
+        // 2. Xử lý thời gian (Giữ nguyên code cũ)
         if (month == null || year == null) {
             LocalDateTime now = LocalDateTime.now();
             month = now.getMonthValue();
@@ -120,7 +124,7 @@ public class AttendanceController {
         LocalDateTime startOfMonth = yearMonth.atDay(1).atStartOfDay();
         LocalDateTime endOfMonth = yearMonth.atEndOfMonth().atTime(23, 59, 59);
 
-        // 3. Gọi Repo lấy tất cả
+        // 3. Gọi Repo lấy tất cả (Giữ nguyên code cũ)
         List<Attendance> allRecords = attendanceRepo.findByCheckInTimeBetweenOrderByCheckInTimeDesc(startOfMonth, endOfMonth);
         
         return ResponseEntity.ok(allRecords);

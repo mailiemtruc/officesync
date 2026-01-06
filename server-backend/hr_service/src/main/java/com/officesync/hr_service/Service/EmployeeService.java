@@ -100,6 +100,10 @@ public class EmployeeService {
             try {
                 String passwordToSend = (password != null && !password.isEmpty()) ? password : "123456";
 
+                String deptName = (savedEmployee.getDepartment() != null) 
+                            ? savedEmployee.getDepartment().getName() 
+                            : "N/A";
+
                 EmployeeSyncEvent event = new EmployeeSyncEvent(
                     null, 
                     savedEmployee.getEmail(),
@@ -109,7 +113,8 @@ public class EmployeeService {
                     savedEmployee.getCompanyId(),
                     savedEmployee.getRole().name(),
                     savedEmployee.getStatus().name(),
-                    passwordToSend 
+                    passwordToSend,
+                    deptName
                 );
                 
                 employeeProducer.sendEmployeeCreatedEvent(event);
@@ -437,6 +442,9 @@ public class EmployeeService {
 
         // 6. Gửi RabbitMQ đồng bộ
         try {
+            String deptName = (savedEmployee.getDepartment() != null) 
+                        ? savedEmployee.getDepartment().getName() 
+                        : "N/A";
             EmployeeSyncEvent event = new EmployeeSyncEvent(
                 savedEmployee.getId(),
                 savedEmployee.getEmail(),
@@ -446,7 +454,8 @@ public class EmployeeService {
                 savedEmployee.getCompanyId(),
                 savedEmployee.getRole().name(), 
                 savedEmployee.getStatus().name(),
-                null
+                null,
+                deptName
             );
             employeeProducer.sendEmployeeUpdatedEvent(event);
         } catch (Exception e) {

@@ -8,8 +8,10 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 
 import com.officesync.attendance_service.model.Attendance;
+import com.officesync.attendance_service.model.AttendanceUser;
 import com.officesync.attendance_service.model.OfficeConfig;
 import com.officesync.attendance_service.repository.AttendanceRepository;
+import com.officesync.attendance_service.repository.AttendanceUserRepository;
 import com.officesync.attendance_service.repository.OfficeConfigRepository;
 
 import lombok.RequiredArgsConstructor;
@@ -22,6 +24,7 @@ public class AttendanceService {
 
     private final AttendanceRepository attendanceRepo;
     private final OfficeConfigRepository officeConfigRepo;
+    private final AttendanceUserRepository userRepo;
 
     public Attendance processCheckIn(Long userId, Long companyId, Double lat, Double lng, String bssid) {
         
@@ -75,14 +78,32 @@ public class AttendanceService {
         Attendance att = new Attendance();
         att.setUserId(userId);
         att.setCompanyId(companyId);
+        
+        // [MỚI] LẤY THÔNG TIN USER VÀ LƯU (Snapshot data)
+        AttendanceUser user = userRepo.findById(userId).orElse(null);
+        if (user != null) {
+            att.setFullName(user.getFullName());
+            att.setEmail(user.getEmail());
+            att.setPhone(user.getPhone());
+            att.setDateOfBirth(user.getDateOfBirth());
+            att.setRole(user.getRole());                     
+            att.setDepartmentName(user.getDepartmentName());
+        } else {
+            // Fallback nếu chưa đồng bộ kịp (Tránh lỗi null)
+            att.setFullName("Unknown");
+            att.setRole("UNKNOWN");
+            att.setDepartmentName("UNKNOWN");
+        }
+
         att.setCheckInTime(LocalDateTime.now());
         att.setLocationName(matchedLocation);
         att.setDeviceBssid(bssid);
-        att.setType(attendanceType); // [MỚI] Lưu loại (Vào hoặc Ra)
-        att.setStatus("ON_TIME"); // Logic tính muộn có thể phát triển thêm dựa vào attendanceType
+        att.setType(attendanceType); 
+        att.setStatus("ON_TIME"); 
 
         return attendanceRepo.save(att);
     }
+    
 
     private double calculateHaversineDistance(double lat1, double lon1, double lat2, double lon2) {
         final int R = 6371; 

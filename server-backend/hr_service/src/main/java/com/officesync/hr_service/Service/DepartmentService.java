@@ -273,6 +273,9 @@ public class DepartmentService {
     // Các hàm phụ trợ giữ nguyên
     private void syncEmployeeToCore(Employee emp) {
         try {
+            String deptName = (emp.getDepartment() != null) 
+                            ? emp.getDepartment().getName() 
+                            : "N/A";
             EmployeeSyncEvent event = new EmployeeSyncEvent(
                 emp.getId(),
                 emp.getEmail(),
@@ -282,7 +285,8 @@ public class DepartmentService {
                 emp.getCompanyId(),
                 emp.getRole().name(),
                 emp.getStatus().name(),
-                null
+                null,
+                deptName
             );
             employeeProducer.sendEmployeeUpdatedEvent(event);
         } catch (Exception e) {

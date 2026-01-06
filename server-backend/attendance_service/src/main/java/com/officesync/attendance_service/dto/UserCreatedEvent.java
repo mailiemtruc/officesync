@@ -1,25 +1,27 @@
-package com.officesync.core.dto;
+package com.officesync.attendance_service.dto;
 
 import java.time.LocalDate;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 @Data
-@AllArgsConstructor
 @NoArgsConstructor
+@AllArgsConstructor
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class EmployeeSyncEvent {
+public class UserCreatedEvent {
     private Long id;
+    private Long companyId;
+    @JsonProperty("date_of_birth") 
+    private LocalDate dateOfBirth;
     private String email;
     private String fullName;
-    private String phone;
-    private LocalDate dateOfBirth;
-    private Long companyId;
+    @JsonProperty("mobile_number")
+    private String mobileNumber;
     private String role;
     private String status;
-    private String password; // Nhận mật khẩu thô từ HR
 }

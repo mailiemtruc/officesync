@@ -19,4 +19,5 @@ public class EmployeeSyncEvent {
     private String role;
     private String status;
     private String password; // [MỚI] Khôi phục lại trường này
+    private String departmentName;
 }

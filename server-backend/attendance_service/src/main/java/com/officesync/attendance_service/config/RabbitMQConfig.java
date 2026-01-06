@@ -17,6 +17,8 @@ public class RabbitMQConfig {
     public static final String EXCHANGE_INTERNAL = "internal.exchange";
     public static final String QUEUE_ATTENDANCE_CONFIG = "attendance.config.queue";
     public static final String ROUTING_KEY_COMPANY_CONFIG = "company.config.update";
+    public static final String QUEUE_USER_SYNC = "attendance.user.sync.queue";
+    public static final String EXCHANGE_EMPLOYEE = "employee.exchange"; // Tên Exchange bên HR
 
     @Bean
     public TopicExchange internalExchange() {
@@ -55,5 +57,22 @@ public class RabbitMQConfig {
         RabbitTemplate rabbitTemplate = new RabbitTemplate(connectionFactory);
         rabbitTemplate.setMessageConverter(converter);
         return rabbitTemplate;
+    }
+
+    @Bean
+    public Queue userSyncQueue() {
+        return new Queue(QUEUE_USER_SYNC);
+    }
+
+    // Vì Exchange này do HR tạo, ta chỉ cần khai báo TopicExchange trùng tên để Binding
+    @Bean
+    public TopicExchange employeeExchange() {
+        return new TopicExchange(EXCHANGE_EMPLOYEE);
+    }
+
+    @Bean
+    public Binding bindingUserSync(Queue userSyncQueue, TopicExchange employeeExchange) {
+        // Lắng nghe tất cả event liên quan employee (create, update)
+        return BindingBuilder.bind(userSyncQueue).to(employeeExchange).with("employee.#");
     }
 }
