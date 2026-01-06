@@ -537,6 +537,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         // Nếu là Admin -> Giữ nguyên role gốc ("COMPANY_ADMIN")
                         arguments: (role == 'MANAGER') ? 'HR_MANAGER' : role,
                       ),
+
+                    // ✅ [ĐÃ SỬA] Chỉ hiển thị cho COMPANY_ADMIN
+                    if (role == 'COMPANY_ADMIN')
+                      _buildMenuItem(
+                        context,
+                        title: 'Company Profile',
+                        icon: PhosphorIconsFill.buildings,
+                        color: const Color(0xFF06B6D4),
+                        route: '/company_profile',
+                        width: itemWidth,
+                      ),
                   ],
                 );
               },
