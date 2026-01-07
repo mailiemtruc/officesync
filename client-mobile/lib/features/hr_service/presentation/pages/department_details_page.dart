@@ -11,6 +11,7 @@ import '../../domain/repositories/employee_repository.dart';
 import '../../data/datasources/employee_remote_data_source.dart';
 import 'add_members_page.dart';
 import 'employee_profile_page.dart';
+import '../../../../core/utils/custom_snackbar.dart';
 
 class DepartmentDetailsPage extends StatefulWidget {
   final DepartmentModel department;
@@ -170,13 +171,11 @@ class _DepartmentDetailsPageState extends State<DepartmentDetailsPage> {
       await _fetchMembers();
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Updated: Added ${toAdd.length}, Removed ${toRemove.length}',
-            ),
-            backgroundColor: Colors.green,
-          ),
+        CustomSnackBar.show(
+          context,
+          title: 'Update Success',
+          message: 'Added ${toAdd.length}, Removed ${toRemove.length} members.',
+          isError: false,
         );
       }
     } catch (e) {
@@ -191,8 +190,12 @@ class _DepartmentDetailsPageState extends State<DepartmentDetailsPage> {
 
     // [BẢO VỆ] Chỉ Admin mới được xóa thành viên
     if (_currentUserRole != 'COMPANY_ADMIN') {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Only Admin can remove members.")),
+      // [ĐÃ SỬA] Dùng CustomSnackBar
+      CustomSnackBar.show(
+        context,
+        title: 'Permission Denied',
+        message: 'Only Admin can remove members.',
+        isError: true,
       );
       return;
     }

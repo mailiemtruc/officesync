@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-
+import '../../../../core/utils/custom_snackbar.dart';
 import '../../../../core/config/app_colors.dart';
 import '../../data/models/employee_model.dart';
 import '../../data/models/department_model.dart';
@@ -56,11 +56,12 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
 
   Future<void> _handleCreateDepartment() async {
     if (_nameController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter department name'),
-          backgroundColor: Colors.red,
-        ),
+      // [ĐÃ SỬA]
+      CustomSnackBar.show(
+        context,
+        title: 'Validation Error',
+        message: 'Please enter department name',
+        isError: true,
       );
       return;
     }
@@ -80,7 +81,7 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
         name: _nameController.text.trim(),
         manager: _selectedManager,
         memberIds: memberIds,
-        isHr: _isHr, // [MỚI] Gửi trạng thái HR
+        isHr: _isHr,
       );
 
       final success = await _departmentRepository.createDepartment(
@@ -89,21 +90,23 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
       );
 
       if (success && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Department created successfully!'),
-            backgroundColor: Colors.green,
-          ),
+        // [ĐÃ SỬA]
+        CustomSnackBar.show(
+          context,
+          title: 'Success',
+          message: 'Department created successfully!',
+          isError: false,
         );
         Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
+        // [ĐÃ SỬA]
+        CustomSnackBar.show(
+          context,
+          title: 'Error',
+          message: 'Error: ${e.toString()}',
+          isError: true,
         );
       }
     } finally {
@@ -116,7 +119,6 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
-        // [SỬA] Không truyền list nhân viên vào nữa
         builder: (context) =>
             SelectManagerPage(selectedId: _selectedManager?.id),
       ),
@@ -126,16 +128,15 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
       setState(() {
         _selectedManager = result;
 
-        // Logic loại trừ: Nếu Manager vừa chọn đang nằm trong list Member -> Xóa khỏi Member
         if (_selectedMembers.any((m) => m.id == result.id)) {
           _selectedMembers.removeWhere((m) => m.id == result.id);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
+          // [ĐÃ SỬA]
+          CustomSnackBar.show(
+            context,
+            title: 'Member Removed',
+            message:
                 '${result.fullName} has been removed from members list to be Manager.',
-              ),
-              backgroundColor: Colors.orange,
-            ),
+            isError: false,
           );
         }
       });

@@ -14,6 +14,7 @@ import '../../widgets/confirm_bottom_sheet.dart';
 import '../../domain/repositories/request_repository_impl.dart';
 import '../../domain/repositories/request_repository.dart';
 import '../../data/datasources/request_remote_data_source.dart';
+import '../../../../core/utils/custom_snackbar.dart';
 
 class ManagerRequestReviewPage extends StatefulWidget {
   final RequestModel request;
@@ -46,7 +47,6 @@ class _ManagerRequestReviewPageState extends State<ManagerRequestReviewPage> {
   void _initListener() {
     final topic = '/topic/request/${widget.request.id}';
 
-    // Gọi Service global
     _unsubscribeFn = WebSocketService().subscribe(topic, (data) {
       if (!mounted) return;
 
@@ -57,11 +57,12 @@ class _ManagerRequestReviewPageState extends State<ManagerRequestReviewPage> {
         });
 
         if (updatedReq.status != RequestStatus.PENDING) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text("Updated to: ${updatedReq.status.name}"),
-              backgroundColor: _getStatusColor(updatedReq.status),
-            ),
+          // [SỬA] Dùng CustomSnackBar thông báo cập nhật trạng thái
+          CustomSnackBar.show(
+            context,
+            title: "Status Updated",
+            message: "Request status changed to ${updatedReq.status.name}",
+            isError: updatedReq.status == RequestStatus.REJECTED,
           );
         }
       }
@@ -147,9 +148,13 @@ class _ManagerRequestReviewPageState extends State<ManagerRequestReviewPage> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
+        // [SỬA] Báo lỗi mở file
+        CustomSnackBar.show(
           context,
-        ).showSnackBar(SnackBar(content: Text("Cannot open file: $e")));
+          title: "File Error",
+          message: "Cannot open file: $e",
+          isError: true,
+        );
       }
     }
   }
@@ -177,12 +182,12 @@ class _ManagerRequestReviewPageState extends State<ManagerRequestReviewPage> {
 
       if (userId == null) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                "Lỗi: Không tìm thấy thông tin người dùng. Vui lòng đăng nhập lại.",
-              ),
-            ),
+          // [SỬA] Báo lỗi không tìm thấy user
+          CustomSnackBar.show(
+            context,
+            title: "Authentication Error",
+            message: "User info not found. Please login again.",
+            isError: true,
           );
         }
         return;
@@ -199,17 +204,21 @@ class _ManagerRequestReviewPageState extends State<ManagerRequestReviewPage> {
         // Socket sẽ tự update UI, nhưng ta pop về list cho mượt flow
         Navigator.pop(context, true);
       } else if (!success && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Xử lý thất bại. Vui lòng thử lại."),
-            backgroundColor: Colors.red,
-          ),
+        // [SỬA] Báo lỗi xử lý thất bại
+        CustomSnackBar.show(
+          context,
+          title: "Processing Failed",
+          message: "Could not process request. Please try again.",
+          isError: true,
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
+        CustomSnackBar.show(
+          context,
+          title: "Error",
+          message: e.toString(),
+          isError: true,
         );
       }
     } finally {

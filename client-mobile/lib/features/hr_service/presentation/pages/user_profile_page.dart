@@ -6,7 +6,7 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
-// Ví dụ đường dẫn, hãy sửa lại cho đúng nơi bạn lưu file confirm_bottom_sheet.dart
+import '../../../../core/utils/custom_snackbar.dart';
 import '../../widgets/confirm_bottom_sheet.dart';
 import 'package:officesync/features/notification_service/notification_service.dart';
 import 'change_password_page.dart';
@@ -171,7 +171,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
   }
 
   Future<void> _uploadAvatar(File file) async {
-    // Không cần setState _isUploading ở đây nữa vì đã set ở trên
     try {
       String fileUrl = await _repository.uploadFile(file);
       print("--> Upload Repository success: $fileUrl");
@@ -179,18 +178,16 @@ class _UserProfilePageState extends State<UserProfilePage> {
     } catch (e) {
       print("Upload error: $e");
       if (mounted) {
-        // [SỬA] Nếu lỗi, revert lại ảnh cũ
         setState(() {
           _localAvatarFile = null;
           _isUploading = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              "Upload failed: ${e.toString().replaceAll('Exception: ', '')}",
-            ),
-            backgroundColor: Colors.red,
-          ),
+
+        CustomSnackBar.show(
+          context,
+          title: "Upload Failed",
+          message: e.toString().replaceAll('Exception: ', ''),
+          isError: true,
         );
       }
     }
@@ -217,18 +214,18 @@ class _UserProfilePageState extends State<UserProfilePage> {
         });
 
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("Profile picture updated successfully!"),
-              backgroundColor: Colors.green,
-            ),
+          // [SỬA] Dùng CustomSnackBar báo thành công
+          CustomSnackBar.show(
+            context,
+            title: "Success",
+            message: "Profile picture updated successfully!",
+            isError: false,
           );
         }
 
         // Reload data
         await _fetchEmployeeDetail();
 
-        // [SỬA] Sau khi reload xong dữ liệu mới, xóa ảnh local đi để dùng ảnh từ URL
         if (mounted) {
           setState(() {
             _localAvatarFile = null;

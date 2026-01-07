@@ -39,7 +39,6 @@ class DepartmentRemoteDataSource {
     String userId, // [MỚI]
     int id,
     String name,
-    String description,
     String? managerId,
     bool isHr, // [MỚI] Thêm tham số
   ) async {
@@ -47,7 +46,6 @@ class DepartmentRemoteDataSource {
       final url = Uri.parse('$baseUrl/$id');
       final body = {
         "name": name,
-        "description": description,
         "managerId": managerId != null ? int.tryParse(managerId) : null,
         "isHr": isHr, // [MỚI] Gửi lên
       };

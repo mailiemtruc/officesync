@@ -8,6 +8,7 @@ import 'confirm_bottom_sheet.dart';
 import '../presentation/pages/edit_department_page.dart';
 import '../presentation/pages/department_details_page.dart';
 import '../data/datasources/department_remote_data_source.dart';
+import '../../../../core/utils/custom_snackbar.dart';
 
 class DepartmentBottomSheet extends StatelessWidget {
   final DepartmentModel department;
@@ -48,10 +49,11 @@ class DepartmentBottomSheet extends StatelessWidget {
           if (userId == null) {
             if (context.mounted) {
               Navigator.pop(context); // Đóng dialog confirm
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Session expired. Please login again.'),
-                ),
+              CustomSnackBar.show(
+                context,
+                title: 'Session Error',
+                message: 'Session expired. Please login again.',
+                isError: true,
               );
             }
             return;
@@ -75,33 +77,32 @@ class DepartmentBottomSheet extends StatelessWidget {
             if (success) {
               Navigator.pop(context); // Đóng Dialog
               onDeleteSuccess(); // Refresh list
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Department deleted successfully'),
-                  backgroundColor: Colors.green,
-                ),
+              CustomSnackBar.show(
+                context,
+                title: 'Success',
+                message: 'Department deleted successfully',
+                isError: false,
               );
             } else {
               // Nếu thất bại (Server trả về false do lỗi 500)
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text(
+              CustomSnackBar.show(
+                context,
+                title: 'Delete Failed',
+                message:
                     'Failed to delete department. Please check dependencies.',
-                  ),
-                  backgroundColor: Colors.red,
-                ),
+                isError: true,
               );
             }
           } catch (e) {
             if (context.mounted) {
               Navigator.pop(context);
               String msg = e.toString().replaceAll("Exception: ", "");
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Error: $msg'),
-                  backgroundColor: Colors.red,
-                ),
+              CustomSnackBar.show(
+                context,
+                title: 'Error',
+                message: 'Error: $msg',
+                isError: true,
               );
             }
           }

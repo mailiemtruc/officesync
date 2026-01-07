@@ -20,7 +20,6 @@ class DepartmentRepositoryImpl implements DepartmentRepository {
     String userId,
     int id,
     String name,
-    String description,
     String? managerId,
     bool isHr,
   ) async {
@@ -28,7 +27,6 @@ class DepartmentRepositoryImpl implements DepartmentRepository {
       userId,
       id,
       name,
-      description,
       managerId,
       isHr,
     );

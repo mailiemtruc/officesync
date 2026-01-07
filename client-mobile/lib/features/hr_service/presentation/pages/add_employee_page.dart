@@ -4,14 +4,16 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:intl/intl.dart';
 import 'dart:math';
-
-// --- IMPORT PATHS ---
 import '../../data/datasources/employee_remote_data_source.dart';
 import '../../domain/repositories/employee_repository_impl.dart';
 import '../../domain/repositories/employee_repository.dart';
 import '../../data/models/department_model.dart';
 import '../../../../core/config/app_colors.dart';
 import '../../widgets/selection_bottom_sheet.dart';
+import '../../data/datasources/department_remote_data_source.dart';
+import '../../domain/repositories/department_repository_impl.dart';
+import '../../domain/repositories/department_repository.dart';
+import '../../../../core/utils/custom_snackbar.dart';
 
 class AddEmployeePage extends StatefulWidget {
   const AddEmployeePage({super.key});
@@ -42,6 +44,7 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
 
   // Repository & Storage
   late final EmployeeRepository _employeeRepository;
+  late final DepartmentRepository _departmentRepository;
   final _storage = const FlutterSecureStorage();
 
   @override
@@ -51,6 +54,10 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
 
     _employeeRepository = EmployeeRepositoryImpl(
       remoteDataSource: EmployeeRemoteDataSource(),
+    );
+
+    _departmentRepository = DepartmentRepositoryImpl(
+      remoteDataSource: DepartmentRemoteDataSource(),
     );
 
     // [SỬA] Gọi hàm khởi tạo tích hợp kiểm tra quyền
@@ -168,7 +175,6 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
     }
   }
 
-  // --- LOGIC CHÍNH ---
   Future<void> _handleCreateEmployee() async {
     final fullName = _nameController.text.trim();
     final email = _emailController.text.trim();
@@ -269,7 +275,7 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
         }
       }
 
-      final success = await _employeeRepository.createEmployee(
+      final String? newEmployeeId = await _employeeRepository.createEmployee(
         fullName: fullName,
         email: email,
         phone: phone,
@@ -280,14 +286,36 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
         password: password,
       );
 
-      if (success && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Employee created successfully!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-        Navigator.pop(context, true);
+      // Nếu có ID trả về => Tạo thành công
+      if (newEmployeeId != null) {
+        // [LOGIC MỚI] Tự động set Manager cho phòng ban
+        if (_selectedRole?.toUpperCase() == 'MANAGER' &&
+            _selectedDepartment != null) {
+          print(
+            "--> Auto-assigning Manager ($newEmployeeId) to Dept ${_selectedDepartment!.name}",
+          );
+
+          await _departmentRepository.updateDepartment(
+            _currentUserId!,
+            _selectedDepartment!.id!,
+            _selectedDepartment!.name,
+            newEmployeeId, // Gán ID nhân viên mới làm Manager
+            _selectedDepartment!.isHr,
+          );
+        }
+
+        if (mounted) {
+          CustomSnackBar.show(
+            context,
+            title: 'Success',
+            message: 'Employee created successfully!',
+            isError: false,
+          );
+          Navigator.pop(context, true);
+        }
+      } else {
+        // Trường hợp API trả về 200 nhưng không có ID trong body (hiếm gặp)
+        throw Exception("Employee created but failed to retrieve ID.");
       }
     } catch (e) {
       if (mounted) {
@@ -317,13 +345,12 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
   }
 
   void _showErrorSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 4),
-      ),
+    // [ĐÃ SỬA] Dùng CustomSnackBar
+    CustomSnackBar.show(
+      context,
+      title: 'Validation Error',
+      message: message,
+      isError: true,
     );
   }
 
@@ -333,10 +360,12 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
     if (_isManager) return;
 
     if (_departments.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Loading departments or no data available...'),
-        ),
+      // [ĐÃ SỬA] Dùng CustomSnackBar
+      CustomSnackBar.show(
+        context,
+        title: 'Data Unavailable',
+        message: 'Loading departments or no data available...',
+        isError: true,
       );
       // Thử load lại nếu trống
       _initDataAndCheckPermissions();

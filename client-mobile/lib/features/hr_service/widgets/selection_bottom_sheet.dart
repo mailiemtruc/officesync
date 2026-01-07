@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
-import '../../../core/config/app_colors.dart'; // Đảm bảo đường dẫn đúng tới file config màu
+import '../../../core/config/app_colors.dart';
 
 class SelectionBottomSheet extends StatefulWidget {
   final String title;
-  // Danh sách item dạng Map: {'id': '...', 'title': '...', 'desc': '...'}
   final List<Map<String, String>> items;
   final String? selectedId;
   final ValueChanged<String> onSelected;
@@ -32,10 +31,16 @@ class _SelectionBottomSheetState extends State<SelectionBottomSheet> {
 
   @override
   Widget build(BuildContext context) {
+    // 1. Lấy chiều cao màn hình
+    final double screenHeight = MediaQuery.of(context).size.height;
+
     return Container(
       width: double.infinity,
-      // Responsive: Giới hạn chiều rộng trên Tablet
-      constraints: const BoxConstraints(maxWidth: 600),
+      // 2. [SỬA] Thêm maxHeight để giới hạn chiều cao (ví dụ: 85% màn hình)
+      constraints: BoxConstraints(
+        maxWidth: 600,
+        maxHeight: screenHeight * 0.85,
+      ),
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(27)),
@@ -46,7 +51,7 @@ class _SelectionBottomSheetState extends State<SelectionBottomSheet> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // 1. Handle Bar (Thanh gạch ngang)
+              // Handle Bar
               Center(
                 child: Container(
                   width: 35,
@@ -59,11 +64,10 @@ class _SelectionBottomSheetState extends State<SelectionBottomSheet> {
                 ),
               ),
 
-              // 2. HEADER: Tiêu đề + Nút Đóng (X)
+              // HEADER
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  // Tiêu đề
                   Text(
                     widget.title,
                     style: const TextStyle(
@@ -72,8 +76,6 @@ class _SelectionBottomSheetState extends State<SelectionBottomSheet> {
                       fontFamily: 'Inter',
                     ),
                   ),
-
-                  // Nút Đóng (X) tròn màu xám
                   InkWell(
                     onTap: () => Navigator.pop(context),
                     borderRadius: BorderRadius.circular(20),
@@ -81,13 +83,13 @@ class _SelectionBottomSheetState extends State<SelectionBottomSheet> {
                       width: 30,
                       height: 30,
                       decoration: const BoxDecoration(
-                        color: Color(0xFFE5E7EB), // Màu nền xám nhạt
+                        color: Color(0xFFE5E7EB),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(
                         Icons.close,
                         size: 18,
-                        color: Color(0xFF6B7280), // Màu icon xám đậm
+                        color: Color(0xFF6B7280),
                       ),
                     ),
                   ),
@@ -97,6 +99,8 @@ class _SelectionBottomSheetState extends State<SelectionBottomSheet> {
               const SizedBox(height: 24),
 
               // 3. Danh sách lựa chọn (List Items)
+              // [GIẢI THÍCH] Flexible kết hợp với maxHeight ở trên sẽ giúp list
+              // tự động cuộn (scroll) khi danh sách dài quá 85% màn hình
               Flexible(
                 child: ListView.separated(
                   shrinkWrap: true,
@@ -111,7 +115,6 @@ class _SelectionBottomSheetState extends State<SelectionBottomSheet> {
                       child: Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          // Nếu chọn: nền xanh nhạt, viền xanh. Không chọn: nền trắng, viền xám nhạt
                           color: isSelected
                               ? const Color(0xFFEFF6FF)
                               : Colors.white,
@@ -124,7 +127,7 @@ class _SelectionBottomSheetState extends State<SelectionBottomSheet> {
                         ),
                         child: Row(
                           children: [
-                            // Icon Box bên trái
+                            // Icon Box
                             Container(
                               width: 46,
                               height: 44,
@@ -161,7 +164,7 @@ class _SelectionBottomSheetState extends State<SelectionBottomSheet> {
                             ),
                             const SizedBox(width: 16),
 
-                            // Nội dung text
+                            // Text Content
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -195,7 +198,7 @@ class _SelectionBottomSheetState extends State<SelectionBottomSheet> {
                               ),
                             ),
 
-                            // Radio Circle (Vòng tròn chọn)
+                            // Radio Circle
                             Container(
                               width: 20,
                               height: 20,
@@ -235,7 +238,7 @@ class _SelectionBottomSheetState extends State<SelectionBottomSheet> {
                 height: 50,
                 child: ElevatedButton(
                   onPressed: _tempSelectedId == null
-                      ? null // Disable nếu chưa chọn gì
+                      ? null
                       : () => widget.onSelected(_tempSelectedId!),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,

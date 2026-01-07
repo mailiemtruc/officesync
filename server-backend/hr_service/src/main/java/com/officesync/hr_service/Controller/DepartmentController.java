@@ -34,7 +34,6 @@ public class DepartmentController {
     @Data
     public static class CreateDepartmentRequest {
         private String name;
-        private String description;
         private Long managerId;
         private List<Long> memberIds;
         private Boolean isHr; // [MỚI]
@@ -53,7 +52,6 @@ public class DepartmentController {
             Department created = departmentService.createDepartmentFull(
                     creator, 
                     request.getName(), 
-                    request.getDescription(), 
                     request.getManagerId(), 
                     request.getMemberIds(),
                     request.getIsHr() // [MỚI] Truyền tham số này vào
@@ -75,7 +73,6 @@ public class DepartmentController {
     @Data
     public static class UpdateDepartmentRequest {
         private String name;
-        private String description;
         private Long managerId;
         private Boolean isHr; // [MỚI]
     }
@@ -95,7 +92,6 @@ public class DepartmentController {
                 updater, 
                 id, 
                 request.getName(), 
-                request.getDescription(), 
                 request.getManagerId(),
                 request.getIsHr() // [MỚI] Truyền tham số này vào
             );

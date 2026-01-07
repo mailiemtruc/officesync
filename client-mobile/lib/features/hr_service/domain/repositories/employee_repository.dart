@@ -4,8 +4,7 @@ import '../../data/models/employee_model.dart'; // Import Model
 import '../../data/models/department_model.dart'; // Import Model
 
 abstract class EmployeeRepository {
-  // Hàm tạo nhân viên
-  Future<bool> createEmployee({
+  Future<String?> createEmployee({
     required String fullName,
     required String email,
     required String phone,
@@ -13,7 +12,7 @@ abstract class EmployeeRepository {
     required String role,
     required int departmentId,
     required String currentUserId,
-    required String password, // [MỚI] Thêm tham số này
+    required String password,
   });
   // [MỚI] Thêm hàm upload
   Future<String> uploadFile(File file);

@@ -22,7 +22,7 @@ import '../../widgets/employee_bottom_sheet.dart';
 import 'add_employee_page.dart';
 import 'create_department_page.dart';
 import 'department_details_page.dart';
-
+import '../../../../core/utils/custom_snackbar.dart';
 import 'employee_profile_page.dart';
 
 class EmployeeListPage extends StatefulWidget {
@@ -180,8 +180,11 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
 
   Future<void> _navigateToAddPage() async {
     if (!_isEmployeesTab && _currentUserRole == 'MANAGER') {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Managers cannot create departments.")),
+      CustomSnackBar.show(
+        context,
+        title: 'Permission Denied',
+        message: 'Managers cannot create departments.',
+        isError: true,
       );
       return;
     }
@@ -260,8 +263,11 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
     try {
       // [FIX LỖI] Kiểm tra null
       if (_currentUserId == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Session expired. Please login again.")),
+        CustomSnackBar.show(
+          context,
+          title: 'Session Error',
+          message: 'Session expired. Please login again.',
+          isError: true,
         );
         return;
       }
@@ -274,13 +280,19 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
 
       if (mounted) {
         if (success) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Employee deleted successfully")),
+          CustomSnackBar.show(
+            context,
+            title: 'Success',
+            message: 'Employee deleted successfully',
+            isError: false,
           );
           _fetchData();
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Failed to delete employee")),
+          CustomSnackBar.show(
+            context,
+            title: 'Failed',
+            message: 'Failed to delete employee',
+            isError: true,
           );
         }
       }
@@ -291,8 +303,11 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
 
   Future<void> _handleToggleLock(EmployeeModel emp) async {
     if (_currentUserId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Session expired. Please login again.")),
+      CustomSnackBar.show(
+        context,
+        title: 'Session Error',
+        message: 'Session expired. Please login again.',
+        isError: true,
       );
       return;
     }
@@ -313,22 +328,31 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
 
       if (mounted) {
         if (success) {
-          ScaffoldMessenger.of(
+          CustomSnackBar.show(
             context,
-          ).showSnackBar(SnackBar(content: Text("Account is now $newStatus")));
+            title: 'Success',
+            message: 'Account is now $newStatus',
+            isError: false,
+          );
           _fetchData(keyword: _searchController.text);
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Failed to update status")),
+          CustomSnackBar.show(
+            context,
+            title: 'Error',
+            message: 'Failed to update status',
+            isError: true,
           );
         }
       }
     } catch (e) {
       print("Status update error: $e");
       if (mounted) {
-        ScaffoldMessenger.of(
+        CustomSnackBar.show(
           context,
-        ).showSnackBar(SnackBar(content: Text("Error: ${e.toString()}")));
+          title: 'Error',
+          message: 'Error: ${e.toString()}',
+          isError: true,
+        );
       }
     }
   }

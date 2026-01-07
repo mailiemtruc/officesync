@@ -11,9 +11,10 @@ import '../../domain/repositories/employee_repository.dart';
 import '../../data/datasources/employee_remote_data_source.dart';
 import '../../widgets/confirm_bottom_sheet.dart';
 import 'select_manager_page.dart';
-import 'department_details_page.dart';
+import 'add_members_page.dart';
 import '../../domain/repositories/department_repository_impl.dart';
 import '../../domain/repositories/department_repository.dart';
+import '../../../../core/utils/custom_snackbar.dart';
 
 class EditDepartmentPage extends StatefulWidget {
   final DepartmentModel department;
@@ -27,23 +28,22 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
   late TextEditingController _nameController;
   EmployeeModel? _selectedManager;
   bool _isLoading = false;
-  bool _isHr = false; // [MỚI]
-  // List này chứa TẤT CẢ nhân viên trong công ty
-  List<EmployeeModel> _availableEmployees = [];
-  // List này chỉ chứa thành viên thuộc phòng ban này
+  bool _isHr = false;
+
+  // [QUAN TRỌNG] Biến lưu danh sách thành viên hiện tại (Đang chỉnh sửa)
   List<EmployeeModel> _departmentMembers = [];
+  // [QUAN TRỌNG] Biến lưu danh sách ban đầu để so sánh sự thay đổi khi bấm Save
+  List<EmployeeModel> _initialMembers = [];
 
   late final DepartmentRepository _deptRepo;
   late final EmployeeRepository _empRepo;
   final _storage = const FlutterSecureStorage();
-
-  // [MỚI] Biến lưu ID người dùng hiện tại
   String? _currentUserId;
 
   @override
   void initState() {
     super.initState();
-    _isHr = widget.department.isHr; // [MỚI] Lấy giá trị hiện tại
+    _isHr = widget.department.isHr;
     _nameController = TextEditingController(text: widget.department.name);
     _selectedManager = widget.department.manager;
 
@@ -77,8 +77,6 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
       if (userInfoStr != null) {
         final userMap = jsonDecode(userInfoStr);
         currentUserIdForEmp = userMap['id'].toString();
-
-        // [MỚI] Lưu lại ID vào biến class
         setState(() {
           _currentUserId = currentUserIdForEmp;
         });
@@ -88,14 +86,16 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
 
       if (mounted) {
         setState(() {
-          _availableEmployees = allEmps;
-          // Lọc thành viên
+          // Lọc ra các thành viên thuộc phòng ban này (trừ Manager)
           _departmentMembers = allEmps.where((e) {
             final deptName = e.departmentName ?? "";
             return deptName.trim().toLowerCase() ==
                     widget.department.name.trim().toLowerCase() &&
                 e.id != _selectedManager?.id;
           }).toList();
+
+          // [QUAN TRỌNG] Sao chép danh sách ban đầu để đối chiếu sau này
+          _initialMembers = List.from(_departmentMembers);
         });
       }
     } catch (e) {
@@ -103,44 +103,123 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
     }
   }
 
+  // [LOGIC MỚI] Hàm mở trang chọn thành viên (Thay vì mở trang chi tiết)
+  Future<void> _openSelectMembers() async {
+    final List<EmployeeModel>? result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AddMembersPage(
+          alreadySelectedMembers:
+              _departmentMembers, // Truyền danh sách hiện tại
+          excludeManagerId: _selectedManager?.id, // Loại trừ ông quản lý ra
+        ),
+      ),
+    );
+
+    // Khi quay lại, chỉ cập nhật biến cục bộ, CHƯA gọi API
+    if (result != null) {
+      setState(() {
+        _departmentMembers = result;
+      });
+      // Thông báo nhẹ để người dùng biết đã cập nhật tạm thời
+      CustomSnackBar.show(
+        context,
+        title: 'Draft Updated',
+        message: 'Member list updated. Tap "Save Changes" to commit.',
+        isError: false,
+      );
+    }
+  }
+
   Future<void> _handleSave() async {
     if (_nameController.text.isEmpty) return;
 
-    // Check ID
     if (_currentUserId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Session expired. Please login again.')),
+      CustomSnackBar.show(
+        context,
+        title: 'Authentication',
+        message: 'Session expired. Please login again.',
+        isError: true,
       );
       return;
     }
 
     setState(() => _isLoading = true);
     try {
-      // [MỚI] Truyền _currentUserId vào hàm update
+      // 1. Cập nhật thông tin Phòng ban
       final success = await _deptRepo.updateDepartment(
         _currentUserId!,
         widget.department.id!,
         _nameController.text.trim(),
-        "Updated Description",
         _selectedManager?.id,
-        _isHr, // [MỚI] Truyền giá trị switch
+        _isHr,
       );
 
+      // 2. [LOGIC MỚI] Cập nhật danh sách thành viên (So sánh cũ và mới)
+      // Tìm những người mới được thêm vào
+      final addedMembers = _departmentMembers
+          .where(
+            (newItem) =>
+                !_initialMembers.any((oldItem) => oldItem.id == newItem.id),
+          )
+          .toList();
+
+      // Tìm những người bị xóa ra
+      final removedMembers = _initialMembers
+          .where(
+            (oldItem) =>
+                !_departmentMembers.any((newItem) => newItem.id == oldItem.id),
+          )
+          .toList();
+
+      // Gọi API cập nhật cho từng người
+      // a. Gán phòng ban cho người mới
+      for (var emp in addedMembers) {
+        if (emp.id != null) {
+          await _empRepo.updateEmployee(
+            _currentUserId!,
+            emp.id!,
+            emp.fullName,
+            emp.phone,
+            emp.dateOfBirth,
+            role: emp.role,
+            departmentId: widget.department.id, // Gán vào phòng hiện tại
+          );
+        }
+      }
+
+      // b. Gỡ phòng ban cho người bị xóa (Gán về 0 hoặc null)
+      for (var emp in removedMembers) {
+        if (emp.id != null) {
+          await _empRepo.updateEmployee(
+            _currentUserId!,
+            emp.id!,
+            emp.fullName,
+            emp.phone,
+            emp.dateOfBirth,
+            role: emp.role,
+            departmentId: 0, // Gán về "Unassigned"
+          );
+        }
+      }
+
       if (success && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Updated successfully!'),
-            backgroundColor: Colors.green,
-          ),
+        CustomSnackBar.show(
+          context,
+          title: 'Success',
+          message: 'Updated successfully!',
+          isError: false,
         );
         Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) {
-        // Hiển thị lỗi từ backend (ví dụ: Access Denied)
         String msg = e.toString().replaceAll("Exception: ", "");
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(msg), backgroundColor: Colors.red),
+        CustomSnackBar.show(
+          context,
+          title: 'Error',
+          message: msg,
+          isError: true,
         );
       }
     } finally {
@@ -149,32 +228,32 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
   }
 
   Future<void> _handleDelete() async {
+    // ... (Giữ nguyên logic xóa)
     if (_currentUserId == null) return;
 
     setState(() => _isLoading = true);
     try {
-      // [MỚI] Truyền _currentUserId vào hàm delete
       await _deptRepo.deleteDepartment(_currentUserId!, widget.department.id!);
 
       if (mounted) {
         Navigator.pop(context); // Close dialog
         Navigator.pop(context, true); // Close page
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Department deleted'),
-            backgroundColor: Colors.green,
-          ),
+        CustomSnackBar.show(
+          context,
+          title: 'Success',
+          message: 'Department deleted',
+          isError: false,
         );
       }
     } catch (e) {
       if (mounted) {
         Navigator.pop(context); // Close dialog
         String msg = e.toString().replaceAll("Exception: ", "");
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Delete failed: $msg'),
-            backgroundColor: Colors.red,
-          ),
+        CustomSnackBar.show(
+          context,
+          title: 'Delete Failed',
+          message: 'Delete failed: $msg',
+          isError: true,
         );
       }
     } finally {
@@ -183,6 +262,7 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
   }
 
   Future<void> _pickManager() async {
+    // ... (Giữ nguyên logic chọn manager)
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
@@ -204,16 +284,18 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
           return false;
         });
         if (removed) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Employee moved from Member to Manager position.'),
-            ),
+          CustomSnackBar.show(
+            context,
+            title: 'Info',
+            message: 'Employee moved from Member to Manager position.',
+            isError: false,
           );
         }
       });
     }
   }
 
+  // ... (Các hàm UI khác giữ nguyên)
   void _showDeleteDialog(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -409,17 +491,10 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
                               ),
                             ),
 
+                            // [ĐÃ SỬA] Đổi InkWell này thành mở _openSelectMembers
                             InkWell(
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => DepartmentDetailsPage(
-                                      department: widget.department,
-                                    ),
-                                  ),
-                                );
-                              },
+                              onTap:
+                                  _openSelectMembers, // Gọi hàm chọn thành viên nội bộ
                               child: Row(
                                 children: [
                                   const Text(
@@ -434,10 +509,13 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
                                   const Spacer(),
                                   _buildMemberFacePile(),
                                   const SizedBox(width: 12),
-                                  const Icon(
-                                    Icons.arrow_forward_ios,
-                                    size: 16,
-                                    color: Color(0xFF9CA3AF),
+                                  // Đổi icon thành bút chì hoặc cộng để gợi ý chỉnh sửa
+                                  Icon(
+                                    PhosphorIcons.pencilSimple(
+                                      PhosphorIconsStyle.regular,
+                                    ),
+                                    size: 18,
+                                    color: const Color(0xFF9CA3AF),
                                   ),
                                 ],
                               ),
@@ -446,7 +524,7 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
                         ),
                       ),
                       const SizedBox(height: 24),
-                      // [MỚI] PHẦN UI CẤU HÌNH HR
+                      // ... (Phần Settings giữ nguyên)
                       _buildSectionTitle('DEPARTMENT SETTINGS'),
                       const SizedBox(height: 12),
                       Container(
@@ -495,7 +573,7 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
                           ],
                         ),
                       ),
-                      // Settings
+
                       const SizedBox(height: 24),
                       _buildSectionTitle('SETTINGS'),
                       const SizedBox(height: 12),
@@ -648,7 +726,6 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
                       ? Image.network(
                           emp.avatarUrl!,
                           fit: BoxFit.cover,
-                          // [SỬA 1]
                           errorBuilder: (_, __, ___) => Icon(
                             PhosphorIcons.user(PhosphorIconsStyle.fill),
                             size: 20,
@@ -716,7 +793,6 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
                       width: 46,
                       height: 46,
                       fit: BoxFit.cover,
-                      // [SỬA 3]
                       errorBuilder: (_, __, ___) => Container(
                         width: 46,
                         height: 46,

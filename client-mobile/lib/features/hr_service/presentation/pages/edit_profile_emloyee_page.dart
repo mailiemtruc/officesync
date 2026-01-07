@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-
+import '../../../../core/utils/custom_snackbar.dart';
 import '../../../../core/config/app_colors.dart';
 import '../../data/models/employee_model.dart';
 import '../../data/models/department_model.dart';
@@ -240,11 +240,12 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
       if (mounted) {
         setState(() => _isLoading = false);
         if (success) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("Profile updated successfully!"),
-              backgroundColor: Colors.green,
-            ),
+          // [ĐÃ SỬA]
+          CustomSnackBar.show(
+            context,
+            title: 'Success',
+            message: 'Profile updated successfully!',
+            isError: false,
           );
           Navigator.pop(context, true);
         }
@@ -259,8 +260,12 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
   }
 
   void _showErrorSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.red),
+    // [ĐÃ SỬA]
+    CustomSnackBar.show(
+      context,
+      title: 'Error',
+      message: message,
+      isError: true,
     );
   }
 
@@ -296,8 +301,12 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
             setState(() => _isLoading = false);
             if (success) {
               Navigator.pop(context, true);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text("Employee deleted successfully")),
+              // [ĐÃ SỬA]
+              CustomSnackBar.show(
+                context,
+                title: 'Deleted',
+                message: 'Employee deleted successfully',
+                isError: false,
               );
             } else {
               _showErrorSnackBar("Failed to delete employee");

@@ -3,10 +3,13 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
-import org.springframework.dao.DataIntegrityViolationException; // [THÊM]
-import org.springframework.stereotype.Service; // [THÊM]
-import org.springframework.transaction.annotation.Transactional; // [THÊM]
- 
+import org.springframework.cache.annotation.CacheEvict; // [THÊM]
+import org.springframework.cache.annotation.Cacheable; // [THÊM]
+import org.springframework.cache.annotation.Caching; // [THÊM]
+import org.springframework.dao.DataIntegrityViolationException; 
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.officesync.hr_service.Config.SnowflakeIdGenerator;
 import com.officesync.hr_service.DTO.EmployeeSyncEvent;
 import com.officesync.hr_service.DTO.UserCreatedEvent;
@@ -15,16 +18,14 @@ import com.officesync.hr_service.Model.Department;
 import com.officesync.hr_service.Model.Employee;
 import com.officesync.hr_service.Model.EmployeeRole;
 import com.officesync.hr_service.Model.EmployeeStatus;
-import com.officesync.hr_service.Model.Request;
-import com.officesync.hr_service.Model.RequestAuditLog;
-import com.officesync.hr_service.Producer.EmployeeProducer;
+import com.officesync.hr_service.Model.Request; // [THÊM]
+import com.officesync.hr_service.Model.RequestAuditLog; // [THÊM]
+import com.officesync.hr_service.Producer.EmployeeProducer; // [THÊM]
 import com.officesync.hr_service.Repository.DepartmentRepository; // [THÊM]
-import com.officesync.hr_service.Repository.EmployeeRepository; // [THÊM]
-import com.officesync.hr_service.Repository.RequestAuditLogRepository; // [THÊM]
-import com.officesync.hr_service.Repository.RequestRepository; // [THÊM]
-import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
-import org.springframework.cache.annotation.Caching;
+import com.officesync.hr_service.Repository.EmployeeRepository;
+import com.officesync.hr_service.Repository.RequestAuditLogRepository;
+import com.officesync.hr_service.Repository.RequestRepository;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 @Service
@@ -39,8 +40,12 @@ public class EmployeeService {
    private final SnowflakeIdGenerator idGenerator; 
    private final EmployeeProducer employeeProducer;
 
-  // [SỬA] Thay tham số Long companyId -> Employee creator
-  @CacheEvict(value = "employees", allEntries = true)
+
+    @Caching(evict = {
+        @CacheEvict(value = "employees", allEntries = true),
+        @CacheEvict(value = "departments", allEntries = true),    
+        @CacheEvict(value = "hr_department", allEntries = true) 
+    })
     public Employee createEmployee(Employee newEmployee, Employee creator, Long departmentId, String password) {
         
         // 1. KIỂM TRA QUYỀN HẠN (Permission Check)
@@ -161,80 +166,100 @@ public class EmployeeService {
     public void createEmployeeFromEvent(UserCreatedEvent event) {
         log.info("--> [Core -> HR] Nhận phản hồi đồng bộ ID. CoreID: {}, Email: {}", event.getId(), event.getEmail());
 
-        // Bước 1: Tìm nhân viên hiện tại trong HR bằng Email (đang giữ ID Snowflake tạm hoặc ID cũ)
+        // Bước 1: Tìm nhân viên hiện tại (đang giữ ID Snowflake tạm)
         Optional<Employee> existingOpt = employeeRepository.findByEmail(event.getEmail());
 
         if (existingOpt.isPresent()) {
             Employee existingEmp = existingOpt.get();
 
-            // Nếu ID đã khớp nhau rồi (Core ID == HR ID) -> Không cần làm gì
+            // Nếu ID đã khớp nhau rồi -> Bỏ qua
             if (existingEmp.getId().equals(event.getId())) {
-                log.info("User đã được đồng bộ trước đó. Bỏ qua.");
                 return;
             }
 
             // --- XỬ LÝ XUNG ĐỘT (ID SWAPPING) ---
             log.info("--> PHÁT HIỆN ID TẠM ({}). TIẾN HÀNH TRÁO ĐỔI SANG ID CORE ({})", existingEmp.getId(), event.getId());
 
-            // 1. Backup dữ liệu HR-specific (Core không có những trường này)
-            Department savedDept = existingEmp.getDepartment();
+            // 1. Backup dữ liệu cũ
+            Department memberOfDept = existingEmp.getDepartment(); // Phòng ban đang thuộc về (Member)
             String savedCode = existingEmp.getEmployeeCode();
             Long companyId = existingEmp.getCompanyId();
 
-            // 2. Xóa bản ghi cũ (ID Snowflake)
-            employeeRepository.delete(existingEmp);
+            // [QUAN TRỌNG - SỬA LỖI CONSTRAINT]
+            // Kiểm tra xem nhân viên này có đang làm QUẢN LÝ (Manager) phòng nào không?
+            Department managedDept = null;
+            Optional<Department> deptManagedOpt = departmentRepository.findByManagerId(existingEmp.getId());
             
-            // [QUAN TRỌNG] Flush để DB xóa ngay lập tức
-            // Nếu không flush, Hibernate có thể hoãn lệnh delete, gây lỗi "Duplicate Entry" khi save bản ghi mới
-            employeeRepository.flush(); 
+            if (deptManagedOpt.isPresent()) {
+                managedDept = deptManagedOpt.get();
+                log.info("--> Tạm thời gỡ quyền Manager khỏi phòng: {}", managedDept.getName());
+                // Gỡ manager tạm thời để không bị lỗi Foreign Key khi xóa Employee
+                managedDept.setManager(null);
+                departmentRepository.saveAndFlush(managedDept);
+            }
+
+            // 2. Xóa bản ghi cũ (Lúc này đã an toàn để xóa)
+            employeeRepository.delete(existingEmp);
+            employeeRepository.flush(); // Bắt buộc flush để DB xóa ngay lập tức
 
             // 3. Tạo bản ghi mới với ID chuẩn từ Core
             Employee newSyncEmp = new Employee();
-            newSyncEmp.setId(event.getId()); // [QUAN TRỌNG] Dùng ID từ Core
+            newSyncEmp.setId(event.getId()); // ID Core
             
-            // Restore dữ liệu cũ (Dữ liệu đặc thù của HR)
-            newSyncEmp.setDepartment(savedDept);
+            // Restore dữ liệu
+            newSyncEmp.setDepartment(memberOfDept);
             newSyncEmp.setEmployeeCode(savedCode);
             newSyncEmp.setCompanyId(companyId);
 
-            // Cập nhật thông tin mới nhất từ Event (để đảm bảo đồng nhất 2 bên)
+            // Map data mới nhất từ Event
             newSyncEmp.setFullName(event.getFullName());
             newSyncEmp.setEmail(event.getEmail());
             newSyncEmp.setPhone(event.getMobileNumber());
             newSyncEmp.setDateOfBirth(event.getDateOfBirth());
 
-            // Xử lý Enum an toàn (Tránh lỗi nếu Core gửi string lạ)
             try { newSyncEmp.setRole(EmployeeRole.valueOf(event.getRole())); } 
             catch (Exception e) { newSyncEmp.setRole(EmployeeRole.STAFF); }
 
             try { newSyncEmp.setStatus(EmployeeStatus.valueOf(event.getStatus())); } 
             catch (Exception e) { newSyncEmp.setStatus(EmployeeStatus.ACTIVE); }
 
-            // Lưu bản ghi mới
-            employeeRepository.save(newSyncEmp);
-            log.info("--> ĐỒNG BỘ THÀNH CÔNG. Nhân viên {} giờ có ID chuẩn: {}", event.getEmail(), event.getId());
+            // [QUAN TRỌNG] Lưu nhân viên mới TRƯỚC
+            newSyncEmp = employeeRepository.saveAndFlush(newSyncEmp);
+
+            // 4. Khôi phục chức Manager (Nếu lúc nãy có gỡ)
+            if (managedDept != null) {
+                log.info("--> Khôi phục quyền Manager cho phòng: {} với ID mới: {}", managedDept.getName(), newSyncEmp.getId());
+                // Gán lại Manager là object nhân viên mới (đã có ID chuẩn)
+                managedDept.setManager(newSyncEmp);
+                departmentRepository.save(managedDept);
+            }
+
+            log.info("--> ĐỒNG BỘ THÀNH CÔNG. ID cũ {} đã đổi thành {}", existingEmp.getId(), newSyncEmp.getId());
 
         } else {
-            // Trường hợp: User được tạo trực tiếp từ Core (Admin dashboard) -> Tạo mới hoàn toàn
-            log.info("--> Không tìm thấy nhân viên cũ. Tạo mới hoàn toàn từ Core Event.");
-            
-            Employee newEmployee = new Employee();
-            newEmployee.setId(event.getId()); 
-            newEmployee.setCompanyId(event.getCompanyId());
-            newEmployee.setFullName(event.getFullName());
-            newEmployee.setEmail(event.getEmail());
-            newEmployee.setDateOfBirth(event.getDateOfBirth());
-            newEmployee.setPhone(event.getMobileNumber());
-            
-            try { newEmployee.setRole(EmployeeRole.valueOf(event.getRole())); } 
-            catch (Exception e) { newEmployee.setRole(EmployeeRole.STAFF); } // Hoặc MANAGER tùy logic
-
-            try { newEmployee.setStatus(EmployeeStatus.valueOf(event.getStatus())); } 
-            catch (Exception e) { newEmployee.setStatus(EmployeeStatus.ACTIVE); }
-
-            // Dùng hàm retry để tự động sinh mã nhân viên (NVxxxxxx)
-            saveEmployeeWithRetry(newEmployee);
+            // Trường hợp: Tạo mới hoàn toàn (như cũ)
+            createFreshEmployeeFromEvent(event);
         }
+    }
+
+ 
+    private void createFreshEmployeeFromEvent(UserCreatedEvent event) {
+        log.info("--> Không tìm thấy nhân viên cũ. Tạo mới hoàn toàn từ Core Event.");
+        Employee newEmployee = new Employee();
+        newEmployee.setId(event.getId());
+        newEmployee.setCompanyId(event.getCompanyId());
+        newEmployee.setFullName(event.getFullName());
+        newEmployee.setEmail(event.getEmail());
+        newEmployee.setDateOfBirth(event.getDateOfBirth());
+        newEmployee.setPhone(event.getMobileNumber());
+
+        try { newEmployee.setRole(EmployeeRole.valueOf(event.getRole())); } 
+        catch (Exception e) { newEmployee.setRole(EmployeeRole.STAFF); }
+
+        try { newEmployee.setStatus(EmployeeStatus.valueOf(event.getStatus())); } 
+        catch (Exception e) { newEmployee.setStatus(EmployeeStatus.ACTIVE); }
+
+        saveEmployeeWithRetry(newEmployee);
     }
     // =================================================================
     // 3. HÀM DÙNG CHUNG (Sinh mã & Retry)
@@ -297,11 +322,13 @@ public class EmployeeService {
    // [CẬP NHẬT] Thêm tham số 'Employee updater' vào đầu hàm
     @Transactional
     @Caching(evict = {
-        @CacheEvict(value = "employee_detail", key = "#id"),      // Xóa cache chi tiết ID đó
-        @CacheEvict(value = "employees", allEntries = true)       // Xóa cache danh sách tổng
+        @CacheEvict(value = "employee_detail", key = "#id"),
+        @CacheEvict(value = "employees", allEntries = true),
+        @CacheEvict(value = "departments", allEntries = true),   
+        @CacheEvict(value = "hr_department", allEntries = true)  
     })
     public Employee updateEmployee(
-            Employee updater, // <--- Người thực hiện sửa
+            Employee updater, 
             Long id, 
             String fullName, 
             String phone, 
@@ -477,7 +504,9 @@ public class EmployeeService {
     @Transactional
     @Caching(evict = {
         @CacheEvict(value = "employee_detail", key = "#targetId"),
-        @CacheEvict(value = "employees", allEntries = true)
+        @CacheEvict(value = "employees", allEntries = true),
+        @CacheEvict(value = "departments", allEntries = true),   
+        @CacheEvict(value = "hr_department", allEntries = true)  
     })
     public void deleteEmployee(Employee deleter, Long targetId) { // [SỬA] Thêm tham số deleter
         

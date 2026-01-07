@@ -3,6 +3,9 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Random;
 
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,9 +20,7 @@ import com.officesync.hr_service.Producer.EmployeeProducer;
 import com.officesync.hr_service.Repository.DepartmentRepository;
 import com.officesync.hr_service.Repository.EmployeeRepository;
 import com.officesync.hr_service.Repository.RequestRepository;
-import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
-import org.springframework.cache.annotation.Caching;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j; 
 @Service
@@ -55,9 +56,12 @@ public class DepartmentService {
         }
     }
     @Transactional
-    // Khi tạo mới, danh sách phòng ban bị thay đổi -> Xóa cache danh sách
-    @CacheEvict(value = "departments", allEntries = true)
-    public Department createDepartmentFull(Employee creator, String name, String description, Long managerId, List<Long> memberIds,Boolean isHr) {
+    @Caching(evict = {
+        @CacheEvict(value = "departments", allEntries = true),
+        @CacheEvict(value = "employees", allEntries = true),       // [MỚI]
+        @CacheEvict(value = "employee_detail", allEntries = true)  // [MỚI]
+    })
+    public Department createDepartmentFull(Employee creator, String name, Long managerId, List<Long> memberIds,Boolean isHr) {
         // 1. Kiểm tra quyền
         requireAdminRole(creator);
         
@@ -66,7 +70,6 @@ public class DepartmentService {
         // 2. Khởi tạo đối tượng
         Department dept = new Department();
         dept.setName(name);
-        dept.setDescription(description);
         dept.setCompanyId(companyId);
         dept.setColor(generateRandomColor());
        // [MỚI] Xử lý cờ HR
@@ -137,11 +140,13 @@ public class DepartmentService {
     }
 
     @Transactional
-    @Caching(evict = {
-        @CacheEvict(value = "departments", allEntries = true), // Xóa cache list
-        @CacheEvict(value = "hr_department", allEntries = true) // Xóa cache HR phòng hờ
+   @Caching(evict = {
+        @CacheEvict(value = "departments", allEntries = true),
+        @CacheEvict(value = "hr_department", allEntries = true),
+        @CacheEvict(value = "employees", allEntries = true),       // [MỚI]
+        @CacheEvict(value = "employee_detail", allEntries = true)  // [MỚI]
     })
-    public Department updateDepartment(Employee updater, Long deptId, String name, String description, Long managerId,Boolean isHr) {
+    public Department updateDepartment(Employee updater, Long deptId, String name, Long managerId,Boolean isHr) {
         // 1. Kiểm tra quyền
         requireAdminRole(updater);
 
@@ -154,7 +159,7 @@ public class DepartmentService {
         }
 
         currentDept.setName(name);
-        currentDept.setDescription(description);
+     
         // [MỚI] Xử lý cờ HR
         if (isHr != null) {
              handleHrFlag(currentDept, isHr, updater.getCompanyId());
@@ -223,9 +228,11 @@ public class DepartmentService {
     }
 
     @Transactional
-    @Caching(evict = {
+   @Caching(evict = {
         @CacheEvict(value = "departments", allEntries = true),
-        @CacheEvict(value = "hr_department", allEntries = true)
+        @CacheEvict(value = "hr_department", allEntries = true),
+        @CacheEvict(value = "employees", allEntries = true),       // [MỚI QUAN TRỌNG]
+        @CacheEvict(value = "employee_detail", allEntries = true)  // [MỚI QUAN TRỌNG]
     })
     public void deleteDepartment(Employee deleter, Long deptId) {
         // 1. Kiểm tra quyền

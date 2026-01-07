@@ -19,20 +19,19 @@ public class HrDatabaseSeeder {
             if (departmentRepository.count() == 0) {
                 Long fptCompanyId = 2L; // Giả định ID công ty của Admin là 1
 
-                createDepartment(departmentRepository, "IT Department", "DEP001", "Phát triển hệ thống và bảo mật", fptCompanyId);
-                createDepartment(departmentRepository, "Human Resources", "DEP002", "Tuyển dụng và đào tạo nhân sự", fptCompanyId);
-                createDepartment(departmentRepository, "Sales & Marketing", "DEP003", "Kinh doanh và tiếp thị sản phẩm", fptCompanyId);
+                createDepartment(departmentRepository, "IT Department", "DEP001", fptCompanyId);
+                createDepartment(departmentRepository, "Human Resources", "DEP002", fptCompanyId);
+                createDepartment(departmentRepository, "Sales & Marketing", "DEP003", fptCompanyId);
                 
                 System.out.println("--> Đã tạo dữ liệu mẫu cho bảng Departments");
             }
         };
     }
 
-    private void createDepartment(DepartmentRepository repo, String name, String code, String description, Long companyId) {
+    private void createDepartment(DepartmentRepository repo, String name, String code, Long companyId) {
         Department dept = new Department();
         dept.setName(name);
         dept.setDepartmentCode(code);
-        dept.setDescription(description);
         dept.setCompanyId(companyId);
         dept.setCreatedAt(LocalDateTime.now());
         dept.setUpdatedAt(LocalDateTime.now());

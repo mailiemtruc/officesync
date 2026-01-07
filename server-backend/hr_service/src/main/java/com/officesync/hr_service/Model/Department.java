@@ -23,6 +23,7 @@ import lombok.ToString;
 @Table(name = "departments")
 @Data
 @EqualsAndHashCode(callSuper = true)
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class Department extends BaseEntity {
 
     @Id
@@ -36,8 +37,7 @@ public class Department extends BaseEntity {
     private String departmentCode;
     @Column(name = "color", length = 10)
     private String color;
-    @Column(columnDefinition = "TEXT")
-    private String description;
+  
 // [MỚI] Tự động đếm số nhân viên bằng câu lệnh SQL con (Sub-query)
     // Lưu ý: 'employees' là tên bảng trong DB, 'department_id' là khóa ngoại
     @Formula("(SELECT count(*) FROM employees e WHERE e.department_id = id)")

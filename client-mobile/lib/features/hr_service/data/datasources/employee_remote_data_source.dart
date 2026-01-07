@@ -13,12 +13,12 @@ class EmployeeRemoteDataSource {
   static const String _baseUrl = 'http://10.0.2.2:8081/api/employees';
 
   static const String storageUrl = 'http://10.0.2.2:8090/api/files/upload';
-  // 1. TẠO NHÂN VIÊN
-  Future<bool> createEmployee(
+
+  Future<String?> createEmployee(
     EmployeeModel employee,
     int deptId,
     String creatorId,
-    String password, // [MỚI] Nhận password
+    String password,
   ) async {
     try {
       final url = Uri.parse('$baseUrl/employees?departmentId=$deptId');
@@ -26,21 +26,22 @@ class EmployeeRemoteDataSource {
       print("--> Creating Employee by User ID: $creatorId");
 
       Map<String, dynamic> bodyData = employee.toJson();
-      bodyData['password'] = password; // Nhét mật khẩu vào JSON
+      bodyData['password'] = password;
 
       final response = await http.post(
         url,
-        headers: {
-          "Content-Type": "application/json",
-          "X-User-Id": creatorId, // Header để Backend nhận diện công ty
-        },
-        body: jsonEncode(bodyData), // Gửi Map đã có password
+        headers: {"Content-Type": "application/json", "X-User-Id": creatorId},
+        body: jsonEncode(bodyData),
       );
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        return true;
+        final Map<String, dynamic> data = jsonDecode(response.body);
+        if (data.containsKey('id')) {
+          return data['id'].toString();
+        }
+        return null; // Tạo thành công nhưng server không trả về ID
       } else {
-        throw Exception('Server Error: ${response.body}');
+        throw Exception('Failed to create employee: ${response.body}');
       }
     } catch (e) {
       rethrow;

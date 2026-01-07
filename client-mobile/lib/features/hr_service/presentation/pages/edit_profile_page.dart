@@ -10,6 +10,7 @@ import '../../data/models/employee_model.dart';
 import '../../domain/repositories/employee_repository_impl.dart';
 import '../../domain/repositories/employee_repository.dart';
 import '../../data/datasources/employee_remote_data_source.dart';
+import '../../../../core/utils/custom_snackbar.dart';
 
 class EditProfilePage extends StatefulWidget {
   final EmployeeModel user;
@@ -128,22 +129,24 @@ class _EditProfilePageState extends State<EditProfilePage> {
       );
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Profile picture updated successfully!"),
-            backgroundColor: Colors.green,
-          ),
+        // [ĐÃ SỬA]
+        CustomSnackBar.show(
+          context,
+          title: 'Success',
+          message: 'Profile picture updated successfully!',
+          isError: false,
         );
       }
     } catch (e) {
       print("Auto-save avatar error: $e");
       if (mounted) {
         String msg = e.toString().replaceAll("Exception: ", "");
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Failed to update avatar: $msg"),
-            backgroundColor: Colors.red,
-          ),
+        // [ĐÃ SỬA]
+        CustomSnackBar.show(
+          context,
+          title: 'Upload Failed',
+          message: 'Failed to update avatar: $msg',
+          isError: true,
         );
       }
     } finally {
@@ -177,11 +180,11 @@ class _EditProfilePageState extends State<EditProfilePage> {
       );
 
       if (success && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Profile details updated successfully!'),
-            backgroundColor: Colors.green,
-          ),
+        CustomSnackBar.show(
+          context,
+          title: 'Success',
+          message: 'Profile details updated successfully!',
+          isError: false,
         );
         Navigator.pop(context, true); // Quay lại và refresh
       }
@@ -200,14 +203,13 @@ class _EditProfilePageState extends State<EditProfilePage> {
         if (msg.contains("No changes detected")) {
           msg = "No changes detected.";
         }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(msg),
-            backgroundColor: msg.contains("No changes")
-                ? Colors.orange
-                : Colors.red,
-            behavior: SnackBarBehavior.floating,
-          ),
+        CustomSnackBar.show(
+          context,
+          title: msg.contains("No changes") ? 'Info' : 'Error',
+          message: msg,
+          isError: !msg.contains(
+            "No changes",
+          ), // Nếu không thay đổi thì ko tính là lỗi nghiêm trọng
         );
       }
     } finally {

@@ -7,12 +7,10 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
-
-// [MỚI] WebSocket Import
+import '../../../../core/utils/custom_snackbar.dart';
 import 'package:stomp_dart_client/stomp.dart';
 import 'package:stomp_dart_client/stomp_config.dart';
 import 'package:stomp_dart_client/stomp_frame.dart';
-
 import '../../../../core/config/app_colors.dart';
 import '../../data/models/request_model.dart';
 import '../../widgets/confirm_bottom_sheet.dart';
@@ -48,8 +46,6 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
     _connectWebSocket(); // [MỚI]
   }
 
-  // [MỚI] KẾT NỐI WEBSOCKET
-  // [SỬA LỖI QUAN TRỌNG]: Bỏ check userId null ở đây
   void _connectWebSocket() {
     final socketUrl = 'ws://10.0.2.2:8081/ws-hr/websocket';
 
@@ -72,24 +68,20 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
                   setState(() {
                     _currentRequest = updatedReq;
                   });
-
-                  // Nếu bị hủy -> Back ra list
                   if (updatedReq.status == RequestStatus.CANCELLED) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text("Request has been cancelled."),
-                      ),
+                    CustomSnackBar.show(
+                      context,
+                      title: "Request Cancelled",
+                      message: "This request has been cancelled.",
+                      isError: true, // Màu đỏ vì là hủy
                     );
                     Navigator.pop(context, true);
                   } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          'Status updated: ${_currentRequest.status.name}',
-                        ),
-                        backgroundColor: Colors.blueAccent,
-                        behavior: SnackBarBehavior.floating,
-                      ),
+                    CustomSnackBar.show(
+                      context,
+                      title: "Status Updated",
+                      message: "Updated to: ${_currentRequest.status.name}",
+                      isError: _currentRequest.status == RequestStatus.REJECTED,
                     );
                   }
                 }
@@ -130,9 +122,13 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
+        // [SỬA] Báo lỗi khi hủy đơn
+        CustomSnackBar.show(
           context,
-        ).showSnackBar(SnackBar(content: Text("Error: $e")));
+          title: "Error",
+          message: "Failed to cancel request: $e",
+          isError: true,
+        );
       }
     } finally {
       if (mounted) setState(() => _isCancelling = false);
@@ -219,9 +215,13 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
+        // [SỬA] Báo lỗi mở file
+        CustomSnackBar.show(
           context,
-        ).showSnackBar(SnackBar(content: Text("Cannot open file: $e")));
+          title: "File Error",
+          message: "Cannot open file: $e",
+          isError: true,
+        );
       }
     }
   }

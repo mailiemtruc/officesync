@@ -10,7 +10,7 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
   EmployeeRepositoryImpl({required this.remoteDataSource});
 
   @override
-  Future<bool> createEmployee({
+  Future<String?> createEmployee({
     required String fullName,
     required String email,
     required String phone,
@@ -18,7 +18,7 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
     required String role,
     required int departmentId,
     required String currentUserId,
-    required String password, // [MỚI] Nhận password
+    required String password,
   }) async {
     final employee = EmployeeModel(
       fullName: fullName,
@@ -29,7 +29,7 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
       status: "ACTIVE",
     );
 
-    // Truyền tiếp password xuống remote data source
+    // Truyền tiếp password xuống remote data source và nhận về ID
     return await remoteDataSource.createEmployee(
       employee,
       departmentId,

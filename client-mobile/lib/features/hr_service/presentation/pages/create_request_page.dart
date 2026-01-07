@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
-
+import '../../../../core/utils/custom_snackbar.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'dart:ui' as ui;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -327,8 +327,12 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
 
   void _showErrorSnackBar(String message) {
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message), backgroundColor: Colors.red),
+      // [ĐÃ SỬA] Dùng CustomSnackBar
+      CustomSnackBar.show(
+        context,
+        title: 'Error',
+        message: message,
+        isError: true,
       );
     }
   }
@@ -474,8 +478,11 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
       );
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Request submitted successfully!")),
+        CustomSnackBar.show(
+          context,
+          title: 'Success',
+          message: 'Request submitted successfully!',
+          isError: false,
         );
         Navigator.pop(context, true);
       }

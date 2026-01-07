@@ -7,7 +7,6 @@ abstract class DepartmentRepository {
     String userId,
     int id,
     String name,
-    String description,
     String? managerId,
     bool isHr,
   );
