@@ -322,7 +322,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     // Trường hợp 2: Nếu là Manager -> Cần hỏi Server xem phòng ban có phải là HR không
-    if (role == 'MANAGER') {
+    if (role == 'MANAGER' || role == 'STAFF') {
       int userId = int.tryParse(widget.userInfo['id'].toString()) ?? 0;
 
       // Gọi API qua DataSource
@@ -336,7 +336,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         });
       }
     } else {
-      // Trường hợp 3: Staff -> Chặn
+      // Các role khác (nếu có) -> Chặn
       if (mounted) {
         setState(() {
           _canAccessHrAttendance = false;

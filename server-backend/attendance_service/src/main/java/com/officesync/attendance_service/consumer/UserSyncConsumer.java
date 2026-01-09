@@ -3,7 +3,7 @@ package com.officesync.attendance_service.consumer;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Service;
 
-import com.fasterxml.jackson.databind.ObjectMapper; // [THÊM IMPORT]
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.officesync.attendance_service.config.RabbitMQConfig;
 import com.officesync.attendance_service.dto.EmployeeSyncEvent;
 import com.officesync.attendance_service.model.AttendanceUser;
@@ -18,23 +18,31 @@ import lombok.extern.slf4j.Slf4j;
 public class UserSyncConsumer {
 
     private final AttendanceUserRepository userRepo;
-    private final ObjectMapper objectMapper; // [ĐÃ CÓ KIỂU DỮ LIỆU]
+    private final ObjectMapper objectMapper;
 
     @RabbitListener(queues = RabbitMQConfig.QUEUE_USER_SYNC)
     public void receiveUserSync(String message) {
         try {
-            // 1. Làm sạch chuỗi JSON nếu cần
+            // 1. Làm sạch chuỗi JSON (Giữ nguyên logic của bạn - rất tốt để phòng thủ)
             String cleanJson = message;
             if (message.startsWith("\"") && message.endsWith("\"")) {
                 cleanJson = message.substring(1, message.length() - 1).replace("\\\"", "\"");
             }
 
+            log.info("--> [DEBUG JSON]: {}", cleanJson);
+
             // 2. Chuyển đổi JSON sang DTO
             EmployeeSyncEvent event = objectMapper.readValue(cleanJson, EmployeeSyncEvent.class);
 
-            // 3. Đồng bộ vào bảng User cục bộ (Snapshot)
-            AttendanceUser user = new AttendanceUser();
-            user.setId(event.getId());
+            log.info("--> [DEBUG OBJECT]: ID={}, Email={}", event.getId(), event.getEmail());
+
+            // 3. [TỐI ƯU] Tìm User cũ trước, nếu không có mới tạo mới
+            // Cách này an toàn hơn, tránh mất dữ liệu cũ hoặc lỗi Duplicate Entry
+            AttendanceUser user = userRepo.findById(event.getId())
+                    .orElse(new AttendanceUser());
+
+            // 4. Cập nhật thông tin (Dù mới hay cũ đều set lại cho mới nhất)
+            user.setId(event.getId()); // Quan trọng: Set ID chuẩn từ Core/HR
             user.setFullName(event.getFullName());
             user.setEmail(event.getEmail());
             user.setPhone(event.getPhone());
@@ -43,6 +51,7 @@ public class UserSyncConsumer {
             user.setRole(event.getRole());
             user.setDepartmentName(event.getDepartmentName());
 
+            // 5. Lưu xuống DB
             userRepo.save(user);
             log.info("--> [Attendance] User has been synchronized: {}", event.getEmail());
 

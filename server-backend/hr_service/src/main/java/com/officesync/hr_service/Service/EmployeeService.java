@@ -149,7 +149,9 @@ public class EmployeeService {
             try {
                 // 2. Chuyển String sang Enum và Lưu
                 emp.setStatus(EmployeeStatus.valueOf(event.getStatus()));
-                employeeRepository.save(emp);
+                Employee saved = employeeRepository.save(emp);
+
+                syncToAttendanceService(saved);
                 
                 log.info("--> Đã cập nhật trạng thái user {} thành {}", emp.getEmail(), event.getStatus());
             } catch (Exception e) {
@@ -165,6 +167,8 @@ public class EmployeeService {
     @Transactional
     public void createEmployeeFromEvent(UserCreatedEvent event) {
         log.info("--> [Core -> HR] Nhận phản hồi đồng bộ ID. CoreID: {}, Email: {}", event.getId(), event.getEmail());
+
+        Employee finalEmployee = null;
 
         // Bước 1: Tìm nhân viên hiện tại (đang giữ ID Snowflake tạm)
         Optional<Employee> existingOpt = employeeRepository.findByEmail(event.getEmail());
@@ -224,13 +228,13 @@ public class EmployeeService {
             catch (Exception e) { newSyncEmp.setStatus(EmployeeStatus.ACTIVE); }
 
             // [QUAN TRỌNG] Lưu nhân viên mới TRƯỚC
-            newSyncEmp = employeeRepository.saveAndFlush(newSyncEmp);
+            finalEmployee = employeeRepository.saveAndFlush(newSyncEmp);
 
             // 4. Khôi phục chức Manager (Nếu lúc nãy có gỡ)
             if (managedDept != null) {
                 log.info("--> Khôi phục quyền Manager cho phòng: {} với ID mới: {}", managedDept.getName(), newSyncEmp.getId());
                 // Gán lại Manager là object nhân viên mới (đã có ID chuẩn)
-                managedDept.setManager(newSyncEmp);
+                managedDept.setManager(finalEmployee);
                 departmentRepository.save(managedDept);
             }
 
@@ -238,12 +242,15 @@ public class EmployeeService {
 
         } else {
             // Trường hợp: Tạo mới hoàn toàn (như cũ)
-            createFreshEmployeeFromEvent(event);
+            finalEmployee = createFreshEmployeeFromEvent(event);
+        }
+        if (finalEmployee != null) {
+        syncToAttendanceService(finalEmployee);
         }
     }
 
  
-    private void createFreshEmployeeFromEvent(UserCreatedEvent event) {
+    private Employee createFreshEmployeeFromEvent(UserCreatedEvent event) {
         log.info("--> Không tìm thấy nhân viên cũ. Tạo mới hoàn toàn từ Core Event.");
         Employee newEmployee = new Employee();
         newEmployee.setId(event.getId());
@@ -259,7 +266,8 @@ public class EmployeeService {
         try { newEmployee.setStatus(EmployeeStatus.valueOf(event.getStatus())); } 
         catch (Exception e) { newEmployee.setStatus(EmployeeStatus.ACTIVE); }
 
-        saveEmployeeWithRetry(newEmployee);
+        // [SỬA 2] Thêm 'return' để trả về đối tượng đã lưu
+        return saveEmployeeWithRetry(newEmployee);
     }
     // =================================================================
     // 3. HÀM DÙNG CHUNG (Sinh mã & Retry)
@@ -492,6 +500,8 @@ public class EmployeeService {
                 deptName
             );
             employeeProducer.sendEmployeeUpdatedEvent(event);
+
+            employeeProducer.sendToAttendance(event);
         } catch (Exception e) {
             log.error("Lỗi gửi RabbitMQ: {}", e.getMessage());
         }
@@ -638,7 +648,7 @@ public class EmployeeService {
 
 
 
-public List<Employee> searchEmployees(Long requesterId, String keyword) {
+    public List<Employee> searchEmployees(Long requesterId, String keyword) {
         Employee requester = employeeRepository.findById(requesterId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
@@ -672,5 +682,30 @@ public List<Employee> searchEmployees(Long requesterId, String keyword) {
         }
         
         return List.of();
+    }
+
+    private void syncToAttendanceService(Employee emp) {
+        try {
+            String deptName = (emp.getDepartment() != null) ? emp.getDepartment().getName() : "N/A";
+            
+            EmployeeSyncEvent syncEvent = new EmployeeSyncEvent(
+                emp.getId(), // ID NÀY ĐÃ LÀ ID CHUẨN TỪ CORE
+                emp.getEmail(),
+                emp.getFullName(),
+                emp.getPhone(),
+                emp.getDateOfBirth(),
+                emp.getCompanyId(),
+                emp.getRole().name(),
+                emp.getStatus().name(),
+                null,
+                deptName
+            );
+            
+            // Gọi hàm mới trong Producer để bắn vào Exchange nội bộ
+            employeeProducer.sendToAttendance(syncEvent);
+            log.info("--> [HR -> Attendance] Đã gửi thông tin User ID {} sang Attendance Service.", emp.getId());
+        } catch (Exception e) {
+            log.error("Lỗi đồng bộ sang Attendance: {}", e.getMessage());
+        }
     }
 }

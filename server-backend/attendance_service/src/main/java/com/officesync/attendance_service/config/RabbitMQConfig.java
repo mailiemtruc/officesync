@@ -14,22 +14,37 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 @Configuration
 public class RabbitMQConfig {
 
+    // --- 1. KHAI BÁO TÊN EXCHANGE VÀ QUEUE ---
     public static final String EXCHANGE_INTERNAL = "internal.exchange";
+    
+    // Config cho Company/Office (Giữ nguyên)
     public static final String QUEUE_ATTENDANCE_CONFIG = "attendance.config.queue";
     public static final String ROUTING_KEY_COMPANY_CONFIG = "company.config.update";
+    
+    // Config cho User Sync (SỬA LẠI ĐỂ KHỚP VỚI HR)
     public static final String QUEUE_USER_SYNC = "attendance.user.sync.queue";
-    public static final String EXCHANGE_EMPLOYEE = "employee.exchange"; // Tên Exchange bên HR
+    public static final String ROUTING_KEY_USER_SYNC = "user.sync"; // <--- Bắt buộc phải là "user.sync"
 
+    // --- 2. KHỞI TẠO EXCHANGE ---
     @Bean
     public TopicExchange internalExchange() {
         return new TopicExchange(EXCHANGE_INTERNAL);
     }
 
+    // --- 3. KHỞI TẠO QUEUE ---
     @Bean
     public Queue attendanceConfigQueue() {
-        return new Queue(QUEUE_ATTENDANCE_CONFIG);
+        return new Queue(QUEUE_ATTENDANCE_CONFIG, true); // true = durable (bền vững)
     }
 
+    @Bean
+    public Queue userSyncQueue() {
+        return new Queue(QUEUE_USER_SYNC, true); // true = durable
+    }
+
+    // --- 4. BINDING (LIÊN KẾT QUEUE VÀO EXCHANGE) ---
+
+    // Binding nhận cấu hình công ty (Giữ nguyên)
     @Bean
     public Binding bindingAttendanceConfig(Queue attendanceConfigQueue, TopicExchange internalExchange) {
         return BindingBuilder.bind(attendanceConfigQueue)
@@ -37,16 +52,24 @@ public class RabbitMQConfig {
                 .with(ROUTING_KEY_COMPANY_CONFIG);
     }
 
-    // [QUAN TRỌNG] Khai báo ObjectMapper là @Bean để Spring có thể Inject vào nơi khác
+    // [QUAN TRỌNG - ĐÃ SỬA] Binding nhận User Sync từ HR
+    @Bean
+    public Binding bindingUserSync(Queue userSyncQueue, TopicExchange internalExchange) {
+        // Chúng ta bind vào 'internalExchange' với key 'user.sync'
+        // Vì bên HR Producer đang gửi: convertAndSend("internal.exchange", "user.sync", ...)
+        return BindingBuilder.bind(userSyncQueue)
+                .to(internalExchange)
+                .with(ROUTING_KEY_USER_SYNC);
+    }
+
+    // --- 5. CẤU HÌNH CONVERTER (Giữ nguyên) ---
     @Bean
     public ObjectMapper objectMapper() {
         ObjectMapper mapper = new ObjectMapper();
-        // Đăng ký module JavaTime để xử lý ngày tháng (LocalDate/LocalDateTime)
         mapper.registerModule(new JavaTimeModule());
         return mapper;
     }
 
-    // Sử dụng ObjectMapper vừa tạo ở trên cho Converter
     @Bean
     public MessageConverter converter(ObjectMapper objectMapper) {
         return new Jackson2JsonMessageConverter(objectMapper);
@@ -57,22 +80,5 @@ public class RabbitMQConfig {
         RabbitTemplate rabbitTemplate = new RabbitTemplate(connectionFactory);
         rabbitTemplate.setMessageConverter(converter);
         return rabbitTemplate;
-    }
-
-    @Bean
-    public Queue userSyncQueue() {
-        return new Queue(QUEUE_USER_SYNC);
-    }
-
-    // Vì Exchange này do HR tạo, ta chỉ cần khai báo TopicExchange trùng tên để Binding
-    @Bean
-    public TopicExchange employeeExchange() {
-        return new TopicExchange(EXCHANGE_EMPLOYEE);
-    }
-
-    @Bean
-    public Binding bindingUserSync(Queue userSyncQueue, TopicExchange employeeExchange) {
-        // Lắng nghe tất cả event liên quan employee (create, update)
-        return BindingBuilder.bind(userSyncQueue).to(employeeExchange).with("employee.#");
     }
 }
