@@ -197,7 +197,7 @@ public class EmployeeController {
         return ResponseEntity.ok(employees);
     }
 
-    // [MỚI] API kiểm tra quyền truy cập Attendance Manager
+    // [MỚI] API kiểm tra quyền truy cập Attendance 
     @GetMapping("/check-hr-permission")
     public ResponseEntity<?> checkHrPermission(@RequestHeader("X-User-Id") Long requesterId) {
         try {
@@ -206,17 +206,14 @@ public class EmployeeController {
 
             boolean isCompanyAdmin = employee.getRole() == EmployeeRole.COMPANY_ADMIN;
             
-            // Logic kiểm tra: Là Manager VÀ Phòng ban đó có bật cờ isHr
-            boolean isHrManager = false;
-            if (employee.getRole() == EmployeeRole.MANAGER && employee.getDepartment() != null) {
-                isHrManager = Boolean.TRUE.equals(employee.getDepartment().getIsHr());
+            boolean isHrMember = false;
+            if (employee.getDepartment() != null) {
+                isHrMember = Boolean.TRUE.equals(employee.getDepartment().getIsHr());
             }
             
-            // Trả về kết quả
+            // Trả về true nếu là Admin HOẶC là thành viên phòng HR
             return ResponseEntity.ok(Map.of(
-                "isCompanyAdmin", isCompanyAdmin,
-                "isHrManager", isHrManager,
-                "canAccessAttendance", (isCompanyAdmin || isHrManager)
+                "canAccessAttendance", (isCompanyAdmin || isHrMember)
             ));
 
         } catch (Exception e) {

@@ -311,11 +311,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final String role = widget.userInfo['role'] ?? 'STAFF';
 
     // Trường hợp 1: Nếu là Admin/Super Admin -> Luôn cho phép
-    if (role == 'COMPANY_ADMIN' || role == 'SUPER_ADMIN') {
+    if (role == 'COMPANY_ADMIN') {
       if (mounted) {
         setState(() {
           _canAccessHrAttendance = true;
-          // Cập nhật lại _pages để UI Menu render lại nút mới (nếu cần thiết với IndexedStack)
           _updatePages(role);
         });
       }
@@ -532,10 +531,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         route: '/manager_attendance',
                         width: itemWidth,
 
-                        // [SỬA QUAN TRỌNG] Logic gửi "Quyền ảo" sang màn hình ManagerAttendanceScreen
-                        // Nếu là Manager thường nhưng đã qua được vòng check _canAccessHrAttendance -> Gửi "HR_MANAGER"
-                        // Nếu là Admin -> Giữ nguyên role gốc ("COMPANY_ADMIN")
-                        arguments: (role == 'MANAGER') ? 'HR_MANAGER' : role,
+                        arguments: (role == 'COMPANY_ADMIN')
+                            ? 'COMPANY_ADMIN'
+                            : 'HR_MANAGER',
                       ),
 
                     // ✅ [ĐÃ SỬA] Chỉ hiển thị cho COMPANY_ADMIN
