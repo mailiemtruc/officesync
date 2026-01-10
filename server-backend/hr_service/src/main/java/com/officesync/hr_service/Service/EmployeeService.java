@@ -1,15 +1,14 @@
 package com.officesync.hr_service.Service;
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Objects;
-import java.util.Optional; // [1] NHỚ IMPORT CÁI NÀY
+import java.util.Optional;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Autowired; // [1] NHỚ IMPORT CÁI NÀY
 import org.springframework.cache.CacheManager;
-import org.springframework.cache.annotation.CacheEvict; // [THÊM]
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable; // [THÊM]
 import org.springframework.cache.annotation.Caching; // [THÊM]
-import org.springframework.context.annotation.Lazy;
+import org.springframework.context.annotation.Lazy; // [THÊM]
 import org.springframework.dao.DataIntegrityViolationException; 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,11 +22,11 @@ import com.officesync.hr_service.Model.Employee;
 import com.officesync.hr_service.Model.EmployeeRole;
 import com.officesync.hr_service.Model.EmployeeStatus;
 import com.officesync.hr_service.Model.Request;
-import com.officesync.hr_service.Model.RequestAuditLog; // [THÊM]
+import com.officesync.hr_service.Model.RequestAuditLog;
 import com.officesync.hr_service.Producer.EmployeeProducer; // [THÊM]
 import com.officesync.hr_service.Repository.DepartmentRepository; // [THÊM]
 import com.officesync.hr_service.Repository.EmployeeRepository; // [THÊM]
-import com.officesync.hr_service.Repository.RequestAuditLogRepository;
+import com.officesync.hr_service.Repository.RequestAuditLogRepository; // [THÊM]
 import com.officesync.hr_service.Repository.RequestRepository;
 
 import lombok.RequiredArgsConstructor;
@@ -51,13 +50,17 @@ public class EmployeeService {
         this.self = self;
     }
 
-    // [3] THÊM HÀM PHỤ TRỢ NÀY (Để xóa cache chính xác)
-    private void evictDepartmentCache(Long deptId) {
+  private void evictDepartmentCache(Long deptId) {
         if (deptId != null) {
             try {
-                // Chỉ xóa cache của đúng phòng ban đó
-                Objects.requireNonNull(cacheManager.getCache("employees_by_department")).evict(deptId);
-                log.info("--> [Cache] Đã xóa cache danh sách nhân viên phòng ban ID: {}", deptId);
+                // [FIX] Kiểm tra null trước khi gọi evict
+                var cache = cacheManager.getCache("employees_by_department");
+                if (cache != null) {
+                    cache.evict(deptId);
+                    log.info("--> [Cache] Đã xóa cache danh sách nhân viên phòng ban ID: {}", deptId);
+                } else {
+                    log.warn("--> [Cache] Không tìm thấy cache tên 'employees_by_department'");
+                }
             } catch (Exception e) {
                 log.warn("--> [Cache] Lỗi xóa cache deptId {}: {}", deptId, e.getMessage());
             }
@@ -545,7 +548,7 @@ public class EmployeeService {
             log.error("Lỗi khi gửi sự kiện xóa file: {}", e.getMessage());
         }
     }
-
+@Transactional(readOnly = true)
     public List<Employee> searchStaff(Long requesterId, String keyword) {
         // 1. Lấy thông tin người tìm
         Employee requester = employeeRepository.findById(requesterId)
@@ -560,7 +563,7 @@ public class EmployeeService {
     }
 
 
-
+@Transactional(readOnly = true)
     public List<Employee> searchEmployees(Long requesterId, String keyword) {
         Employee requester = employeeRepository.findById(requesterId)
                 .orElseThrow(() -> new RuntimeException("User not found"));

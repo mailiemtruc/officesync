@@ -25,77 +25,97 @@ public interface RequestRepository extends JpaRepository<Request, Long> {
 // 3. [CŨ - DÙNG LẠI] Lấy tất cả đơn của công ty (cho Admin xem History)
     List<Request> findByCompanyIdOrderByCreatedAtDesc(Long companyId);
 
-  // 1. Query cho ADMIN: Thấy ALL công ty, TRỪ đơn của chính mình
-    @Query("SELECT r FROM Request r WHERE r.companyId = :companyId " +
-           "AND r.requester.id <> :adminId " + // [QUAN TRỌNG] Không hiện đơn chính mình
-           "AND (:keyword IS NULL OR (LOWER(r.requester.fullName) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
-           "OR LOWER(r.requester.employeeCode) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
-           "OR LOWER(r.requestCode) LIKE LOWER(CONCAT('%', :keyword, '%')))) " +
-           "AND (:day IS NULL OR DAY(r.createdAt) = :day) " +
-           "AND (:month IS NULL OR MONTH(r.createdAt) = :month) " +
-           "AND (:year IS NULL OR YEAR(r.createdAt) = :year) " +
-           "ORDER BY r.createdAt DESC")
+  // 1. Query cho ADMIN
+    @Query("SELECT r FROM Request r " +
+            "JOIN FETCH r.requester e " +           // Lấy nhân viên tạo đơn
+            "LEFT JOIN FETCH e.department ed " +    // [FIX LỖI 1] Lấy phòng ban của nhân viên để hàm getDepartmentName() không query lại
+            "LEFT JOIN FETCH r.department d " +     // Lấy phòng ban của đơn
+            "LEFT JOIN FETCH r.approver a " +       // [FIX LỖI 2] Lấy thông tin người duyệt (để hiện tên sếp duyệt)
+            "WHERE r.companyId = :companyId " +
+            "AND r.requester.id <> :adminId " +
+            "AND (:keyword IS NULL OR (LOWER(e.fullName) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
+            "OR LOWER(e.employeeCode) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
+            "OR LOWER(r.requestCode) LIKE LOWER(CONCAT('%', :keyword, '%')))) " +
+            "AND (:day IS NULL OR DAY(r.createdAt) = :day) " +
+            "AND (:month IS NULL OR MONTH(r.createdAt) = :month) " +
+            "AND (:year IS NULL OR YEAR(r.createdAt) = :year) " +
+            "ORDER BY r.createdAt DESC")
     List<Request> searchRequestsForAdmin(
-        @Param("companyId") Long companyId, 
-        @Param("adminId") Long adminId,
-        @Param("keyword") String keyword,
-        @Param("day") Integer day,
-        @Param("month") Integer month,
-        @Param("year") Integer year
+            @Param("companyId") Long companyId,
+            @Param("adminId") Long adminId,
+            @Param("keyword") String keyword,
+            @Param("day") Integer day,
+            @Param("month") Integer month,
+            @Param("year") Integer year
     );
 
-    // 2. Query cho HR: Thấy ALL công ty, TRỪ đơn của Manager, TRỪ đơn chính mình
-    @Query("SELECT r FROM Request r WHERE r.companyId = :companyId " +
-           "AND r.requester.id <> :hrId " + // Không hiện đơn chính mình
-           "AND r.requester.role <> 'MANAGER' " + // [QUAN TRỌNG] HR không thấy đơn của Manager (để Admin duyệt)
-           "AND (:keyword IS NULL OR (LOWER(r.requester.fullName) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
-           "OR LOWER(r.requester.employeeCode) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
-           "OR LOWER(r.requestCode) LIKE LOWER(CONCAT('%', :keyword, '%')))) " +
-           "AND (:day IS NULL OR DAY(r.createdAt) = :day) " +
-           "AND (:month IS NULL OR MONTH(r.createdAt) = :month) " +
-           "AND (:year IS NULL OR YEAR(r.createdAt) = :year) " +
-           "ORDER BY r.createdAt DESC")
+    // 2. Query cho HR
+    @Query("SELECT r FROM Request r " +
+            "JOIN FETCH r.requester e " +
+            "LEFT JOIN FETCH e.department ed " +    // [FIX LỖI 1]
+            "LEFT JOIN FETCH r.department d " +
+            "LEFT JOIN FETCH r.approver a " +       // [FIX LỖI 2]
+            "WHERE r.companyId = :companyId " +
+            "AND r.requester.id <> :hrId " +
+            "AND e.role <> 'MANAGER' " +
+            "AND (:keyword IS NULL OR (LOWER(e.fullName) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
+            "OR LOWER(e.employeeCode) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
+            "OR LOWER(r.requestCode) LIKE LOWER(CONCAT('%', :keyword, '%')))) " +
+            "AND (:day IS NULL OR DAY(r.createdAt) = :day) " +
+            "AND (:month IS NULL OR MONTH(r.createdAt) = :month) " +
+            "AND (:year IS NULL OR YEAR(r.createdAt) = :year) " +
+            "ORDER BY r.createdAt DESC")
     List<Request> searchRequestsForHR(
-        @Param("companyId") Long companyId, 
-        @Param("hrId") Long hrId,
-        @Param("keyword") String keyword,
-        @Param("day") Integer day,
-        @Param("month") Integer month,
-        @Param("year") Integer year
+            @Param("companyId") Long companyId,
+            @Param("hrId") Long hrId,
+            @Param("keyword") String keyword,
+            @Param("day") Integer day,
+            @Param("month") Integer month,
+            @Param("year") Integer year
     );
 
-    // 3. Query cho MANAGER: Thấy đơn PHÒNG BAN MÌNH, TRỪ đơn chính mình
-    @Query("SELECT r FROM Request r WHERE r.department.id = :deptId " +
-           "AND r.requester.id <> :managerId " + // [QUAN TRỌNG] Không hiện đơn chính mình
-           "AND (:keyword IS NULL OR (LOWER(r.requester.fullName) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
-           "OR LOWER(r.requester.employeeCode) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
-           "OR LOWER(r.requestCode) LIKE LOWER(CONCAT('%', :keyword, '%')))) " +
-           "AND (:day IS NULL OR DAY(r.createdAt) = :day) " +
-           "AND (:month IS NULL OR MONTH(r.createdAt) = :month) " +
-           "AND (:year IS NULL OR YEAR(r.createdAt) = :year) " +
-           "ORDER BY r.createdAt DESC")
+    // 3. Query cho MANAGER
+    @Query("SELECT r FROM Request r " +
+            "JOIN FETCH r.requester e " +
+            "LEFT JOIN FETCH e.department ed " +    // [FIX LỖI 1]
+            "LEFT JOIN FETCH r.department d " +
+            "LEFT JOIN FETCH r.approver a " +       // [FIX LỖI 2]
+            "WHERE r.department.id = :deptId " +
+            "AND r.requester.id <> :managerId " +
+            "AND (:keyword IS NULL OR (LOWER(e.fullName) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
+            "OR LOWER(e.employeeCode) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
+            "OR LOWER(r.requestCode) LIKE LOWER(CONCAT('%', :keyword, '%')))) " +
+            "AND (:day IS NULL OR DAY(r.createdAt) = :day) " +
+            "AND (:month IS NULL OR MONTH(r.createdAt) = :month) " +
+            "AND (:year IS NULL OR YEAR(r.createdAt) = :year) " +
+            "ORDER BY r.createdAt DESC")
     List<Request> searchRequestsForManager(
-        @Param("deptId") Long deptId, 
-        @Param("managerId") Long managerId,
-        @Param("keyword") String keyword,
-        @Param("day") Integer day,
-        @Param("month") Integer month,
-        @Param("year") Integer year
+            @Param("deptId") Long deptId,
+            @Param("managerId") Long managerId,
+            @Param("keyword") String keyword,
+            @Param("day") Integer day,
+            @Param("month") Integer month,
+            @Param("year") Integer year
     );
 
-    // 3. Query cho NHÂN VIÊN (Sửa)
-    @Query("SELECT r FROM Request r WHERE r.requester.id = :userId " +
-           "AND (:keyword IS NULL OR (LOWER(r.requestCode) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
-           "OR LOWER(r.type) LIKE LOWER(CONCAT('%', :keyword, '%')))) " + // [MỚI THÊM DÒNG NÀY]
-           "AND (:day IS NULL OR DAY(r.createdAt) = :day) " +     // [MỚI THÊM]
-           "AND (:month IS NULL OR MONTH(r.createdAt) = :month) " +
-           "AND (:year IS NULL OR YEAR(r.createdAt) = :year) " +
-           "ORDER BY r.createdAt DESC")
+    // 4. Query cho NHÂN VIÊN
+    @Query("SELECT r FROM Request r " +
+            "JOIN FETCH r.requester e " +
+            "LEFT JOIN FETCH e.department ed " +    // [FIX LỖI 1]
+            "LEFT JOIN FETCH r.department d " +
+            "LEFT JOIN FETCH r.approver a " +       // [FIX LỖI 2]
+            "WHERE r.requester.id = :userId " +
+            "AND (:keyword IS NULL OR (LOWER(r.requestCode) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
+            "OR LOWER(r.type) LIKE LOWER(CONCAT('%', :keyword, '%')))) " +
+            "AND (:day IS NULL OR DAY(r.createdAt) = :day) " +
+            "AND (:month IS NULL OR MONTH(r.createdAt) = :month) " +
+            "AND (:year IS NULL OR YEAR(r.createdAt) = :year) " +
+            "ORDER BY r.createdAt DESC")
     List<Request> searchRequestsForEmployee(
-        @Param("userId") Long userId,
-        @Param("keyword") String keyword,
-        @Param("day") Integer day,     // [MỚI]
-        @Param("month") Integer month,
-        @Param("year") Integer year
+            @Param("userId") Long userId,
+            @Param("keyword") String keyword,
+            @Param("day") Integer day,
+            @Param("month") Integer month,
+            @Param("year") Integer year
     );
 }

@@ -143,13 +143,13 @@ public class DepartmentService {
     }
 
     @Transactional
-  @Caching(evict = {
+    @Caching(evict = {
         @CacheEvict(value = "departments", key = "#updater.companyId"),
         @CacheEvict(value = "hr_department", key = "#updater.companyId"),
         @CacheEvict(value = "employees_by_company", key = "#updater.companyId"),
         @CacheEvict(value = "employees_by_department", key = "#deptId")
     })
-    public Department updateDepartment(Employee updater, Long deptId, String name, Long managerId,Boolean isHr) {
+    public Department updateDepartment(Employee updater, Long deptId, String name, Long managerId, Boolean isHr) {
         // 1. Kiểm tra quyền
         requireAdminRole(updater);
 
@@ -162,7 +162,7 @@ public class DepartmentService {
         }
 
         currentDept.setName(name);
-     
+      
         // [MỚI] Xử lý cờ HR
         if (isHr != null) {
              handleHrFlag(currentDept, isHr, updater.getCompanyId());
@@ -176,9 +176,11 @@ public class DepartmentService {
                 Employee oldManager = currentDept.getManager();
                 if (oldManager != null) {
                     oldManager.setRole(EmployeeRole.STAFF);
-                    employeeRepository.save(oldManager);
+                    // [QUAN TRỌNG] Dùng saveAndFlush để Database cập nhật ngay lập tức
+                    employeeRepository.saveAndFlush(oldManager);
                     syncEmployeeToCore(oldManager);
-                  // [EN] Notification: Dismiss Old Manager
+                    
+                    // [EN] Notification: Dismiss Old Manager
                     sendNotification(oldManager, "Manager Role Ended", 
                         "You are no longer the Manager of " + currentDept.getName() + ". Current role: Staff.");
                 }
@@ -196,6 +198,7 @@ public class DepartmentService {
                     Department oldDept = oldManagedDeptOpt.get();
                     if (!oldDept.getId().equals(deptId)) {
                         oldDept.setManager(null);
+                        // [QUAN TRỌNG] Flush ngay để giải phóng khóa ngoại
                         departmentRepository.saveAndFlush(oldDept);
                     }
                 }
@@ -205,7 +208,8 @@ public class DepartmentService {
                     newManager.setRole(EmployeeRole.MANAGER);
                 }
                 
-                employeeRepository.save(newManager);
+                // [QUAN TRỌNG] Flush ngay
+                employeeRepository.saveAndFlush(newManager);
                 syncEmployeeToCore(newManager);
                 
                 currentDept.setManager(newManager);
@@ -218,18 +222,21 @@ public class DepartmentService {
             if (currentDept.getManager() != null) {
                 Employee oldManager = currentDept.getManager();
                 oldManager.setRole(EmployeeRole.STAFF);
-                employeeRepository.save(oldManager);
+                // [QUAN TRỌNG] Flush ngay
+                employeeRepository.saveAndFlush(oldManager);
                 syncEmployeeToCore(oldManager);
                 currentDept.setManager(null);
-              // [EN] Notification: Dismiss Manager
+                
+                // [EN] Notification: Dismiss Manager
                 sendNotification(oldManager, "Manager Role Ended", 
                     "You are no longer the Manager of " + currentDept.getName() + ".");
             }
         }
 
-        return departmentRepository.save(currentDept);
+        // [QUAN TRỌNG] Flush thay đổi cuối cùng của Department
+        return departmentRepository.saveAndFlush(currentDept);
     }
-
+    
     @Transactional
    @Caching(evict = {
         @CacheEvict(value = "departments", key = "#deleter.companyId"),
@@ -346,7 +353,7 @@ public class DepartmentService {
 public List<Department> getAllDepartments(Employee requester) { // <--- Tham số là Object
     return departmentRepository.findByCompanyId(requester.getCompanyId());
 }
-
+   @Transactional(readOnly = true)
     public List<Department> searchDepartments(Long requesterId, String keyword) {
         Employee requester = employeeRepository.findById(requesterId)
                 .orElseThrow(() -> new RuntimeException("User not found"));

@@ -74,42 +74,44 @@ class _DepartmentDetailsPageState extends State<DepartmentDetailsPage> {
     }
 
     try {
-      // 1. Lấy danh sách thành viên mới nhất từ API (Đã bao gồm Manager mới update)
+      // 1. Lấy danh sách thành viên mới nhất từ API
       final deptMembers = await _employeeRepo.getEmployeesByDepartment(
         _currentDept.id!,
       );
 
       if (mounted) {
         setState(() {
-          // 2. Tìm thông tin Manager MỚI NHẤT trong danh sách vừa tải về
-          EmployeeModel? freshManager = _currentDept.manager;
+          EmployeeModel? freshManager;
 
-          if (_currentDept.manager != null) {
-            try {
-              // Tìm người có ID trùng với Manager trong list mới trả về
-              // Người này sẽ có thông tin departmentName chính xác từ DB
-              freshManager = deptMembers.firstWhere(
-                (e) => e.id == _currentDept.manager!.id,
-              );
-            } catch (e) {
-              // Nếu không tìm thấy (ít xảy ra), giữ nguyên manager cũ
-              print("Manager not found in member list: $e");
-            }
+          // [FIX QUAN TRỌNG] Thay vì so sánh ID cũ (có thể bị null),
+          // ta tìm người có role là MANAGER trong danh sách vừa tải về.
+          try {
+            freshManager = deptMembers.firstWhere(
+              (e) => e.role.toUpperCase() == 'MANAGER',
+            );
+          } catch (e) {
+            // Nếu không tìm thấy ai là Manager trong list này
+            // (Có thể phòng chưa có Manager, hoặc API lỗi)
+            // Lúc này mới fallback về manager cũ (nếu có)
+            freshManager = _currentDept.manager;
           }
 
-          // 3. Cập nhật danh sách hiển thị (trừ Manager ra)
-          _members = deptMembers
-              .where((e) => e.id != _currentDept.manager?.id)
-              .toList();
+          // 2. Cập nhật danh sách hiển thị Members (Trừ ông Manager ra)
+          _members = deptMembers.where((e) {
+            // Nếu đã tìm thấy Manager xịn, loại người đó ra khỏi list Members
+            if (freshManager != null && freshManager.id != null) {
+              return e.id != freshManager.id;
+            }
+            return true;
+          }).toList();
 
-          // 4. Cập nhật _currentDept với Manager MỚI và số lượng thành viên
+          // 3. Cập nhật _currentDept với Manager MỚI NHẤT
           _currentDept = DepartmentModel(
             id: _currentDept.id,
             name: _currentDept.name,
             code: _currentDept.code,
             color: _currentDept.color,
-            manager:
-                freshManager, // <--- [QUAN TRỌNG] Dùng Manager mới thay vì manager cũ
+            manager: freshManager, // Dùng Manager vừa tìm được
             isHr: _currentDept.isHr,
             memberIds: _currentDept.memberIds,
             memberCount: deptMembers.length,

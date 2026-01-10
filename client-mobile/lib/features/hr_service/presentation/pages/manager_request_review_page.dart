@@ -796,7 +796,7 @@ class _ManagerRequestReviewPageState extends State<ManagerRequestReviewPage> {
 
           // [HIỂN THỊ] Sử dụng displayCode đã xử lý ở trên
           Text(
-            '#$displayCode',
+            '$displayCode',
             style: const TextStyle(
               color: Color(0xFF94A3B8),
               fontSize: 14,

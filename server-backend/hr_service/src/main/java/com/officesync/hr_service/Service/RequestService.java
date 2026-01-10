@@ -6,9 +6,10 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set; 
 
+import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
-import org.springframework.cache.annotation.Caching; // [THÊM]
+import org.springframework.cache.annotation.Cacheable; // [THÊM]
+import org.springframework.cache.annotation.Caching;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
@@ -40,6 +41,23 @@ public class RequestService {
     private final EmployeeProducer employeeProducer;
    private final SimpMessagingTemplate messagingTemplate;
    // --- 1. TẠO ĐƠN MỚI ---
+
+   // [THÊM] Inject CacheManager
+    private final CacheManager cacheManager;
+
+    // [MỚI - QUAN TRỌNG] Hàm hỗ trợ xóa Cache danh sách của Manager
+    private void evictManagerListCache(Long managerId) {
+        try {
+            var cache = cacheManager.getCache("request_list_manager");
+            if (cache != null) {
+                // Key trong RedisConfig là "mgr_" + managerId
+                cache.evict("mgr_" + managerId);
+                log.info("--> [Cache] Đã xóa cache danh sách của Manager ID: {}", managerId);
+            }
+        } catch (Exception e) {
+            log.warn("Lỗi xóa cache manager: {}", e.getMessage());
+        }
+    }
     @Transactional
  @Caching(evict = {
         @CacheEvict(value = "request_detail", key = "#requestData.id", condition = "#requestData.id != null"),
@@ -93,7 +111,7 @@ public class RequestService {
                 String title = "New Leave Request";
                 String roleName = (requester.getRole() == EmployeeRole.MANAGER) ? "Manager " : "Employee ";
                 String deptName = userDept.getName();
-                
+                evictManagerListCache(receiver.getId());
                 // Ex: "Employee John Doe (IT Dept) has submitted a new request."
                 String body = roleName + requester.getFullName() + " (" + deptName + ") has submitted a new request.";
                 
@@ -275,8 +293,8 @@ public class RequestService {
         return savedRequest;
     }
 
-// --- 3. LẤY DANH SÁCH DUYỆT (ĐÃ SỬA LỖI HIỂN THỊ) ---
-@Cacheable(
+    @Transactional(readOnly = true)
+    @Cacheable(
         value = "request_list_manager", // [FIX] Đổi tên cho khớp RedisConfig
         key = "'mgr_' + #requesterId",  // Key chỉ cần ID Manager
         condition = "#keyword == null && #day == null && #month == null && #year == null", // Chỉ cache trang default
@@ -345,7 +363,10 @@ public class RequestService {
         // --- TRƯỜNG HỢP 1: Đơn đang chờ (PENDING) -> XÓA VĨNH VIỄN KHỎI DB ---
         // (Logic này giống hệt code gốc của bạn)
         if (request.getStatus() == RequestStatus.PENDING) {
-            
+            List<Employee> managers = determineReceivers(request.getRequester(), request.getDepartment());
+            for (Employee mgr : managers) {
+                evictManagerListCache(mgr.getId()); // Xóa cache
+            }
             Long reqId = request.getId();
             Long companyId = request.getCompanyId();
 
@@ -426,7 +447,8 @@ public class RequestService {
         return "REQ" + datePart + String.format("%04d", randomNum);
     }
 
-@Cacheable(
+    @Transactional(readOnly = true)
+    @Cacheable(
         value = "request_list_user", 
         key = "#userId", 
         condition = "#keyword == null && #day == null && #month == null && #year == null", // [FIX] Sửa tên biến search -> keyword cho đồng bộ

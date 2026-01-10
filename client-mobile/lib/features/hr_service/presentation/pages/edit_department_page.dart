@@ -146,7 +146,7 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
 
     setState(() => _isLoading = true);
     try {
-      // 1. Cập nhật thông tin Phòng ban
+      // 1. Cập nhật thông tin Phòng ban (Backend sẽ lo việc set Manager và Old Manager)
       final success = await _deptRepo.updateDepartment(
         _currentUserId!,
         widget.department.id!,
@@ -155,34 +155,50 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
         _isHr,
       );
 
-      // 2. [LOGIC MỚI] Cập nhật danh sách thành viên (So sánh cũ và mới)
-      // Tìm những người mới được thêm vào
+      // 2. Cập nhật danh sách thành viên
+
+      // [FIX 1] Tìm người mới thêm vào
+      // Phải loại trừ Manager mới ra nếu lỡ có trong list, vì Backend đã xử lý người này rồi
       final addedMembers = _departmentMembers
           .where(
             (newItem) =>
-                !_initialMembers.any((oldItem) => oldItem.id == newItem.id),
+                !_initialMembers.any((oldItem) => oldItem.id == newItem.id) &&
+                newItem.id != _selectedManager?.id,
           )
           .toList();
 
-      // Tìm những người bị xóa ra
+      // [FIX 2 - QUAN TRỌNG NHẤT] Tìm người bị xóa ra
+      // Nếu người bị xóa khỏi list member là Manager mới (_selectedManager),
+      // thì BỎ QUA (đừng xóa họ khỏi phòng), vì họ đã được thăng chức chứ không phải bị đuổi.
       final removedMembers = _initialMembers
           .where(
             (oldItem) =>
-                !_departmentMembers.any((newItem) => newItem.id == oldItem.id),
+                !_departmentMembers.any(
+                  (newItem) => newItem.id == oldItem.id,
+                ) &&
+                oldItem.id != _selectedManager?.id,
           )
           .toList();
 
-      // Gọi API cập nhật cho từng người
-      // a. Gán phòng ban cho người mới
+      // a. Gán phòng ban cho người mới (thường là Manager cũ bị hạ chức)
       for (var emp in addedMembers) {
         if (emp.id != null) {
+          // [FIX 3 - LOGIC ROLE]
+          // Nếu nhân viên này trong UI đang hiển thị là MANAGER (do là manager cũ vừa bị hạ bệ),
+          // Ta phải ép gửi role = 'STAFF' xuống Backend.
+          // Nếu không, ta sẽ gửi role='MANAGER', Backend nhận được sẽ lại thăng chức cho họ lần nữa!
+          String roleToSend = emp.role;
+          if (emp.role == 'MANAGER') {
+            roleToSend = 'STAFF';
+          }
+
           await _empRepo.updateEmployee(
             _currentUserId!,
             emp.id!,
             emp.fullName,
             emp.phone,
             emp.dateOfBirth,
-            role: emp.role,
+            role: roleToSend, // Dùng role đã xử lý
             departmentId: widget.department.id, // Gán vào phòng hiện tại
           );
         }
@@ -197,7 +213,7 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
             emp.fullName,
             emp.phone,
             emp.dateOfBirth,
-            role: emp.role,
+            role: emp.role, // Giữ nguyên role
             departmentId: 0, // Gán về "Unassigned"
           );
         }
