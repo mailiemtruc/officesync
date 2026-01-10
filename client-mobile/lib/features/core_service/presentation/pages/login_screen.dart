@@ -230,7 +230,13 @@ class _LoginScreenState extends State<LoginScreen> {
                       Icons.arrow_back_ios,
                       color: AppColors.primary,
                     ),
-                    onPressed: () => Navigator.pop(context),
+                    onPressed: () {
+                      Navigator.pushNamedAndRemoveUntil(
+                        context,
+                        '/',
+                        (route) => false,
+                      );
+                    },
                   ),
                 ),
                 Align(

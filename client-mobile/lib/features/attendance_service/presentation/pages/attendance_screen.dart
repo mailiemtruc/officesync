@@ -23,33 +23,40 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   final AttendanceApi _api = AttendanceApi();
   final _storage = const FlutterSecureStorage();
 
+  // --- PALETTE MÀU HIỆN ĐẠI ---
   static const Color primaryColor = Color(0xFF2260FF);
-  // [ĐỔI] Màu nền giống trang Note cho đồng bộ
   static const Color bgColor = Color(0xFFF2F2F7);
+  static const Color textDark = Color(0xFF1E293B);
+  static const Color textGrey = Color(0xFF64748B);
+
+  // Màu trạng thái
+  static const Color colorIn = Color(0xFF00B894); // Xanh Teal
+  static const Color colorOut = Color(0xFFFA8231); // Cam
 
   bool _isLoading = false;
+  bool _isLoadingHistory = true;
+
   String? _currentBssid;
   Position? _currentPosition;
   int? _companyId;
   int? _userId;
 
-  // Biến đồng hồ
   String _timeString = "";
   String _dateString = "";
   Timer? _timer;
 
-  // Biến quản lý tháng đang xem
-  DateTime _selectedDate = DateTime.now();
+  // --- DATA & FILTERS ---
+  DateTime _selectedMonth = DateTime.now();
+  List<AttendanceModel> _allMonthRecords = [];
 
-  // Biến lịch sử
-  late Future<List<AttendanceModel>> _historyFuture;
+  DateTime? _filterSpecificDate;
+  String _filterType = "ALL";
 
   @override
   void initState() {
     super.initState();
     _startClock();
     _initData();
-    _historyFuture = Future.value([]);
   }
 
   @override
@@ -90,33 +97,99 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           _companyId = userData['companyId'];
           _userId = userData['id'];
         });
-        _refreshHistory();
+        _fetchHistoryData();
       }
     } catch (e) {
       debugPrint("Error reading User Info: $e");
     }
   }
 
-  void _refreshHistory() {
-    if (_userId != null) {
-      setState(() {
-        _historyFuture = _api.getHistory(
-          _userId!,
-          _selectedDate.month,
-          _selectedDate.year,
-        );
-      });
+  Future<void> _fetchHistoryData() async {
+    if (_userId == null) return;
+
+    setState(() => _isLoadingHistory = true);
+
+    try {
+      final data = await _api.getHistory(
+        _userId!,
+        _selectedMonth.month,
+        _selectedMonth.year,
+      );
+
+      if (mounted) {
+        setState(() {
+          _allMonthRecords = data;
+          _isLoadingHistory = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _allMonthRecords = [];
+          _isLoadingHistory = false;
+        });
+      }
+      debugPrint("Error loading history: $e");
     }
+  }
+
+  List<AttendanceModel> _getFilteredRecords() {
+    return _allMonthRecords.where((item) {
+      if (_filterType != "ALL") {
+        if (item.type != _filterType) return false;
+      }
+      if (_filterSpecificDate != null) {
+        DateTime itemDate = DateTime.parse(item.checkInTime);
+        bool isSameDay =
+            itemDate.year == _filterSpecificDate!.year &&
+            itemDate.month == _filterSpecificDate!.month &&
+            itemDate.day == _filterSpecificDate!.day;
+        if (!isSameDay) return false;
+      }
+      return true;
+    }).toList();
   }
 
   void _changeMonth(int monthsToAdd) {
     setState(() {
-      _selectedDate = DateTime(
-        _selectedDate.year,
-        _selectedDate.month + monthsToAdd,
+      _selectedMonth = DateTime(
+        _selectedMonth.year,
+        _selectedMonth.month + monthsToAdd,
       );
+      _filterSpecificDate = null;
     });
-    _refreshHistory();
+    _fetchHistoryData();
+  }
+
+  Future<void> _pickSpecificDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _filterSpecificDate ?? _selectedMonth,
+      firstDate: DateTime(_selectedMonth.year, _selectedMonth.month, 1),
+      lastDate: DateTime(_selectedMonth.year, _selectedMonth.month + 1, 0),
+      helpText: "FILTER BY DAY",
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: primaryColor,
+              onPrimary: Colors.white,
+              onSurface: textDark,
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(foregroundColor: primaryColor),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null) {
+      setState(() {
+        _filterSpecificDate = picked;
+      });
+    }
   }
 
   Future<void> _initializeLocationAndWifi() async {
@@ -159,7 +232,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           title: "Success!",
           message: "Checked in at: ${result.locationName}",
         );
-        _refreshHistory();
+        _fetchHistoryData();
       }
     } catch (e) {
       if (mounted) {
@@ -177,20 +250,19 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final filteredList = _getFilteredRecords();
+
     return Scaffold(
       backgroundColor: bgColor,
       body: SafeArea(
         child: Column(
           children: [
-            // 1. Header Cố định
             _buildCustomHeader(),
 
-            // 2. Nội dung chính (Dùng CustomScrollView để Lazy Loading thật sự)
             Expanded(
               child: CustomScrollView(
                 physics: const BouncingScrollPhysics(),
                 slivers: [
-                  // Phần trên List (Clock, Wifi, Month...) -> Dùng SliverToBoxAdapter
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 24.0),
@@ -208,17 +280,20 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                                 _currentBssid == null,
                           ),
                           const SizedBox(height: 20),
-                          _buildMonthSelector(),
+
+                          _buildFilterControlSection(filteredList.length),
+
                           const SizedBox(height: 20),
+                          // Header nhỏ cho danh sách
                           Align(
                             alignment: Alignment.centerLeft,
                             child: Text(
-                              "Recent Activity",
+                              "HISTORY LOGS",
                               style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.grey[800],
-                                fontFamily: 'Inter',
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: textGrey.withOpacity(0.6),
+                                letterSpacing: 1.0,
                               ),
                             ),
                           ),
@@ -228,113 +303,112 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                     ),
                   ),
 
-                  // Phần List (Lazy Loading thật sự) -> Dùng FutureBuilder + SliverList
-                  FutureBuilder<List<AttendanceModel>>(
-                    future: _historyFuture,
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const SliverToBoxAdapter(
-                          child: Padding(
-                            padding: EdgeInsets.only(top: 20),
-                            child: Center(
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
-                          ),
-                        );
-                      } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                        return SliverToBoxAdapter(
-                          child: Padding(
-                            padding: const EdgeInsets.only(top: 40),
-                            child: Column(
-                              children: [
-                                Icon(
-                                  Icons.history,
-                                  size: 40,
-                                  color: Colors.grey[300],
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  "No history for this month",
-                                  style: TextStyle(color: Colors.grey[400]),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      }
-
-                      final history = snapshot.data!;
-                      return SliverPadding(
-                        padding: const EdgeInsets.symmetric(horizontal: 24),
-                        sliver: SliverList(
-                          delegate: SliverChildBuilderDelegate((
-                            context,
-                            index,
-                          ) {
-                            final item = history[index];
-                            final DateTime checkInTime =
-                                DateTime.tryParse(item.checkInTime) ??
-                                DateTime.now();
-
-                            // Logic header ngày
-                            bool showHeader = true;
-                            if (index > 0) {
-                              final DateTime prevTime = DateTime.parse(
-                                history[index - 1].checkInTime,
-                              );
-                              if (DateFormat('dd/MM/yyyy').format(prevTime) ==
-                                  DateFormat(
-                                    'dd/MM/yyyy',
-                                  ).format(checkInTime)) {
-                                showHeader = false;
-                              }
-                            }
-
-                            return Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                if (showHeader)
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 8.0,
-                                    ),
-                                    child: Text(
-                                      _getDateLabel(checkInTime),
-                                      style: TextStyle(
-                                        color: Colors.grey[600],
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 13,
-                                      ),
-                                    ),
-                                  ),
-                                _buildHistoryItemCard(item, checkInTime),
-                              ],
-                            );
-                          }, childCount: history.length),
+                  // LIST DỮ LIỆU
+                  if (_isLoadingHistory)
+                    const SliverToBoxAdapter(
+                      child: Padding(
+                        padding: EdgeInsets.only(top: 40),
+                        child: Center(
+                          child: CircularProgressIndicator(color: primaryColor),
                         ),
-                      );
-                    },
-                  ),
+                      ),
+                    )
+                  else if (filteredList.isEmpty)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 40),
+                        child: Column(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(20),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.02),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 5),
+                                  ),
+                                ],
+                              ),
+                              child: const Icon(
+                                Icons.history_toggle_off,
+                                size: 40,
+                                color: Color(0xFFCBD5E1),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            const Text(
+                              "No history found",
+                              style: TextStyle(
+                                color: textGrey,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  else
+                    SliverPadding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      sliver: SliverList(
+                        delegate: SliverChildBuilderDelegate((context, index) {
+                          final item = filteredList[index];
+                          final DateTime checkInTime =
+                              DateTime.tryParse(item.checkInTime) ??
+                              DateTime.now();
 
-                  // Khoảng trắng đệm dưới cùng (Để không bị nút che mất item cuối)
-                  const SliverToBoxAdapter(child: SizedBox(height: 20)),
+                          // Header Ngày
+                          bool showHeader = true;
+                          if (index > 0) {
+                            final DateTime prevTime = DateTime.parse(
+                              filteredList[index - 1].checkInTime,
+                            );
+                            if (DateFormat('dd/MM/yyyy').format(prevTime) ==
+                                DateFormat('dd/MM/yyyy').format(checkInTime)) {
+                              showHeader = false;
+                            }
+                          }
+
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (showHeader) _buildDateHeader(checkInTime),
+                              // [MỚI] Sử dụng hàm Build Card mới đẹp hơn
+                              _buildModernHistoryCard(item, checkInTime),
+                            ],
+                          );
+                        }, childCount: filteredList.length),
+                      ),
+                    ),
+
+                  const SliverToBoxAdapter(
+                    child: SizedBox(height: 100),
+                  ), // Bottom padding cho nút
                 ],
               ),
-            ),
-
-            // 3. Footer (Nút dính đáy)
-            Container(
-              padding: const EdgeInsets.fromLTRB(24, 10, 24, 20),
-              color: bgColor,
-              child: _buildCheckInButton(),
             ),
           ],
         ),
       ),
+      // Floating Button Check-in
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(
+          bottom: 20,
+          left: 30,
+        ), // Padding left để căn giữa vì FAB mặc định căn phải
+        child:
+            _buildCheckInButton(), // Đưa nút xuống FAB hoặc giữ ở bottom sheet tùy ý
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
     );
   }
 
-  // [MỚI] Header giống hệt trang Note/Manager
+  // --- WIDGETS ---
+
+  // Header giống ảnh 2
   Widget _buildCustomHeader() {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
@@ -342,89 +416,196 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Nút Back to & đẹp
           IconButton(
             icon: const Icon(
               Icons.arrow_back_ios,
               color: primaryColor,
-              size: 24, // Tăng kích thước
+              size: 24,
             ),
             onPressed: () => Navigator.pop(context),
           ),
-
-          // Title
           const Expanded(
             child: Text(
               "ATTENDANCE",
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 24, // Chữ to
-                fontWeight: FontWeight.w800, // Chữ đậm
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
                 color: primaryColor,
                 fontFamily: 'Inter',
                 letterSpacing: 0.5,
               ),
             ),
           ),
-
-          // Widget rỗng bên phải để cân bằng với nút Back
           const SizedBox(width: 48),
         ],
       ),
     );
   }
 
-  Widget _buildMonthSelector() {
-    final String displayDate = DateFormat('MMMM yyyy').format(_selectedDate);
+  Widget _buildFilterControlSection(int count) {
+    final String displayMonth = DateFormat('MMMM yyyy').format(_selectedMonth);
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(30),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+    return Column(
+      children: [
+        // Hàng 1: Month Selector (Style hiện đại)
+        Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.03),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          IconButton(
-            icon: const Icon(
-              Icons.arrow_back_ios_new,
-              size: 18,
-              color: Colors.grey,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.chevron_left, size: 24, color: textGrey),
+                onPressed: () => _changeMonth(-1),
+              ),
+              Column(
+                children: [
+                  Text(
+                    displayMonth.toUpperCase(),
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: primaryColor,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  Text(
+                    "$count Records",
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: textGrey,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+              IconButton(
+                icon: const Icon(
+                  Icons.chevron_right,
+                  size: 24,
+                  color: textGrey,
+                ),
+                onPressed: () {
+                  final now = DateTime.now();
+                  if (_selectedMonth.month < now.month ||
+                      _selectedMonth.year < now.year) {
+                    _changeMonth(1);
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 12),
+
+        // Hàng 2: Date & Type Filter
+        Row(
+          children: [
+            Expanded(
+              child: GestureDetector(
+                onTap: _pickSpecificDate,
+                child: Container(
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: _filterSpecificDate != null
+                        ? primaryColor
+                        : Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: _filterSpecificDate != null
+                          ? primaryColor
+                          : Colors.grey.shade200,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.calendar_month_rounded,
+                        size: 18,
+                        color: _filterSpecificDate != null
+                            ? Colors.white
+                            : textGrey,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        _filterSpecificDate != null
+                            ? DateFormat('dd/MM').format(_filterSpecificDate!)
+                            : "Select Day",
+                        style: TextStyle(
+                          color: _filterSpecificDate != null
+                              ? Colors.white
+                              : textDark,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                      if (_filterSpecificDate != null) ...[
+                        const SizedBox(width: 4),
+                        GestureDetector(
+                          onTap: () =>
+                              setState(() => _filterSpecificDate = null),
+                          child: const Icon(
+                            Icons.close,
+                            size: 16,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
             ),
-            onPressed: () => _changeMonth(-1),
+
+            const SizedBox(width: 10),
+
+            // Nút lọc Loại (Chỉ dùng icon để tiết kiệm diện tích)
+            _buildTypeFilterIcon(Icons.list, "ALL"),
+            const SizedBox(width: 8),
+            _buildTypeFilterIcon(Icons.login, "CHECK_IN", color: colorIn),
+            const SizedBox(width: 8),
+            _buildTypeFilterIcon(Icons.logout, "CHECK_OUT", color: colorOut),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTypeFilterIcon(IconData icon, String value, {Color? color}) {
+    bool isSelected = _filterType == value;
+    Color activeColor = color ?? primaryColor; // Default blue for ALL
+
+    return GestureDetector(
+      onTap: () => setState(() => _filterType = value),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: isSelected ? activeColor : Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isSelected ? activeColor : Colors.grey.shade200,
           ),
-          Text(
-            displayDate,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: primaryColor,
-              fontFamily: 'Inter',
-            ),
-          ),
-          IconButton(
-            icon: const Icon(
-              Icons.arrow_forward_ios,
-              size: 18,
-              color: Colors.grey,
-            ),
-            onPressed: () {
-              final now = DateTime.now();
-              if (_selectedDate.month < now.month ||
-                  _selectedDate.year < now.year) {
-                _changeMonth(1);
-              }
-            },
-          ),
-        ],
+        ),
+        child: Icon(
+          icon,
+          size: 20,
+          color: isSelected ? Colors.white : (color ?? textGrey),
+        ),
       ),
     );
   }
@@ -435,20 +616,22 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         Text(
           _timeString,
           style: const TextStyle(
-            fontSize: 42,
-            fontWeight: FontWeight.bold,
+            fontSize: 48,
+            fontWeight: FontWeight.w900, // Đậm hơn
             color: primaryColor,
             fontFamily: 'Inter',
-            letterSpacing: -1,
+            height: 1.0, // Chặt dòng
           ),
         ),
+        const SizedBox(height: 4),
         Text(
-          _dateString,
-          style: TextStyle(
-            fontSize: 14,
-            color: Colors.grey[600],
-            fontWeight: FontWeight.w500,
+          _dateString.toUpperCase(),
+          style: const TextStyle(
+            fontSize: 12,
+            color: textGrey,
+            fontWeight: FontWeight.w600,
             fontFamily: 'Inter',
+            letterSpacing: 1.0,
           ),
         ),
       ],
@@ -457,15 +640,15 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
   Widget _buildCheckInButton() {
     return Container(
-      width: double.infinity,
-      height: 56,
+      width: MediaQuery.of(context).size.width * 0.85, // Không full màn hình
+      height: 60,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: primaryColor.withOpacity(0.3),
+            color: primaryColor.withOpacity(0.4),
             blurRadius: 20,
-            offset: const Offset(0, 10),
+            offset: const Offset(0, 8),
           ),
         ],
       ),
@@ -475,8 +658,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           backgroundColor: primaryColor,
           shadowColor: Colors.transparent,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(20),
           ),
+          elevation: 0,
         ),
         child: _isLoading
             ? const SizedBox(
@@ -484,16 +668,20 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                 height: 24,
                 child: CircularProgressIndicator(
                   color: Colors.white,
-                  strokeWidth: 2.5,
+                  strokeWidth: 3,
                 ),
               )
             : Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: const [
-                  Icon(Icons.fingerprint, color: Colors.white, size: 24),
-                  SizedBox(width: 10),
+                  Icon(
+                    Icons.fingerprint_rounded,
+                    color: Colors.white,
+                    size: 28,
+                  ),
+                  SizedBox(width: 12),
                   Text(
-                    "CONFIRM ATTENDANCE",
+                    "CHECK IN NOW",
                     style: TextStyle(
                       fontSize: 16,
                       color: Colors.white,
@@ -508,167 +696,195 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     );
   }
 
-  // Sửa lại Widget này để dùng shrinkWrap vì nằm trong SingleScrollView
-  Widget _buildHistoryList() {
-    return FutureBuilder<List<AttendanceModel>>(
-      future: _historyFuture,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator(strokeWidth: 2));
-        } else if (snapshot.hasError) {
-          return Center(
-            child: Text(
-              "Error loading history",
-              style: TextStyle(color: Colors.grey[500]),
-            ),
-          );
-        } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.history, size: 40, color: Colors.grey[300]),
-                const SizedBox(height: 8),
-                Text(
-                  "No history for this month",
-                  style: TextStyle(color: Colors.grey[400]),
-                ),
-              ],
-            ),
-          );
-        }
-
-        final history = snapshot.data!;
-
-        return ListView.builder(
-          shrinkWrap: true, // [QUAN TRỌNG] Để cuộn được trong SingleScrollView
-          physics: const NeverScrollableScrollPhysics(), // Tắt cuộn riêng
-          itemCount: history.length,
-          itemBuilder: (context, index) {
-            final item = history[index];
-            final DateTime checkInTime =
-                DateTime.tryParse(item.checkInTime) ?? DateTime.now();
-            final String dateHeader = DateFormat(
-              'dd/MM/yyyy',
-            ).format(checkInTime);
-
-            bool showHeader = true;
-            if (index > 0) {
-              final DateTime prevTime = DateTime.parse(
-                history[index - 1].checkInTime,
-              );
-              final String prevDate = DateFormat('dd/MM/yyyy').format(prevTime);
-              if (prevDate == dateHeader) showHeader = false;
-            }
-
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (showHeader)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8.0),
-                    child: Text(
-                      _getDateLabel(checkInTime),
-                      style: TextStyle(
-                        color: Colors.grey[600],
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ),
-                _buildHistoryItemCard(item, checkInTime),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  String _getDateLabel(DateTime date) {
+  // --- [UI MỚI] Header ngày tháng đẹp ---
+  Widget _buildDateHeader(DateTime date) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final yesterday = today.subtract(const Duration(days: 1));
     final checkDate = DateTime(date.year, date.month, date.day);
 
-    if (checkDate == today) return "Today";
-    if (checkDate == yesterday) return "Yesterday";
-    return DateFormat('EEE, dd MMM yyyy').format(date);
-  }
+    String label = DateFormat('EEEE, dd MMMM').format(date);
+    if (checkDate == today)
+      label = "Today";
+    else if (checkDate == yesterday)
+      label = "Yesterday";
 
-  Widget _buildHistoryItemCard(AttendanceModel item, DateTime dateTime) {
-    final bool isCheckIn = item.type == "CHECK_IN";
-    final Color statusColor = isCheckIn
-        ? Colors.green
-        : (item.type == "CHECK_OUT" ? Colors.orange : primaryColor);
-    final IconData statusIcon = isCheckIn
-        ? Icons.login
-        : (item.type == "CHECK_OUT" ? Icons.logout : Icons.check_circle);
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+    return Padding(
+      padding: const EdgeInsets.only(top: 16, bottom: 8),
       child: Row(
         children: [
           Container(
-            width: 44,
-            height: 44,
+            width: 4,
+            height: 16,
             decoration: BoxDecoration(
-              color: statusColor.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(statusIcon, color: statusColor, size: 22),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.type?.replaceAll("_", " ") ?? "ATTENDANCE",
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                    color: Colors.grey[800],
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Icon(Icons.location_on, size: 12, color: Colors.grey[400]),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        item.locationName,
-                        style: TextStyle(color: Colors.grey[500], fontSize: 12),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+              color: primaryColor,
+              borderRadius: BorderRadius.circular(2),
             ),
           ),
+          const SizedBox(width: 8),
           Text(
-            DateFormat('HH:mm').format(dateTime),
-            style: TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: 18,
-              color: Colors.grey[800],
+            label.toUpperCase(),
+            style: const TextStyle(
+              color: textDark,
+              fontWeight: FontWeight.w800,
+              fontSize: 13,
+              letterSpacing: 0.5,
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  // --- [UI MỚI] Card lịch sử "Xịn" ---
+  Widget _buildModernHistoryCard(AttendanceModel item, DateTime dateTime) {
+    final bool isCheckIn = item.type == "CHECK_IN";
+    final Color itemColor = isCheckIn ? colorIn : colorOut;
+    final IconData itemIcon = isCheckIn
+        ? Icons.login_rounded
+        : Icons.logout_rounded;
+    final String typeText = isCheckIn ? "CHECK IN" : "CHECK OUT";
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 15,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        // Để hiệu ứng ripple không tràn ra ngoài
+        borderRadius: BorderRadius.circular(20),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () {
+              // Có thể mở chi tiết sau này
+            },
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  // 1. Icon Container
+                  Container(
+                    width: 50,
+                    height: 50,
+                    decoration: BoxDecoration(
+                      color: itemColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Icon(itemIcon, color: itemColor, size: 24),
+                  ),
+
+                  const SizedBox(width: 16),
+
+                  // 2. Thông tin chính
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Hàng 1: Loại + Badge
+                        Row(
+                          children: [
+                            Text(
+                              typeText,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 14,
+                                color: textDark,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            // Badge nhỏ status
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: item.status == "LATE"
+                                    ? Colors.red.withOpacity(0.1)
+                                    : Colors.green.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                item.status == "LATE" ? "LATE" : "OK",
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: item.status == "LATE"
+                                      ? Colors.red
+                                      : Colors.green,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 6),
+
+                        // Hàng 2: Location
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.location_on_rounded,
+                              size: 14,
+                              color: textGrey,
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                item.locationName,
+                                style: const TextStyle(
+                                  color: textGrey,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // 3. Thời gian (To & Rõ)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        DateFormat('HH:mm').format(dateTime),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 18,
+                          color: textDark,
+                          fontFamily: 'Inter',
+                        ),
+                      ),
+                      Text(
+                        "hrs",
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: textGrey.withOpacity(0.5),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
