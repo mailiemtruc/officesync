@@ -8,7 +8,7 @@ import java.util.Set;
 
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
-import org.springframework.cache.annotation.Caching;
+import org.springframework.cache.annotation.Caching; // [THÊM]
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
@@ -41,11 +41,12 @@ public class RequestService {
    private final SimpMessagingTemplate messagingTemplate;
    // --- 1. TẠO ĐƠN MỚI ---
     @Transactional
-   @Caching(evict = {
-    @CacheEvict(value = "request_detail", key = "#requestId"),
-    @CacheEvict(value = "request_list_user", key = "#userId"),
-    @CacheEvict(value = "request_list_manager", allEntries = true)
-})
+ @Caching(evict = {
+        @CacheEvict(value = "request_detail", key = "#requestData.id", condition = "#requestData.id != null"),
+        @CacheEvict(value = "request_list_user", key = "#userId")
+      
+    })
+ 
     public Request createRequest(Long userId, Request requestData) {
         // A. Lấy thông tin người tạo đơn
         Employee requester = employeeRepository.findById(userId)
@@ -176,10 +177,10 @@ public class RequestService {
 
    // --- 2. DUYỆT ĐƠN (ĐÃ SỬA LOGIC PHÂN QUYỀN CHẶT CHẼ) ---
     @Transactional
-    @Caching(evict = {
-        @CacheEvict(value = "request_detail", key = "#requestId"), // Xóa cache chi tiết
-        @CacheEvict(value = "request_list_user", allEntries = true), // Xóa list user (để họ thấy trạng thái mới)
-        @CacheEvict(value = "request_list_manager", allEntries = true) // Xóa list manager
+@Caching(evict = {
+        // Xóa chi tiết đơn
+        @CacheEvict(value = "request_detail", key = "#requestId"),
+        @CacheEvict(value = "request_list_manager", key = "'mgr_' + #approverId") 
     })
     public Request approveRequest(Long requestId, Long approverId, RequestStatus newStatus, String comment) {
         Request request = requestRepository.findById(requestId)
@@ -275,7 +276,12 @@ public class RequestService {
     }
 
 // --- 3. LẤY DANH SÁCH DUYỆT (ĐÃ SỬA LỖI HIỂN THỊ) ---
-@Cacheable(value = "request_list_manager", key = "'manager_' + #managerId", condition = "#search == null && #day == null && #month == null && #year == null", sync = true)
+@Cacheable(
+        value = "request_list_manager", // [FIX] Đổi tên cho khớp RedisConfig
+        key = "'mgr_' + #requesterId",  // Key chỉ cần ID Manager
+        condition = "#keyword == null && #day == null && #month == null && #year == null", // Chỉ cache trang default
+        sync = true
+    )
     public List<Request> getRequestsForManager(Long requesterId, String keyword, Integer day, Integer month, Integer year) {
         Employee requester = employeeRepository.findById(requesterId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
@@ -322,10 +328,10 @@ public class RequestService {
 
 
   @Transactional
-  @Caching(evict = {
+@Caching(evict = {
         @CacheEvict(value = "request_detail", key = "#requestId"),
-        @CacheEvict(value = "request_list_user", key = "#userId"),
-        @CacheEvict(value = "request_list_manager", allEntries = true)
+        // [FIX QUAN TRỌNG] Xóa list của User để họ thấy đơn đã bị xóa ngay lập tức
+        @CacheEvict(value = "request_list_user", key = "#userId") 
     })
     public void cancelRequest(Long requestId, Long userId) {
         Request request = requestRepository.findById(requestId)
@@ -420,8 +426,12 @@ public class RequestService {
         return "REQ" + datePart + String.format("%04d", randomNum);
     }
 
-// 2. Sửa hàm getMyRequests (Dùng cho Nhân viên xem đơn của mình)
-  @Cacheable(value = "request_list_user", key = "#userId", condition = "#search == null && #day == null && #month == null && #year == null", sync = true)
+@Cacheable(
+        value = "request_list_user", 
+        key = "#userId", 
+        condition = "#keyword == null && #day == null && #month == null && #year == null", // [FIX] Sửa tên biến search -> keyword cho đồng bộ
+        sync = true
+    )
    public List<Request> getMyRequests(Long userId, String keyword,Integer day, Integer month, Integer year) {
     String searchKey = (keyword != null && !keyword.trim().isEmpty()) ? keyword.trim() : null;
     

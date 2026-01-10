@@ -1,11 +1,15 @@
 package com.officesync.hr_service.Service;
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Optional;
+import java.util.Objects;
+import java.util.Optional; // [1] NHỚ IMPORT CÁI NÀY
 
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.CacheEvict; // [THÊM]
 import org.springframework.cache.annotation.Cacheable; // [THÊM]
 import org.springframework.cache.annotation.Caching; // [THÊM]
+import org.springframework.context.annotation.Lazy;
 import org.springframework.dao.DataIntegrityViolationException; 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,11 +22,11 @@ import com.officesync.hr_service.Model.Department;
 import com.officesync.hr_service.Model.Employee;
 import com.officesync.hr_service.Model.EmployeeRole;
 import com.officesync.hr_service.Model.EmployeeStatus;
-import com.officesync.hr_service.Model.Request; // [THÊM]
+import com.officesync.hr_service.Model.Request;
 import com.officesync.hr_service.Model.RequestAuditLog; // [THÊM]
 import com.officesync.hr_service.Producer.EmployeeProducer; // [THÊM]
 import com.officesync.hr_service.Repository.DepartmentRepository; // [THÊM]
-import com.officesync.hr_service.Repository.EmployeeRepository;
+import com.officesync.hr_service.Repository.EmployeeRepository; // [THÊM]
 import com.officesync.hr_service.Repository.RequestAuditLogRepository;
 import com.officesync.hr_service.Repository.RequestRepository;
 
@@ -39,42 +43,59 @@ public class EmployeeService {
     private final RequestAuditLogRepository auditLogRepository;
    private final SnowflakeIdGenerator idGenerator; 
    private final EmployeeProducer employeeProducer;
+    private final CacheManager cacheManager;
+    private EmployeeService self;
 
+    @Autowired
+    public void setSelf(@Lazy EmployeeService self) {
+        this.self = self;
+    }
 
+    // [3] THÊM HÀM PHỤ TRỢ NÀY (Để xóa cache chính xác)
+    private void evictDepartmentCache(Long deptId) {
+        if (deptId != null) {
+            try {
+                // Chỉ xóa cache của đúng phòng ban đó
+                Objects.requireNonNull(cacheManager.getCache("employees_by_department")).evict(deptId);
+                log.info("--> [Cache] Đã xóa cache danh sách nhân viên phòng ban ID: {}", deptId);
+            } catch (Exception e) {
+                log.warn("--> [Cache] Lỗi xóa cache deptId {}: {}", deptId, e.getMessage());
+            }
+        }
+    }
+
+  // --- HÀM 1: SỬA CREATE (Sửa lỗi tên biến trong annotation & Logic Manager) ---
+     @Transactional
     @Caching(evict = {
-        @CacheEvict(value = "employees", allEntries = true),
-        @CacheEvict(value = "departments", allEntries = true),    
-        @CacheEvict(value = "hr_department", allEntries = true) 
+        @CacheEvict(value = "employees_by_company", key = "#creator.companyId"),
+        @CacheEvict(value = "departments", key = "#creator.companyId"),
+        @CacheEvict(value = "employees_by_department", key = "#departmentId", condition = "#departmentId != null")
     })
     public Employee createEmployee(Employee newEmployee, Employee creator, Long departmentId, String password) {
         
-        // 1. KIỂM TRA QUYỀN HẠN (Permission Check)
+        // 1. Check Quyền
         EmployeeRole creatorRole = creator.getRole();
-
-        // TRƯỜNG HỢP 1: STAFF -> CHẶN NGAY
         if (creatorRole == EmployeeRole.STAFF) {
             throw new RuntimeException("Truy cập bị từ chối: Nhân viên không có quyền tạo người dùng mới.");
         }
 
-        // TRƯỜNG HỢP 2: MANAGER -> GIỚI HẠN QUYỀN
         if (creatorRole == EmployeeRole.MANAGER) {
-            // A. Manager CHỈ được tạo nhân viên là STAFF
             newEmployee.setRole(EmployeeRole.STAFF);
-
-            // B. Manager CHỈ được thêm vào phòng ban của chính mình
+            // Logic: Manager tạo nhân viên -> Tự động thêm vào phòng của Manager
             if (creator.getDepartment() != null) {
-                // Ghi đè departmentId gửi lên bằng ID phòng của Manager
-                departmentId = creator.getDepartment().getId(); 
+                Long managerDeptId = creator.getDepartment().getId();
+                
+                // [FIX] Vì annotation ở trên không bắt được việc departmentId bị thay đổi ở đây,
+                // ta phải xóa cache thủ công cho phòng của Manager.
+                evictDepartmentCache(managerDeptId);
+                
+                departmentId = managerDeptId; 
             } else {
-                throw new RuntimeException("Lỗi: Bạn là Manager nhưng chưa thuộc phòng ban nào, không thể tạo nhân viên.");
+                throw new RuntimeException("Lỗi: Bạn là Manager nhưng chưa thuộc phòng ban nào.");
             }
         }
         
-        // TRƯỜNG HỢP 3: COMPANY_ADMIN -> Cho phép tạo tùy ý (Giữ nguyên role/dept gửi lên)
-
-        // =================================================================
-        
-        // 2. Check trùng lặp (Giữ nguyên)
+        // 2. Các logic check trùng, gán ID giữ nguyên code cũ của bạn
         if (employeeRepository.existsByEmail(newEmployee.getEmail())) {
             throw new RuntimeException("Email " + newEmployee.getEmail() + " already exists!");
         }
@@ -82,57 +103,37 @@ public class EmployeeService {
             throw new RuntimeException("Phone " + newEmployee.getPhone() + " already exists!");
         }
 
-        // 3. Gán Company ID (Lấy từ người tạo)
         newEmployee.setCompanyId(creator.getCompanyId());
-        
-        // 4. Default values
         if (newEmployee.getRole() == null) newEmployee.setRole(EmployeeRole.STAFF);
         if (newEmployee.getStatus() == null) newEmployee.setStatus(EmployeeStatus.ACTIVE);
+        if (newEmployee.getId() == null) newEmployee.setId(idGenerator.nextId());
 
-        // 5. Sinh ID (Giữ nguyên)
-        if (newEmployee.getId() == null) {
-            newEmployee.setId(idGenerator.nextId());
-        }
-
-        // 6. Gán phòng ban (Logic cũ nhưng biến departmentId đã được "sạch" hóa ở trên)
         if (departmentId != null) {
             Department dept = departmentRepository.findById(departmentId)
                     .orElseThrow(() -> new RuntimeException("Phòng ban không tồn tại"));
             newEmployee.setDepartment(dept);
         }
 
-        // 7. Lưu & Gửi RabbitMQ (Giữ nguyên đoạn code cũ)
+        // 3. Lưu & Gửi MQ (Giữ nguyên code cũ)
         Employee savedEmployee = saveEmployeeWithRetry(newEmployee);
         
         if (savedEmployee != null) {
             try {
                 String passwordToSend = (password != null && !password.isEmpty()) ? password : "123456";
-
-                String deptName = (savedEmployee.getDepartment() != null) 
-                            ? savedEmployee.getDepartment().getName() 
-                            : "N/A";
+                String deptName = (savedEmployee.getDepartment() != null) ? savedEmployee.getDepartment().getName() : "N/A";
 
                 EmployeeSyncEvent event = new EmployeeSyncEvent(
-                    null, 
-                    savedEmployee.getEmail(),
-                    savedEmployee.getFullName(),
-                    savedEmployee.getPhone(),
-                    savedEmployee.getDateOfBirth(),
-                    savedEmployee.getCompanyId(),
-                    savedEmployee.getRole().name(),
-                    savedEmployee.getStatus().name(),
-                    passwordToSend,
-                    deptName
+                    null, savedEmployee.getEmail(), savedEmployee.getFullName(),
+                    savedEmployee.getPhone(), savedEmployee.getDateOfBirth(),
+                    savedEmployee.getCompanyId(), savedEmployee.getRole().name(),
+                    savedEmployee.getStatus().name(), passwordToSend, deptName
                 );
-                
                 employeeProducer.sendEmployeeCreatedEvent(event);
                 log.info("--> Đã gửi yêu cầu tạo User sang Core (Email: {}).", savedEmployee.getEmail());
-                
             } catch (Exception e) {
                 log.error("Lỗi gửi MQ sang Core: {}", e.getMessage());
             }
         }
-
         return savedEmployee;
     }
 
@@ -298,161 +299,114 @@ public class EmployeeService {
         int randomNum = (int) (Math.random() * 1000000);
         return String.format("NV%06d", randomNum);
     }
-   @Cacheable(value = "employees", key = "#requesterId", sync = true)
-    public List<Employee> getAllEmployeesByRequester(Long requesterId) {
-        // 1. Xác định người gọi
-        Employee requester = employeeRepository.findById(requesterId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
 
-        // 2. PHÂN QUYỀN CHẶT CHẼ 3 CẤP
-        EmployeeRole role = requester.getRole();
-
-        // CẤP 1: ADMIN - Xem toàn bộ công ty
-        if (role == EmployeeRole.COMPANY_ADMIN) {
-            return employeeRepository.findByCompanyId(requester.getCompanyId());
-        }
-
-        // CẤP 2: MANAGER - Xem nhân viên phòng ban mình
-        if (role == EmployeeRole.MANAGER) {
+    public List<Employee> getAllEmployeesByRequester(Employee requester) {
+        // Logic phân luồng tối ưu cache
+        if (requester.getRole() == EmployeeRole.COMPANY_ADMIN) {
+            // [FIX] Gọi qua biến 'self' thay vì gọi trực tiếp để kích hoạt Cache
+            return self.getEmployeesByCompanyCached(requester.getCompanyId());
+        } 
+        else if (requester.getRole() == EmployeeRole.MANAGER) {
             if (requester.getDepartment() != null) {
-                return employeeRepository.findByDepartmentId(requester.getDepartment().getId());
-            } else {
-                // Manager chưa có phòng -> Chỉ thấy chính mình (hoặc rỗng)
-                return List.of(requester); 
+                // [FIX] Gọi qua biến 'self'
+                return self.getEmployeesByDepartmentCached(requester.getDepartment().getId());
             }
         }
-
-        // CẤP 3: STAFF - Chỉ xem được chính mình (An toàn nhất)
-        // (Hoặc nếu muốn Staff xem được đồng nghiệp cùng phòng thì dùng logic giống Manager)
-        return List.of(requester); 
+        // Staff -> Không cache list
+        return List.of(requester);
     }
 
-   // [CẬP NHẬT] Thêm tham số 'Employee updater' vào đầu hàm
+    // [CACHE CON 1]
+    @Cacheable(value = "employees_by_company", key = "#companyId", sync = true)
+    public List<Employee> getEmployeesByCompanyCached(Long companyId) {
+        return employeeRepository.findByCompanyId(companyId);
+    }
+
+    // [CACHE CON 2]
+    @Cacheable(value = "employees_by_department", key = "#deptId", sync = true)
+    public List<Employee> getEmployeesByDepartmentCached(Long deptId) {
+        return employeeRepository.findByDepartmentId(deptId);
+    }
+
+  // --- HÀM 2: SỬA UPDATE (Xóa annotation gây lỗi & dùng code thủ công) ---
     @Transactional
     @Caching(evict = {
         @CacheEvict(value = "employee_detail", key = "#id"),
-        @CacheEvict(value = "employees", allEntries = true),
-        @CacheEvict(value = "departments", allEntries = true),   
-        @CacheEvict(value = "hr_department", allEntries = true)  
+        @CacheEvict(value = "employees_by_company", key = "#updater.companyId"),
+        @CacheEvict(value = "departments", key = "#updater.companyId")
     })
     public Employee updateEmployee(
-            Employee updater, 
-            Long id, 
-            String fullName, 
-            String phone, 
-            String dob, 
-            String avatarUrl, 
-            String statusStr, 
-            String roleStr, 
-            Long departmentId,
-            String email
+            Employee updater, Long id, String fullName, String phone, String dob, 
+            String avatarUrl, String statusStr, String roleStr, Long departmentId, String email
     ) {
-        // 1. Tìm nhân viên cần sửa (Target)
+        // 1. Tìm nhân viên
         Employee targetEmployee = employeeRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Employee not found"));
 
-        // =========================================================
-        // [BẢO MẬT] KIỂM TRA QUYỀN HẠN (Permission Check)
-        // =========================================================
-        
-        // Nếu người sửa là STAFF -> Chặn luôn (Staff không được sửa hồ sơ người khác)
-        // Lưu ý: Nếu muốn cho phép Staff tự sửa hồ sơ mình thì thêm điều kiện (updater.getId().equals(id))
-        if (updater.getRole() == EmployeeRole.STAFF) {
-             throw new RuntimeException("Truy cập bị từ chối: Nhân viên không có quyền chỉnh sửa.");
-        }
+        // [QUAN TRỌNG] Lấy ID phòng ban cũ để xóa cache sau khi update
+        Long oldDeptId = (targetEmployee.getDepartment() != null) ? targetEmployee.getDepartment().getId() : null;
 
-        // Nếu người sửa là MANAGER
+        // 2. Logic Permission Check (Giữ nguyên code cũ)
+        if (updater.getRole() == EmployeeRole.STAFF) throw new RuntimeException("Truy cập bị từ chối.");
         if (updater.getRole() == EmployeeRole.MANAGER) {
-            
-            // A. Manager KHÔNG ĐƯỢC sửa người của phòng khác
-            // Logic: Nếu Manager chưa có phòng, hoặc Target chưa có phòng, hoặc ID phòng khác nhau
-            if (updater.getDepartment() == null || 
-                targetEmployee.getDepartment() == null ||
+            if (updater.getDepartment() == null || targetEmployee.getDepartment() == null || 
                 !updater.getDepartment().getId().equals(targetEmployee.getDepartment().getId())) {
-                
-                throw new RuntimeException("Truy cập bị từ chối: Bạn chỉ được chỉnh sửa nhân viên trong phòng ban của mình.");
+                throw new RuntimeException("Truy cập bị từ chối: Sai phòng ban.");
             }
-
-            // B. Manager KHÔNG ĐƯỢC đổi Role (Quyền)
-            // Nếu có gửi role mới lên VÀ role mới khác role cũ -> Chặn
             if (roleStr != null && !roleStr.isEmpty() && !roleStr.equalsIgnoreCase(targetEmployee.getRole().name())) {
-                throw new RuntimeException("Truy cập bị từ chối: Manager không có quyền thay đổi chức vụ (Role).");
+                throw new RuntimeException("Truy cập bị từ chối: Manager không được đổi Role.");
             }
-
-            // C. Manager KHÔNG ĐƯỢC đổi Phòng ban (Transfer)
-            // Nếu có gửi ID phòng mới lên VÀ ID đó khác ID phòng hiện tại -> Chặn
             if (departmentId != null && !departmentId.equals(targetEmployee.getDepartment().getId())) {
-                throw new RuntimeException("Truy cập bị từ chối: Manager không có quyền điều chuyển nhân sự sang phòng khác.");
+                throw new RuntimeException("Truy cập bị từ chối: Manager không được đổi Phòng.");
             }
         }
-        
-        // =========================================================
-        // [KẾT THÚC KIỂM TRA BẢO MẬT]
-        // =========================================================
 
-        // Lưu lại trạng thái cũ để xử lý logic đồng bộ Manager (cho Admin dùng)
         EmployeeRole oldRole = targetEmployee.getRole();
         Department oldDepartment = targetEmployee.getDepartment();
 
-        // 2. Cập nhật thông tin cơ bản
+        // 3. Update Fields (Giữ nguyên code cũ)
         if (fullName != null && !fullName.isEmpty()) targetEmployee.setFullName(fullName);
-
         if (email != null && !email.isEmpty()) {
             if (!email.equals(targetEmployee.getEmail()) && employeeRepository.existsByEmail(email)) {
                 throw new RuntimeException("Email already exists");
             }
             targetEmployee.setEmail(email);
         }
-
         if (phone != null && !phone.isEmpty()) {
             if (!phone.equals(targetEmployee.getPhone()) && employeeRepository.existsByPhone(phone)) {
                 throw new RuntimeException("Phone already exists");
             }
             targetEmployee.setPhone(phone);
         }
-
         if (dob != null && !dob.isEmpty()) {
-            try { 
-                targetEmployee.setDateOfBirth(LocalDate.parse(dob)); 
-            } catch (Exception e) {
-                throw new RuntimeException("Invalid Date format (yyyy-MM-dd required)."); 
-            }
+            try { targetEmployee.setDateOfBirth(LocalDate.parse(dob)); } 
+            catch (Exception e) { throw new RuntimeException("Invalid Date format."); }
         }
-        
         if (avatarUrl != null && !avatarUrl.equals(targetEmployee.getAvatarUrl())) {
             deleteOldAvatarFromStorage(targetEmployee.getAvatarUrl());
             targetEmployee.setAvatarUrl(avatarUrl);
         }
-
         if (statusStr != null && !statusStr.isEmpty()) {
             try { targetEmployee.setStatus(EmployeeStatus.valueOf(statusStr.toUpperCase())); } catch (Exception e) { }
         }
-
-        // 3. Cập nhật Role mới (Chỉ Admin mới chạy được xuống đây nếu đổi role, Manager đã bị chặn ở trên)
         if (roleStr != null && !roleStr.isEmpty()) {
             try { targetEmployee.setRole(EmployeeRole.valueOf(roleStr.toUpperCase())); } catch (Exception e) { }
         }
 
-        // 4. Cập nhật Phòng ban mới (Chỉ Admin mới chạy được xuống đây nếu đổi phòng)
+        // 4. Update Department
         if (departmentId != null) {
             if (departmentId == 0) {
                 targetEmployee.setDepartment(null);
             } else {
-                Department dept = departmentRepository.findById(departmentId).orElse(null); 
-                if (dept != null) {
-                    targetEmployee.setDepartment(dept);
-                }
+                Department dept = departmentRepository.findById(departmentId).orElse(null);
+                if (dept != null) targetEmployee.setDepartment(dept);
             }
         }
 
-        // =================================================================
-        // [LOGIC ĐỒNG BỘ MANAGER ID VÀO BẢNG DEPARTMENT] (Giữ nguyên)
-        // =================================================================
-        
+        // 5. Logic Sync Manager (Giữ nguyên code cũ)
         EmployeeRole newRole = targetEmployee.getRole();
         Department newDepartment = targetEmployee.getDepartment();
 
-        // A. Xử lý trường hợp bị HẠ CHỨC hoặc CHUYỂN PHÒNG
         if (oldRole == EmployeeRole.MANAGER) {
             boolean isDemoted = !newRole.equals(EmployeeRole.MANAGER);
             boolean isTransferred = (oldDepartment != null && newDepartment != null && !oldDepartment.getId().equals(newDepartment.getId()));
@@ -461,43 +415,38 @@ public class EmployeeService {
             if (isDemoted || isTransferred || isLeftDept) {
                 if (oldDepartment != null && oldDepartment.getManager() != null 
                         && oldDepartment.getManager().getId().equals(targetEmployee.getId())) {
-                    
-                    log.info("--> [Logic] Gỡ quyền Manager cũ tại phòng {}", oldDepartment.getName());
                     oldDepartment.setManager(null);
                     departmentRepository.save(oldDepartment);
                 }
             }
         }
-
-        // B. Xử lý trường hợp THĂNG CHỨC
         if (newRole == EmployeeRole.MANAGER && newDepartment != null) {
             Employee currentManager = newDepartment.getManager();
             if (currentManager == null || !currentManager.getId().equals(targetEmployee.getId())) {
-                log.info("--> [Logic] Thăng chức User {} làm Manager phòng {}", targetEmployee.getId(), newDepartment.getName());
                 newDepartment.setManager(targetEmployee);
                 departmentRepository.save(newDepartment);
             }
         }
 
-        // 5. Save Employee
+        // 6. Save
         Employee savedEmployee = employeeRepository.save(targetEmployee);
 
-        // 6. Gửi RabbitMQ đồng bộ
+        // [FIX] Xử lý Cache: Xóa cả phòng cũ và phòng mới (nếu có thay đổi)
+        evictDepartmentCache(oldDeptId); // Refresh phòng cũ
+        if (savedEmployee.getDepartment() != null) {
+            Long newDeptId = savedEmployee.getDepartment().getId();
+            if (!newDeptId.equals(oldDeptId)) {
+                evictDepartmentCache(newDeptId); // Refresh phòng mới
+            }
+        }
+
+        // 7. RabbitMQ (Giữ nguyên code cũ)
         try {
-            String deptName = (savedEmployee.getDepartment() != null) 
-                        ? savedEmployee.getDepartment().getName() 
-                        : "N/A";
+            String deptName = (savedEmployee.getDepartment() != null) ? savedEmployee.getDepartment().getName() : "N/A";
             EmployeeSyncEvent event = new EmployeeSyncEvent(
-                savedEmployee.getId(),
-                savedEmployee.getEmail(),
-                savedEmployee.getFullName(),
-                savedEmployee.getPhone(),
-                savedEmployee.getDateOfBirth(),
-                savedEmployee.getCompanyId(),
-                savedEmployee.getRole().name(), 
-                savedEmployee.getStatus().name(),
-                null,
-                deptName
+                savedEmployee.getId(), savedEmployee.getEmail(), savedEmployee.getFullName(),
+                savedEmployee.getPhone(), savedEmployee.getDateOfBirth(), savedEmployee.getCompanyId(),
+                savedEmployee.getRole().name(), savedEmployee.getStatus().name(), null, deptName
             );
             employeeProducer.sendEmployeeUpdatedEvent(event);
 
@@ -509,111 +458,75 @@ public class EmployeeService {
         return savedEmployee;
     }
 
-
-   // [CẬP NHẬT BẢO MẬT + LOGIC XÓA]
-    @Transactional
+  @Transactional
     @Caching(evict = {
         @CacheEvict(value = "employee_detail", key = "#targetId"),
-        @CacheEvict(value = "employees", allEntries = true),
-        @CacheEvict(value = "departments", allEntries = true),   
-        @CacheEvict(value = "hr_department", allEntries = true)  
+        @CacheEvict(value = "employees_by_company", key = "#deleter.companyId"),
+        @CacheEvict(value = "departments", key = "#deleter.companyId")
+        // [FIX] Bỏ employees_by_department ở đây vì tham số #deptId không tồn tại
     })
-    public void deleteEmployee(Employee deleter, Long targetId) { // [SỬA] Thêm tham số deleter
-        
-        // 1. Tìm nhân viên cần xóa
+    public void deleteEmployee(Employee deleter, Long targetId) { 
         Employee targetEmployee = employeeRepository.findById(targetId)
                 .orElseThrow(() -> new RuntimeException("Employee not found"));
 
-        // =========================================================
-        // [BẢO MẬT] KIỂM TRA QUYỀN HẠN (Permission Check)
-        // =========================================================
+        // [FIX] Lấy ID phòng ban trước khi xóa để clear cache
+        Long deptId = (targetEmployee.getDepartment() != null) ? targetEmployee.getDepartment().getId() : null;
 
-        // A. Không được tự xóa chính mình
-        if (deleter.getId().equals(targetId)) {
-            throw new RuntimeException("Hành động bị từ chối: Bạn không thể tự xóa tài khoản của chính mình.");
-        }
+        // 1. Permission Check (Giữ nguyên code cũ)
+        if (deleter.getId().equals(targetId)) throw new RuntimeException("Không thể tự xóa chính mình.");
+        if (!deleter.getCompanyId().equals(targetEmployee.getCompanyId())) throw new RuntimeException("Lỗi bảo mật: Khác công ty.");
 
-        // B. Phải cùng công ty
-        if (!deleter.getCompanyId().equals(targetEmployee.getCompanyId())) {
-            throw new RuntimeException("Lỗi bảo mật: Nhân viên này không thuộc công ty của bạn.");
-        }
-
-        // C. Kiểm tra phân quyền dựa trên vai trò của người bị xóa (Target)
         if (targetEmployee.getRole() == EmployeeRole.MANAGER) {
-            // RULE: Nếu xóa Quản lý -> Chỉ Giám đốc (Admin) mới được phép
-            if (deleter.getRole() != EmployeeRole.COMPANY_ADMIN) {
-                throw new RuntimeException("Truy cập bị từ chối: Chỉ Giám đốc mới có quyền xóa Quản lý.");
-            }
+            if (deleter.getRole() != EmployeeRole.COMPANY_ADMIN) throw new RuntimeException("Chỉ Giám đốc mới có quyền xóa Quản lý.");
         } else {
-            // RULE: Nếu xóa Nhân viên (Staff)
             if (deleter.getRole() == EmployeeRole.COMPANY_ADMIN) {
-                // Admin được quyền xóa tất cả -> OK
+                // OK
             } else if (deleter.getRole() == EmployeeRole.MANAGER) {
-                // Manager chỉ được xóa nhân viên TRONG CÙNG PHÒNG BAN
-                if (targetEmployee.getDepartment() == null || 
-                    deleter.getDepartment() == null || 
+                if (targetEmployee.getDepartment() == null || deleter.getDepartment() == null || 
                     !targetEmployee.getDepartment().getId().equals(deleter.getDepartment().getId())) {
-                    
-                    throw new RuntimeException("Truy cập bị từ chối: Bạn chỉ được xóa nhân viên thuộc phòng ban mình quản lý.");
+                    throw new RuntimeException("Chỉ được xóa nhân viên thuộc phòng ban mình quản lý.");
                 }
             } else {
-                // Staff không có quyền xóa ai cả
-                throw new RuntimeException("Truy cập bị từ chối: Bạn không có quyền thực hiện thao tác này.");
+                throw new RuntimeException("Bạn không có quyền thực hiện thao tác này.");
             }
         }
-        // =========================================================
 
-        log.info("--> Bắt đầu quy trình xóa nhân viên ID: {} bởi User: {}", targetId, deleter.getId());
+        log.info("--> Bắt đầu xóa nhân viên ID: {}", targetId);
 
-        // 2. Xử lý Phòng ban (Nếu target đang là Manager -> Gỡ chức Manager)
-        java.util.Optional<Department> managedDept = departmentRepository.findByManagerId(targetId);
+        // 2. Logic dọn dẹp data (Giữ nguyên code cũ)
+        Optional<Department> managedDept = departmentRepository.findByManagerId(targetId);
         if (managedDept.isPresent()) {
             Department dept = managedDept.get();
-            dept.setManager(null); // Set null để không vi phạm khóa ngoại
+            dept.setManager(null);
             departmentRepository.save(dept);
-            log.info("--> Đã gỡ chức Manager khỏi phòng: {}", dept.getName());
         }
 
-        // 3. Xử lý Đơn từ (Requests) mà nhân viên này là NGƯỜI TẠO (Requester)
-        // Yêu cầu: Xóa hết đơn của họ để sạch dữ liệu
         List<Request> myRequests = requestRepository.findByRequesterId(targetId);
         for (Request req : myRequests) {
-            // Trước khi xóa Request, phải xóa Audit Log của Request đó
             List<RequestAuditLog> logs = auditLogRepository.findByRequestId(req.getId());
-            if (!logs.isEmpty()) {
-                auditLogRepository.deleteAll(logs);
-            }
-            // Sau đó mới xóa Request
+            if (!logs.isEmpty()) auditLogRepository.deleteAll(logs);
             requestRepository.delete(req);
         }
-        log.info("--> Đã xóa {} đơn xin phép của nhân viên.", myRequests.size());
 
-        // 4. Xử lý Đơn từ mà nhân viên này là NGƯỜI DUYỆT (Approver)
-        // Yêu cầu: Không xóa đơn của người khác, chỉ gỡ tên người duyệt (Set null)
         List<Request> approvedRequests = requestRepository.findByApproverId(targetId);
         for (Request req : approvedRequests) {
             req.setApprover(null);
             requestRepository.save(req);
         }
 
-        // 5. Xử lý Lịch sử (Audit Logs) mà nhân viên này là NGƯỜI THAO TÁC (Actor)
-        // (Xóa sạch log hành động của họ)
         List<RequestAuditLog> actorLogs = auditLogRepository.findByActorId(targetId);
-        if (!actorLogs.isEmpty()) {
-            auditLogRepository.deleteAll(actorLogs);
-            log.info("--> Đã xóa {} dòng lịch sử hoạt động.", actorLogs.size());
-        }
+        if (!actorLogs.isEmpty()) auditLogRepository.deleteAll(actorLogs);
 
-        // 6. Gửi sự kiện xóa sang Core Service (RabbitMQ)
         try {
             employeeProducer.sendEmployeeDeletedEvent(targetEmployee.getId());
-            log.info("--> Đã gửi lệnh xóa User ID {} sang Core", targetEmployee.getId());
-        } catch (Exception e) {
-            log.error("Lỗi gửi event xóa RabbitMQ: {}", e.getMessage());
-        }
+        } catch (Exception e) { log.error("Lỗi gửi event xóa RabbitMQ: {}", e.getMessage()); }
 
-        // 7. Cuối cùng: Xóa nhân viên khỏi bảng employees
+        // 3. Delete DB
         employeeRepository.delete(targetEmployee);
+
+        // [FIX] Xóa cache thủ công
+        evictDepartmentCache(deptId);
+
         log.info("--> XÓA THÀNH CÔNG NHÂN VIÊN ID: {}", targetId);
     }
 

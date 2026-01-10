@@ -262,7 +262,6 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
   }
 
   Future<void> _pickManager() async {
-    // ... (Giữ nguyên logic chọn manager)
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
@@ -273,21 +272,47 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
 
     if (result != null && result is EmployeeModel) {
       setState(() {
-        _selectedManager = result;
-        // Logic di chuyển thành viên -> manager
-        bool removed = false;
+        // 1. Lưu lại Manager cũ
+        final oldManager = _selectedManager;
+        final newManager = result;
+
+        // Nếu chọn lại đúng người cũ thì không làm gì cả
+        if (oldManager?.id == newManager.id) return;
+
+        // 2. Cập nhật Manager mới
+        _selectedManager = newManager;
+
+        // 3. Xử lý Manager CŨ: Đưa xuống làm nhân viên
+        if (oldManager != null) {
+          // Kiểm tra để chắc chắn không bị trùng (dù logic ít khi trùng)
+          final isAlreadyInList = _departmentMembers.any(
+            (m) => m.id == oldManager.id,
+          );
+
+          if (!isAlreadyInList) {
+            // Thêm vào danh sách thành viên
+            _departmentMembers.add(oldManager);
+          }
+        }
+
+        // 4. Xử lý Manager MỚI: Nếu vốn là nhân viên trong phòng thì xóa khỏi list member
+        // (Vì giờ đã leo lên chức Manager rồi, không nằm trong list member nữa)
+        bool promoted = false;
         _departmentMembers.removeWhere((m) {
-          if (m.id == result.id) {
-            removed = true;
+          if (m.id == newManager.id) {
+            promoted = true;
             return true;
           }
           return false;
         });
-        if (removed) {
+
+        // Hiển thị thông báo nhỏ nếu cần
+        if (promoted) {
           CustomSnackBar.show(
             context,
             title: 'Info',
-            message: 'Employee moved from Member to Manager position.',
+            message:
+                'Member promoted to Manager. Old manager demoted to Member.',
             isError: false,
           );
         }

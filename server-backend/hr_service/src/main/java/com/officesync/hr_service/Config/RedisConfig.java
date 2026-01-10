@@ -27,30 +27,25 @@ public class RedisConfig {
     @Bean
     public RedisCacheConfiguration cacheConfiguration() {
         ObjectMapper objectMapper = new ObjectMapper();
-        
-        // 1. Module ngày tháng
         objectMapper.registerModule(new JavaTimeModule());
-        
-        // 2. Bỏ qua lỗi field thừa
         objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
-        // Thay thế đoạn activateDefaultTyping bằng:
-    objectMapper.activateDefaultTyping(
-    BasicPolymorphicTypeValidator.builder()
-        .allowIfBaseType(Object.class) // Cho phép cơ bản
-        .allowIfSubType("com.officesync.hr_service") // Chỉ cho phép class của dự án
-        .allowIfSubType("java.util.ArrayList")
-        .allowIfSubType("java.util.HashMap")
-        .build(),
-    ObjectMapper.DefaultTyping.NON_FINAL,
-    JsonTypeInfo.As.PROPERTY
-    );
+        // Bảo mật Type Validator (Giữ nguyên như bạn làm là tốt)
+        objectMapper.activateDefaultTyping(
+            BasicPolymorphicTypeValidator.builder()
+                .allowIfBaseType(Object.class)
+                .allowIfSubType("com.officesync.hr_service")
+                .allowIfSubType("java.util.ArrayList")
+                .allowIfSubType("java.util.HashMap")
+                .build(),
+            ObjectMapper.DefaultTyping.NON_FINAL,
+            JsonTypeInfo.As.PROPERTY
+        );
 
-        // 4. Tạo Serializer
         GenericJackson2JsonRedisSerializer serializer = new GenericJackson2JsonRedisSerializer(objectMapper);
 
         return RedisCacheConfiguration.defaultCacheConfig()
-            .entryTtl(Duration.ofMinutes(60))
+            .entryTtl(Duration.ofMinutes(60)) // Mặc định 60 phút
             .disableCachingNullValues()
             .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
             .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(serializer));
@@ -58,23 +53,29 @@ public class RedisConfig {
 
     @Bean
     public RedisCacheManager cacheManager(RedisConnectionFactory redisConnectionFactory) {
-        // ... (Giữ nguyên phần Map cấu hình của bạn)
-        Map<String, RedisCacheConfiguration> configurationMap = new HashMap<>();
+        Map<String, RedisCacheConfiguration> configMap = new HashMap<>();
         
-        configurationMap.put("departments", cacheConfiguration().entryTtl(Duration.ofHours(2)));
-        configurationMap.put("hr_department", cacheConfiguration().entryTtl(Duration.ofHours(2)));
+        // 1. Dữ liệu tĩnh (Phòng ban) - 4 giờ
+        configMap.put("departments", cacheConfiguration().entryTtl(Duration.ofHours(4))); 
+        configMap.put("hr_department", cacheConfiguration().entryTtl(Duration.ofHours(4)));
         
-        configurationMap.put("employees", cacheConfiguration().entryTtl(Duration.ofMinutes(30)));
-        configurationMap.put("employee_detail", cacheConfiguration().entryTtl(Duration.ofMinutes(30)));
-        
-        configurationMap.put("request_detail", cacheConfiguration().entryTtl(Duration.ofMinutes(30)));
-        // Lưu ý: TTL ngắn cho list request vì nó thay đổi liên tục
-        configurationMap.put("request_list_user", cacheConfiguration().entryTtl(Duration.ofMinutes(10))); 
-        configurationMap.put("request_list_manager", cacheConfiguration().entryTtl(Duration.ofMinutes(10)));
+        // 2. Dữ liệu nhân viên - 1 giờ
+        configMap.put("employee_detail", cacheConfiguration().entryTtl(Duration.ofHours(1)));
+        configMap.put("employees_by_company", cacheConfiguration().entryTtl(Duration.ofHours(1))); 
+        configMap.put("employees_by_department", cacheConfiguration().entryTtl(Duration.ofMinutes(30))); 
+
+        // 3. Request Detail - 1 ngày
+        configMap.put("request_detail", cacheConfiguration().entryTtl(Duration.ofDays(1))); 
+
+        // 4. Request List (User & Manager) - Short Lived (2 phút)
+        // [FIX] Phải khai báo rõ ràng tên cache được dùng trong Service
+        RedisCacheConfiguration shortLivedConfig = cacheConfiguration().entryTtl(Duration.ofMinutes(2));
+        configMap.put("request_list_user", shortLivedConfig);
+        configMap.put("request_list_manager", shortLivedConfig);
 
         return RedisCacheManager.builder(redisConnectionFactory)
                 .cacheDefaults(cacheConfiguration())
-                .withInitialCacheConfigurations(configurationMap)
+                .withInitialCacheConfigurations(configMap)
                 .build();
     }
 }

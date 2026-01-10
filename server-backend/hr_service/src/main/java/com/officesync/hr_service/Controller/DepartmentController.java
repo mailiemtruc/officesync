@@ -63,12 +63,14 @@ public class DepartmentController {
     }
 
  @GetMapping
-    public ResponseEntity<List<Department>> getAllDepartments(
-            @RequestHeader("X-User-Id") Long requesterId // [BẮT BUỘC] Thêm header này
-    ) {
-        // Truyền ID vào Service để lọc
-        return ResponseEntity.ok(departmentService.getAllDepartments(requesterId));
-    }
+public ResponseEntity<List<Department>> getAllDepartments(@RequestHeader("X-User-Id") Long requesterId) {
+    // 1. Query User ở Controller (rất nhanh, DB có cache cấp 1)
+    Employee requester = employeeRepository.findById(requesterId)
+            .orElseThrow(() -> new RuntimeException("User not found"));
+            
+    // 2. Truyền Object vào Service để Cache Key hoạt động
+    return ResponseEntity.ok(departmentService.getAllDepartments(requester));
+}
 
     @Data
     public static class UpdateDepartmentRequest {
@@ -126,13 +128,18 @@ public class DepartmentController {
         return ResponseEntity.ok(results);
     }
 
-    // [MỚI] API lấy thông tin phòng HR
-    @GetMapping("/hr")
+   @GetMapping("/hr")
     public ResponseEntity<?> getHrDepartment(
             @RequestHeader("X-User-Id") Long requesterId
     ) {
         try {
-            Department hrDept = departmentService.getHrDepartment(requesterId);
+            // 1. Query User tại Controller
+            Employee requester = employeeRepository.findById(requesterId)
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+
+            // 2. Truyền Object vào Service để kích hoạt Cache Key đúng chuẩn
+            Department hrDept = departmentService.getHrDepartment(requester);
+            
             return ResponseEntity.ok(hrDept);
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));

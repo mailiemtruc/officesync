@@ -108,14 +108,16 @@ public class EmployeeController {
     }
    
 
-    @GetMapping
-    public ResponseEntity<List<Employee>> getEmployees(
-            @RequestHeader("X-User-Id") Long requesterId
-    ) {
-        List<Employee> employees = employeeService.getAllEmployeesByRequester(requesterId);
+  @GetMapping
+    public ResponseEntity<List<Employee>> getEmployees(@RequestHeader("X-User-Id") Long requesterId) {
+        // 1. Query User
+        Employee requester = employeeRepository.findById(requesterId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        // 2. Gọi hàm Router
+        List<Employee> employees = employeeService.getAllEmployeesByRequester(requester);
         return ResponseEntity.ok(employees);
     }
-
     
     @PostMapping
     public ResponseEntity<?> createEmployee(

@@ -74,30 +74,45 @@ class _DepartmentDetailsPageState extends State<DepartmentDetailsPage> {
     }
 
     try {
-      // 1. Lấy danh sách thành viên mới nhất từ API
+      // 1. Lấy danh sách thành viên mới nhất từ API (Đã bao gồm Manager mới update)
       final deptMembers = await _employeeRepo.getEmployeesByDepartment(
         _currentDept.id!,
       );
 
       if (mounted) {
         setState(() {
-          // 2. Cập nhật danh sách hiển thị (trừ Manager ra nếu cần)
+          // 2. Tìm thông tin Manager MỚI NHẤT trong danh sách vừa tải về
+          EmployeeModel? freshManager = _currentDept.manager;
+
+          if (_currentDept.manager != null) {
+            try {
+              // Tìm người có ID trùng với Manager trong list mới trả về
+              // Người này sẽ có thông tin departmentName chính xác từ DB
+              freshManager = deptMembers.firstWhere(
+                (e) => e.id == _currentDept.manager!.id,
+              );
+            } catch (e) {
+              // Nếu không tìm thấy (ít xảy ra), giữ nguyên manager cũ
+              print("Manager not found in member list: $e");
+            }
+          }
+
+          // 3. Cập nhật danh sách hiển thị (trừ Manager ra)
           _members = deptMembers
               .where((e) => e.id != _currentDept.manager?.id)
               .toList();
 
-          // [SỬA LỖI TẠI ĐÂY]
-          // 3. Cập nhật lại _currentDept với số lượng thành viên mới (deptMembers.length)
-          // Vì DepartmentModel là final, ta phải tạo instance mới copy dữ liệu cũ + memberCount mới
+          // 4. Cập nhật _currentDept với Manager MỚI và số lượng thành viên
           _currentDept = DepartmentModel(
             id: _currentDept.id,
             name: _currentDept.name,
             code: _currentDept.code,
             color: _currentDept.color,
-            manager: _currentDept.manager,
+            manager:
+                freshManager, // <--- [QUAN TRỌNG] Dùng Manager mới thay vì manager cũ
             isHr: _currentDept.isHr,
             memberIds: _currentDept.memberIds,
-            memberCount: deptMembers.length, // <--- Cập nhật số lượng mới nhất
+            memberCount: deptMembers.length,
           );
 
           _isLoading = false;

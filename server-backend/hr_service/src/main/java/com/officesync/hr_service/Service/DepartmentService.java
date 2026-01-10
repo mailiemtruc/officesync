@@ -57,9 +57,12 @@ public class DepartmentService {
     }
     @Transactional
     @Caching(evict = {
-        @CacheEvict(value = "departments", allEntries = true),
-        @CacheEvict(value = "employees", allEntries = true),       // [MỚI]
-        @CacheEvict(value = "employee_detail", allEntries = true)  // [MỚI]
+        // Chỉ xóa danh sách phòng ban của CHÍNH CÔNG TY ĐÓ
+        @CacheEvict(value = "departments", key = "#creator.companyId"),
+        // Khi tạo phòng ban mới có thể update nhân viên -> xóa list nhân viên của cty đó
+        @CacheEvict(value = "employees_by_company", key = "#creator.companyId"), 
+        @CacheEvict(value = "hr_department", key = "#creator.companyId"),
+
     })
     public Department createDepartmentFull(Employee creator, String name, Long managerId, List<Long> memberIds,Boolean isHr) {
         // 1. Kiểm tra quyền
@@ -140,11 +143,11 @@ public class DepartmentService {
     }
 
     @Transactional
-   @Caching(evict = {
-        @CacheEvict(value = "departments", allEntries = true),
-        @CacheEvict(value = "hr_department", allEntries = true),
-        @CacheEvict(value = "employees", allEntries = true),       // [MỚI]
-        @CacheEvict(value = "employee_detail", allEntries = true)  // [MỚI]
+  @Caching(evict = {
+        @CacheEvict(value = "departments", key = "#updater.companyId"),
+        @CacheEvict(value = "hr_department", key = "#updater.companyId"),
+        @CacheEvict(value = "employees_by_company", key = "#updater.companyId"),
+        @CacheEvict(value = "employees_by_department", key = "#deptId")
     })
     public Department updateDepartment(Employee updater, Long deptId, String name, Long managerId,Boolean isHr) {
         // 1. Kiểm tra quyền
@@ -229,10 +232,11 @@ public class DepartmentService {
 
     @Transactional
    @Caching(evict = {
-        @CacheEvict(value = "departments", allEntries = true),
-        @CacheEvict(value = "hr_department", allEntries = true),
-        @CacheEvict(value = "employees", allEntries = true),       // [MỚI QUAN TRỌNG]
-        @CacheEvict(value = "employee_detail", allEntries = true)  // [MỚI QUAN TRỌNG]
+        @CacheEvict(value = "departments", key = "#deleter.companyId"),
+        @CacheEvict(value = "hr_department", key = "#deleter.companyId"),
+        @CacheEvict(value = "employees_by_company", key = "#deleter.companyId"),
+        @CacheEvict(value = "employees_by_department", key = "#deptId")
+
     })
     public void deleteDepartment(Employee deleter, Long deptId) {
         // 1. Kiểm tra quyền
@@ -337,16 +341,11 @@ public class DepartmentService {
         return String.format("DEP%04d", randomNum);
     }
 
-  // [ĐÃ SỬA BẢO MẬT] Thay vì findAll(), ta lọc theo Company của người yêu cầu
-  @Cacheable(value = "departments", key = "#requesterId", sync = true)
-    public List<Department> getAllDepartments(Long requesterId) {
-        // 1. Xác thực người dùng
-        Employee requester = employeeRepository.findById(requesterId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-        
-        // 2. Chỉ trả về dữ liệu thuộc công ty của người đó
-        return departmentRepository.findByCompanyId(requester.getCompanyId());
-    }
+ // Sửa hàm này: Nhận object Employee thay vì Long requesterId
+@Cacheable(value = "departments", key = "#requester.companyId", sync = true)
+public List<Department> getAllDepartments(Employee requester) { // <--- Tham số là Object
+    return departmentRepository.findByCompanyId(requester.getCompanyId());
+}
 
     public List<Department> searchDepartments(Long requesterId, String keyword) {
         Employee requester = employeeRepository.findById(requesterId)
@@ -354,13 +353,12 @@ public class DepartmentService {
         return departmentRepository.searchDepartments(requester.getCompanyId(), keyword);
     }
 
-    // [MỚI] Lấy thông tin phòng HR của công ty
-    @Cacheable(value = "hr_department", key = "#requesterId", sync = true)
-    public Department getHrDepartment(Long requesterId) {
-        Employee requester = employeeRepository.findById(requesterId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-        
-        // Tìm phòng ban có cờ isHr = true trong công ty
+   // [TỐI ƯU CACHE KEY] 
+   // [Service] DepartmentService.java
+
+    @Cacheable(value = "hr_department", key = "#requester.companyId", sync = true)
+    public Department getHrDepartment(Employee requester) {
+        // Không cần tìm user nữa vì Controller đã truyền vào
         return departmentRepository.findByCompanyIdAndIsHrTrue(requester.getCompanyId())
                 .orElseThrow(() -> new RuntimeException("Chưa thiết lập phòng HR cho công ty này."));
     }
