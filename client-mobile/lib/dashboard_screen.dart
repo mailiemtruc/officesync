@@ -262,6 +262,8 @@ import 'features/notification_service/notification_service.dart';
 
 import 'features/hr_service/data/datasources/employee_remote_data_source.dart';
 
+import 'features/ai_service/presentation/pages/ai_chat_screen.dart';
+
 class DashboardScreen extends StatefulWidget {
   final Map<String, dynamic> userInfo;
 
@@ -362,6 +364,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
       // Sử dụng IndexedStack để giữ trạng thái các trang
       body: IndexedStack(index: _currentIndex, children: _pages),
+
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          // Điều hướng sang màn hình Chat
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const AiChatScreen()),
+          );
+        },
+        backgroundColor: AppColors.primary,
+        elevation: 4,
+        shape: const CircleBorder(), // Nút tròn
+        tooltip: 'AI Assistant',
+        child: const Icon(
+          Icons
+              .smart_toy_rounded, // Icon hình Robot hoặc dùng PhosphorIconsFill.chatCircleDots
+          color: Colors.white,
+          size: 28,
+        ),
+      ),
 
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
