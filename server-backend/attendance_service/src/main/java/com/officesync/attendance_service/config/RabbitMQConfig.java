@@ -22,7 +22,7 @@ public class RabbitMQConfig {
     public static final String ROUTING_KEY_COMPANY_CONFIG = "company.config.update";
     
     // Config cho User Sync (SỬA LẠI ĐỂ KHỚP VỚI HR)
-    public static final String QUEUE_USER_SYNC = "attendance.user.sync.queue";
+    public static final String QUEUE_USER_SYNC = "attendance.user.sync.queue.v2";
     public static final String ROUTING_KEY_USER_SYNC = "user.sync"; // <--- Bắt buộc phải là "user.sync"
 
     // --- 2. KHỞI TẠO EXCHANGE ---

@@ -20,6 +20,7 @@ public class RabbitMQConfig {
 
     // Tên hàng đợi phải TRÙNG KHỚP với bên Core Service
     public static final String QUEUE_COMPANY_CREATE = "company.create.queue";
+    public static final String ROUTING_KEY_COMPANY_CREATE = "company.create";
 
     // 1. Định nghĩa tên Exchange và Routing Key của Core
     public static final String INTERNAL_EXCHANGE = "internal.exchange";
@@ -125,5 +126,16 @@ public class RabbitMQConfig {
                 .bind(companyQueue)
                 .to(internalExchange)
                 .with(ROUTING_KEY_USER_STATUS);
+    }
+
+    @Bean
+    public Binding bindingCompanyCreate(
+            @Qualifier("queue") Queue companyQueue, // Lấy bean queue() đã khai báo ở trên
+            TopicExchange internalExchange) {
+        
+        return BindingBuilder
+                .bind(companyQueue)
+                .to(internalExchange)
+                .with(ROUTING_KEY_COMPANY_CREATE); // "company.create"
     }
 }
