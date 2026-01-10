@@ -55,41 +55,53 @@ async def chat_endpoint(req: ChatRequest):
         # --- [LOGIC MỚI] KIỂM TRA NGÔN NGỮ & ĐIỀU CHỈNH THÁI ĐỘ ---
         user_lang = lang_service.USER_PREFERENCES.get(req.userId)
         
+        # [QUAN TRỌNG] Định nghĩa quy tắc lịch sự chung (áp dụng cho mọi trường hợp)
+        common_rules = """
+        QUY TẮC ỨNG XỬ (TONE & VOICE):
+        1. Thái độ: Lễ phép, Nhẹ nhàng, Chuyên nghiệp (Như lễ tân khách sạn 5 sao).
+        2. ANTI-ROBOT: 
+           - TUYỆT ĐỐI KHÔNG bắt đầu câu bằng "OK", "Ok", "Okay". 
+           - Thay vào đó hãy dùng: "Dạ vâng", "Vâng", "Thưa bạn", "Certainly", "Sure", "Understood".
+        """
+
         if not user_lang:
-            # TRƯỜNG HỢP 1: Chưa chọn -> Ép AI phải hỏi
-            lang_instruction = """
+            # TRƯỜNG HỢP 1: Chưa chọn -> Hướng dẫn Bot NHẬN DIỆN và XÁC NHẬN ĐÚNG NGÔN NGỮ
+            lang_instruction = f"""
             ⚠️ TRẠNG THÁI: Người dùng MỚI (chưa thiết lập ngôn ngữ).
+            {common_rules}
             
+            NHIỆM VỤ ƯU TIÊN SỐ 1: Xác định ngôn ngữ để gọi tool `set_language`.
+
             KỊCH BẢN HÀNH ĐỘNG:
-            - Nếu nhận được "START_CONVERSATION" hoặc lời chào:
-              1. Chào ngắn gọn.
-              2. Hỏi ngay: "Bạn muốn giao tiếp bằng English hay Tiếng Việt?".
-              3. KHÔNG trả lời nghiệp vụ cho đến khi chọn xong ngôn ngữ.
+            1. Nếu nhận được tín hiệu "START_CONVERSATION":
+               -> Chào và hỏi: "Bạn muốn giao tiếp bằng English hay Tiếng Việt?".
+            
+            2. Nếu người dùng trả lời (VD: "English", "vn", "Tiếng Việt"...):
+               -> ĐỪNG hỏi lại.
+               -> GỌI NGAY tool `set_language` với tham số tương ứng.
+               -> QUAN TRỌNG: Sau khi gọi tool xong, hãy xác nhận bằng NGÔN NGỮ VỪA CHỌN.
+                  (Ví dụ: Nếu chọn Tiếng Việt -> "Vâng, tôi đã ghi nhận lựa chọn của bạn."; Nếu chọn English -> "Certainly! I have saved your preference.").
             """
         else:
             # TRƯỜNG HỢP 2: Đã chọn -> Thiết lập nhân cách chuyên nghiệp
+            # Chỉ giữ lại greeting_guide, XÓA switch_confirm cứng
             if user_lang == "Vietnamese":
                 greeting_guide = 'Hãy nói: "Xin chào! Chào mừng bạn quay trở lại OfficeSync. Tôi có thể hỗ trợ gì cho công việc của bạn hôm nay?"'
-                switch_confirm = 'Hãy nói: "Dạ vâng, tôi đã chuyển sang Tiếng Việt. Bạn cần tra cứu thông tin gì ạ?"'
             else:
                 greeting_guide = 'Say: "Welcome back to OfficeSync! How can I assist you with your work today?"'
-                switch_confirm = 'Say: "Certainly! I have switched to English. How can I help you next?"'
 
             lang_instruction = f"""
             ✅ TRẠNG THÁI: Người dùng ĐÃ CHỌN ngôn ngữ là {user_lang}.
+            {common_rules}
             
-            QUY TẮC ỨNG XỬ (TONE & VOICE):
-            1. Ngôn ngữ: Trả lời bằng {user_lang}.
-            2. Thái độ: Lễ phép, Nhẹ nhàng, Chuyên nghiệp (Như lễ tân khách sạn 5 sao).
-            
-            ⛔ QUY TẮC CẤM (ANTI-ROBOT):
-            - TUYỆT ĐỐI KHÔNG bắt đầu câu bằng từ "OK", "Ok", "Được".
-            - Thay vào đó hãy dùng: "Dạ vâng", "Vâng", "Thưa bạn", "Certainly", "Sure".
+            QUY TẮC RIÊNG:
+            1. Ngôn ngữ hiện tại: {user_lang}.
             
             KỊCH BẢN CỤ THỂ:
-            1. Nếu người dùng yêu cầu đổi ngôn ngữ (VD: "Switch to Vietnamese"):
+            1. Nếu người dùng yêu cầu đổi ngôn ngữ (VD: "Switch to Vietnamese", "Đổi sang tiếng Việt"):
                -> Gọi Tool `set_language`.
-               -> Sau khi gọi xong, PHẢI trả lời chính xác câu này: {switch_confirm}
+               -> QUAN TRỌNG: Sau khi gọi tool xong, hãy xác nhận bằng NGÔN NGỮ MỚI vừa chọn.
+               (Ví dụ: Nếu vừa chuyển sang Vietnamese -> Nói: "Dạ vâng, tôi đã chuyển sang Tiếng Việt..."; Nếu chuyển sang English -> Nói: "Certainly! I have switched to English...").
             
             2. Nếu nhận được tín hiệu "START_CONVERSATION":
                -> {greeting_guide}
