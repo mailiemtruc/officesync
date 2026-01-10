@@ -258,25 +258,33 @@ class _UserProfilePageState extends State<UserProfilePage> {
   Future<void> _handleLogout() async {
     try {
       // -----------------------------------------------------------
-      // 👇 1. [THÊM MỚI] Gọi API báo Server xóa Token đi
+      // 👇 SỬA ĐOẠN NÀY: BỎ TỪ KHÓA 'await'
       // -----------------------------------------------------------
-      String? userIdStr = await _getUserIdSafe(); // Tận dụng hàm có sẵn của bạn
+      String? userIdStr = await _getUserIdSafe();
       if (userIdStr != null) {
         int uid = int.tryParse(userIdStr) ?? 0;
         if (uid > 0) {
-          await NotificationService().unregisterDevice(uid);
-          print("--> Đã logout và hủy Token thông báo thành công");
+          // CÁCH MỚI: Gọi API nhưng KHÔNG CHỜ (Fire-and-forget)
+          // Nếu server sống -> Xóa tốt.
+          // Nếu server chết -> Kệ nó, in lỗi ra log thôi, không chặn đăng xuất.
+          NotificationService().unregisterDevice(uid).catchError((e) {
+            print("⚠️ Server Notification đang tắt, không xóa được Token: $e");
+          });
+
+          print("--> Đã gửi lệnh hủy Token (Không chờ phản hồi)");
         }
       }
       // -----------------------------------------------------------
+
+      // Các lệnh dưới này sẽ chạy NGAY LẬP TỨC mà không bị server làm phiền
       await _storage.deleteAll();
       WebSocketService().disconnect();
+
       if (mounted) {
         Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
       }
     } catch (e) {
       print("Logout error: $e");
-      // Dù lỗi mạng vẫn cho đăng xuất khỏi App để tránh kẹt
       if (mounted) {
         Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
       }
