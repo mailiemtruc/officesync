@@ -18,18 +18,24 @@ class ManagerAttendanceScreen extends StatefulWidget {
 class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
   final AttendanceApi _api = AttendanceApi();
 
-  // --- PALETTE MÀU ---
+  // --- PALETTE MÀU HIỆN ĐẠI ---
   static const Color primaryColor = Color(0xFF2260FF);
-  static const Color bgColor = Color(
-    0xFFF2F2F7,
-  ); // [ĐỔI] Màu nền giống trang Note
+  static const Color bgColor = Color(0xFFF2F2F7);
   static const Color textDark = Color(0xFF1E293B);
   static const Color textGrey = Color(0xFF64748B);
 
-  DateTime _selectedDate = DateTime.now();
+  static const Color colorIn = Color(0xFF00B894); // Xanh Teal
+  static const Color colorOut = Color(0xFFFA8231); // Cam
+
+  // --- STATE ---
+  DateTime _selectedMonth = DateTime.now();
   List<AttendanceModel> _records = [];
   bool _isLoading = false;
   final _storage = const FlutterSecureStorage();
+
+  // --- FILTERS ---
+  String _filterType = "ALL";
+  DateTime? _filterSpecificDate;
 
   @override
   void initState() {
@@ -65,8 +71,8 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
       final data = await _api.getManagerAllAttendance(
         userId,
         widget.userRole,
-        _selectedDate.month,
-        _selectedDate.year,
+        _selectedMonth.month,
+        _selectedMonth.year,
       );
 
       setState(() => _records = data);
@@ -77,12 +83,30 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
     }
   }
 
+  List<AttendanceModel> _getFilteredRecords() {
+    return _records.where((item) {
+      if (_filterType != "ALL") {
+        if (item.type != _filterType) return false;
+      }
+      if (_filterSpecificDate != null) {
+        DateTime itemDate = DateTime.parse(item.checkInTime);
+        bool isSameDay =
+            itemDate.year == _filterSpecificDate!.year &&
+            itemDate.month == _filterSpecificDate!.month &&
+            itemDate.day == _filterSpecificDate!.day;
+        if (!isSameDay) return false;
+      }
+      return true;
+    }).toList();
+  }
+
   Future<void> _pickMonth() async {
     final picked = await showDatePicker(
       context: context,
-      initialDate: _selectedDate,
+      initialDate: _selectedMonth,
       firstDate: DateTime(2020),
       lastDate: DateTime.now(),
+      helpText: "SELECT MONTH",
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
@@ -91,6 +115,9 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
               onPrimary: Colors.white,
               onSurface: textDark,
             ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(foregroundColor: primaryColor),
+            ),
           ),
           child: child!,
         );
@@ -98,42 +125,99 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
     );
 
     if (picked != null) {
-      setState(() => _selectedDate = picked);
+      setState(() {
+        _selectedMonth = picked;
+        _filterSpecificDate = null;
+      });
       _fetchData();
+    }
+  }
+
+  Future<void> _pickSpecificDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _filterSpecificDate ?? _selectedMonth,
+      firstDate: DateTime(_selectedMonth.year, _selectedMonth.month, 1),
+      lastDate: DateTime(_selectedMonth.year, _selectedMonth.month + 1, 0),
+      helpText: "FILTER BY DAY",
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: primaryColor,
+              onPrimary: Colors.white,
+              onSurface: textDark,
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(foregroundColor: primaryColor),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null) {
+      setState(() {
+        _filterSpecificDate = picked;
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final filteredList = _getFilteredRecords();
+
     return Scaffold(
       backgroundColor: bgColor,
-      // [QUAN TRỌNG] Bỏ AppBar mặc định, dùng SafeArea + Custom Header
       body: SafeArea(
         child: Column(
           children: [
-            // 1. HEADER GIỐNG TRANG NOTE
             _buildCustomAppBar(),
 
-            // 2. THANH CÔNG CỤ (FILTER)
-            _buildFilterToolbar(),
-
-            // 3. DANH SÁCH NHÂN VIÊN
             Expanded(
               child: _isLoading
                   ? const Center(
                       child: CircularProgressIndicator(color: primaryColor),
                     )
-                  : _records.isEmpty
-                  ? _buildEmptyState()
-                  : ListView.separated(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 10,
-                      ),
-                      itemCount: _records.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 12),
-                      itemBuilder: (context, index) =>
-                          _buildModernEmployeeCard(_records[index]),
+                  : Column(
+                      children: [
+                        // Phần Toolbar (Filter)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
+                          child: Column(
+                            children: [
+                              _buildFilterControlSection(filteredList.length),
+                              const SizedBox(height: 16),
+                              _buildTypeFilter(),
+                            ],
+                          ),
+                        ),
+
+                        // Danh sách nhân viên
+                        Expanded(
+                          child: filteredList.isEmpty
+                              ? _buildEmptyState()
+                              : ListView.separated(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    16,
+                                    0,
+                                    16,
+                                    20,
+                                  ),
+                                  itemCount: filteredList.length,
+                                  separatorBuilder: (_, __) =>
+                                      const SizedBox(height: 12),
+                                  itemBuilder: (context, index) =>
+                                      _buildModernEmployeeCard(
+                                        filteredList[index],
+                                      ),
+                                ),
+                        ),
+                      ],
                     ),
             ),
           ],
@@ -144,128 +228,196 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
 
   // --- WIDGETS ---
 
-  // [MỚI] Header giống hệt trang Note
   Widget _buildCustomAppBar() {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-      color: bgColor, // Màu F2F2F7
+      color: bgColor,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Nút Back
           IconButton(
             icon: const Icon(
               Icons.arrow_back_ios,
               color: primaryColor,
-              size: 22,
+              size: 24,
             ),
             onPressed: () => Navigator.pop(context),
           ),
-
-          // Title
-          // Dùng Expanded để chữ luôn ở giữa, kể cả khi nút bên phải ẩn
           const Expanded(
             child: Text(
-              "MANAGE ATTENDANCE",
+              "MANAGER ATTENDANCE",
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize:
-                    22, // Giảm nhẹ so với 24 vì chữ này dài hơn chữ "NOTE"
+                fontSize: 20,
                 fontWeight: FontWeight.w800,
                 color: primaryColor,
                 fontFamily: 'Inter',
+                letterSpacing: 0.5,
               ),
             ),
           ),
-
-          // Widget rỗng bên phải để cân bằng với nút Back bên trái
-          // Giúp chữ Tiêu đề nằm chính giữa màn hình
           const SizedBox(width: 48),
         ],
       ),
     );
   }
 
-  Widget _buildFilterToolbar() {
+  Widget _buildFilterControlSection(int count) {
+    final String displayMonth = DateFormat('MMMM yyyy').format(_selectedMonth);
+
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16), // Bo tròn mềm mại hơn
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            blurRadius: 15,
+            offset: const Offset(0, 5),
           ),
         ],
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Column(
         children: [
-          // Nút chọn tháng
-          GestureDetector(
-            onTap: _pickMonth,
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: primaryColor.withOpacity(0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.calendar_month,
-                    color: primaryColor,
-                    size: 20,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          // Row 1: Month Selector
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              GestureDetector(
+                onTap: _pickMonth,
+                child: Row(
                   children: [
-                    Text(
-                      "Time",
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: Colors.grey[500],
-                        fontWeight: FontWeight.w600,
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: primaryColor.withOpacity(0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.calendar_view_month_rounded,
+                        color: primaryColor,
+                        size: 20,
                       ),
                     ),
-                    Row(
+                    const SizedBox(width: 12),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          DateFormat('MM/yyyy').format(_selectedDate),
-                          style: const TextStyle(
-                            color: textDark,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15,
+                        const Text(
+                          "Month View",
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: textGrey,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
-                        const Icon(Icons.arrow_drop_down, color: textGrey),
+                        Row(
+                          children: [
+                            Text(
+                              displayMonth,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: textDark,
+                              ),
+                            ),
+                            const Icon(
+                              Icons.keyboard_arrow_down_rounded,
+                              color: textGrey,
+                              size: 20,
+                            ),
+                          ],
+                        ),
                       ],
                     ),
                   ],
                 ),
-              ],
-            ),
+              ),
+
+              // Record Count Badge
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: bgColor,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  "$count Records",
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: textGrey,
+                  ),
+                ),
+              ),
+            ],
           ),
 
-          // Badge số lượng
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: bgColor,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              "${_records.length} Employees",
-              style: TextStyle(
-                color: Colors.grey.shade700,
-                fontWeight: FontWeight.w600,
-                fontSize: 12,
-              ),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: Divider(height: 1, color: Color(0xFFF1F5F9)),
+          ),
+
+          // Row 2: Date Filter
+          GestureDetector(
+            onTap: _pickSpecificDate,
+            child: Row(
+              children: [
+                Icon(
+                  Icons.filter_alt_rounded,
+                  size: 18,
+                  color: _filterSpecificDate != null ? primaryColor : textGrey,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  "Filter Date: ",
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.grey[600],
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const Spacer(),
+                if (_filterSpecificDate != null)
+                  Chip(
+                    label: Text(
+                      DateFormat('dd/MM/yyyy').format(_filterSpecificDate!),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    backgroundColor: primaryColor,
+                    deleteIcon: const Icon(
+                      Icons.close,
+                      size: 16,
+                      color: Colors.white,
+                    ),
+                    onDeleted: () => setState(() => _filterSpecificDate = null),
+                    visualDensity: VisualDensity.compact,
+                    side: BorderSide.none,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                  )
+                else
+                  const Text(
+                    "All Days",
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: textDark,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+
+                if (_filterSpecificDate == null)
+                  const Icon(Icons.chevron_right_rounded, color: textGrey),
+              ],
             ),
           ),
         ],
@@ -273,26 +425,107 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
     );
   }
 
+  Widget _buildTypeFilter() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          _buildFilterChip("All", "ALL"),
+          const SizedBox(width: 10),
+          _buildFilterChip(
+            "Check In",
+            "CHECK_IN",
+            icon: Icons.login_rounded,
+            activeColor: colorIn,
+          ),
+          const SizedBox(width: 10),
+          _buildFilterChip(
+            "Check Out",
+            "CHECK_OUT",
+            icon: Icons.logout_rounded,
+            activeColor: colorOut,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterChip(
+    String label,
+    String value, {
+    IconData? icon,
+    Color? activeColor,
+  }) {
+    bool isSelected = _filterType == value;
+    Color color = activeColor ?? primaryColor;
+
+    return GestureDetector(
+      onTap: () => setState(() => _filterType = value),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected ? color : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: isSelected ? color : Colors.grey.shade200),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: color.withOpacity(0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                ]
+              : [],
+        ),
+        child: Row(
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: 18, color: isSelected ? Colors.white : textGrey),
+              const SizedBox(width: 6),
+            ],
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? Colors.white : textGrey,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // --- THẺ NHÂN VIÊN ĐẸP HƠN ---
   Widget _buildModernEmployeeCard(AttendanceModel item) {
     DateTime checkInTime = DateTime.parse(item.checkInTime);
     String timeStr = DateFormat('HH:mm').format(checkInTime);
     String dateStr = DateFormat('dd/MM/yyyy').format(checkInTime);
 
     bool isLate = item.status == "LATE";
+    // Badge status (Late/OnTime)
     Color statusColor = isLate
         ? const Color(0xFFFF4757)
         : const Color(0xFF2ED573);
     Color statusBg = statusColor.withOpacity(0.1);
-    String statusText = isLate ? "Late" : "On time";
+    String statusText = isLate ? "Late" : "On Time";
+
+    // Logic IN/OUT
+    bool isCheckIn = item.type == "CHECK_IN";
+    Color typeColor = isCheckIn ? colorIn : colorOut;
+    String typeLabel = isCheckIn ? "IN" : "OUT";
+    IconData typeIcon = isCheckIn ? Icons.login_rounded : Icons.logout_rounded;
 
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 10,
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 12,
             offset: const Offset(0, 4),
           ),
         ],
@@ -300,23 +533,24 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
-          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
 
+          // Avatar
           leading: Container(
-            width: 46,
-            height: 46,
+            width: 50,
+            height: 50,
             decoration: BoxDecoration(
-              color: primaryColor.withOpacity(0.1),
-              shape: BoxShape.circle,
+              color: primaryColor.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(16),
             ),
             alignment: Alignment.center,
             child: Text(
               _getInitials(item.fullName),
               style: const TextStyle(
                 color: primaryColor,
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
+                fontWeight: FontWeight.w900,
+                fontSize: 18,
               ),
             ),
           ),
@@ -332,50 +566,61 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
 
           subtitle: Padding(
             padding: const EdgeInsets.only(top: 6),
-            child: Wrap(
-              spacing: 6,
-              runSpacing: 4,
+            child: Row(
               children: [
-                _buildModernBadge(
-                  item.departmentName,
-                  Colors.grey.shade100,
-                  textGrey,
-                ),
-                _buildModernBadge(
+                _buildMiniBadge(
                   item.role,
-                  const Color(0xFFEef2FF),
-                  primaryColor,
+                  Colors.blue.shade50,
+                  Colors.blue.shade700,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    item.departmentName,
+                    style: const TextStyle(fontSize: 12, color: textGrey),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ],
             ),
           ),
 
+          // Phần bên phải (Giờ & Loại)
           trailing: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
+              // Badge IN/OUT
+              Container(
+                margin: const EdgeInsets.only(bottom: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: typeColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(typeIcon, size: 10, color: typeColor),
+                    const SizedBox(width: 4),
+                    Text(
+                      typeLabel,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w900,
+                        color: typeColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Time
               Text(
                 timeStr,
                 style: const TextStyle(
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w900,
                   fontSize: 16,
                   color: textDark,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: statusBg,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  statusText,
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    color: statusColor,
-                  ),
                 ),
               ),
             ],
@@ -383,75 +628,89 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
 
           children: [
             const Divider(height: 1, color: Color(0xFFF1F5F9)),
-            const SizedBox(height: 12),
-            _buildInfoRow(Icons.cake, "Date of Birth", item.dateOfBirth),
-            _buildInfoRow(Icons.phone, "Phone", item.phone),
-            _buildInfoRow(Icons.email, "Email", item.email),
-            _buildInfoRow(Icons.location_on, "Location", item.locationName),
-            const SizedBox(height: 8),
+            const SizedBox(height: 16),
+
+            // Hàng Status & Date
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Expanded(
-                  child: _buildInfoRow(
-                    Icons.wifi,
-                    "BSSID",
-                    item.deviceBssid,
-                    padding: 0,
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: statusBg,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        isLate
+                            ? Icons.warning_amber_rounded
+                            : Icons.check_circle_outline_rounded,
+                        size: 14,
+                        color: statusColor,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        statusText.toUpperCase(),
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: statusColor,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 Text(
                   dateStr,
                   style: TextStyle(
                     fontSize: 12,
-                    fontStyle: FontStyle.italic,
+                    fontWeight: FontWeight.w600,
                     color: Colors.grey[400],
                   ),
                 ),
               ],
             ),
+
+            const SizedBox(height: 12),
+            _buildDetailRow(Icons.email_outlined, item.email),
+            _buildDetailRow(Icons.phone_outlined, item.phone),
+            _buildDetailRow(Icons.location_on_outlined, item.locationName),
+            _buildDetailRow(Icons.wifi, "BSSID: ${item.deviceBssid ?? 'N/A'}"),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildModernBadge(String text, Color bg, Color textColor) {
+  Widget _buildMiniBadge(String text, Color bg, Color textColor) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(4),
       ),
       child: Text(
         text.toUpperCase(),
         style: TextStyle(
-          fontSize: 10,
+          fontSize: 9,
           fontWeight: FontWeight.bold,
           color: textColor,
         ),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
       ),
     );
   }
 
-  Widget _buildInfoRow(
-    IconData icon,
-    String label,
-    String? value, {
-    double padding = 6,
-  }) {
+  Widget _buildDetailRow(IconData icon, String? value) {
     return Padding(
-      padding: EdgeInsets.only(bottom: padding),
+      padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         children: [
-          Icon(icon, size: 16, color: Colors.grey[400]),
-          const SizedBox(width: 8),
-          Text(
-            "$label: ",
-            style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-          ),
+          Icon(icon, size: 16, color: textGrey),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(
               value ?? "N/A",
@@ -460,7 +719,6 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
                 color: textDark,
                 fontWeight: FontWeight.w500,
               ),
-              maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -474,11 +732,33 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.filter_list_off, size: 60, color: Colors.grey[300]),
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.03),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: Icon(
+              Icons.filter_list_off_rounded,
+              size: 48,
+              color: Colors.grey[300],
+            ),
+          ),
           const SizedBox(height: 16),
           Text(
-            "No data dots",
-            style: TextStyle(color: Colors.grey[500], fontSize: 16),
+            "No records found",
+            style: TextStyle(
+              color: Colors.grey[500],
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
+            ),
           ),
         ],
       ),

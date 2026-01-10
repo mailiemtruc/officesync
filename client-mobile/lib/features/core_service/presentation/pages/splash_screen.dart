@@ -5,7 +5,6 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../../../core/config/app_colors.dart';
 import '../../../../dashboard_screen.dart';
 import '../../../../../core/services/websocket_service.dart';
-import 'login_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -65,17 +64,11 @@ class _SplashScreenState extends State<SplashScreen> {
       } catch (e) {
         print("Lỗi parse user info: $e");
         // Nếu lỗi dữ liệu cũ, bắt đăng nhập lại cho an toàn
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const LoginScreen()),
-        );
+        Navigator.pushReplacementNamed(context, '/register');
       }
     } else {
       // Chưa đăng nhập
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const LoginScreen()),
-      );
+      Navigator.pushReplacementNamed(context, '/register');
     }
   }
 
