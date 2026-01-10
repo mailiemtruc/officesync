@@ -28,6 +28,7 @@ import 'features/task_service/presentation/pages/management_task_screen.dart';
 
 // ======================= notification_SERVICE ==============================
 import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 import 'features/notification_service/notification_service.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 // ======================= notification_SERVICE ==============================
@@ -36,7 +37,8 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   // Cần khởi tạo Firebase để xử lý ngầm
-  await Firebase.initializeApp();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,);
   print(
     "🌙 Nhận thông báo ngầm (Background/Terminated): ${message.notification?.title}",
   );
@@ -44,7 +46,9 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
 
   // 👇 2. ĐĂNG KÝ HÀM BACKGROUND
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
