@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'dart:convert';
+
+// --- IMPORTS TỪ SOURCE CỦA BẠN ---
 import '../../data/attendance_api.dart';
 import '../../data/models/attendance_model.dart';
-import 'dart:convert';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../../data/models/timesheet_model.dart'; // [NEW] Import TimesheetModel
+import '../widgets/daily_timesheet_card.dart'; // [NEW] Import Widget hiển thị thẻ
 
 class ManagerAttendanceScreen extends StatefulWidget {
   final String userRole;
@@ -17,25 +21,28 @@ class ManagerAttendanceScreen extends StatefulWidget {
 
 class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
   final AttendanceApi _api = AttendanceApi();
+  final _storage = const FlutterSecureStorage();
 
-  // --- PALETTE MÀU HIỆN ĐẠI ---
+  // --- PALETTE MÀU ---
   static const Color primaryColor = Color(0xFF2260FF);
   static const Color bgColor = Color(0xFFF2F2F7);
   static const Color textDark = Color(0xFF1E293B);
   static const Color textGrey = Color(0xFF64748B);
 
-  static const Color colorIn = Color(0xFF00B894); // Xanh Teal
-  static const Color colorOut = Color(0xFFFA8231); // Cam
-
   // --- STATE ---
   DateTime _selectedMonth = DateTime.now();
-  List<AttendanceModel> _records = [];
   bool _isLoading = false;
-  final _storage = const FlutterSecureStorage();
+
+  // Dữ liệu gốc từ API (Raw Events)
+  List<AttendanceModel> _rawRecords = [];
+
+  // Dữ liệu đã xử lý để hiển thị (Grouped by User & Date)
+  List<ManagerTimesheetDisplayItem> _processedList = [];
 
   // --- FILTERS ---
-  String _filterType = "ALL";
   DateTime? _filterSpecificDate;
+  // Lưu ý: Filter Type (IN/OUT) không còn phù hợp khi chuyển sang view Timesheet tổng hợp
+  // nên ta sẽ lược bỏ hoặc chỉ giữ lại filter theo ngày.
 
   @override
   void initState() {
@@ -46,19 +53,13 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
   Future<void> _fetchData() async {
     setState(() => _isLoading = true);
     try {
+      // 1. Lấy User ID từ Storage
       String? userIdStr = await _storage.read(key: 'userId');
       if (userIdStr == null) {
         String? userInfoStr = await _storage.read(key: 'user_info');
         if (userInfoStr != null) {
-          try {
-            final userJson = jsonDecode(userInfoStr);
-            userIdStr = userJson['id']?.toString();
-            if (userIdStr != null) {
-              await _storage.write(key: 'userId', value: userIdStr);
-            }
-          } catch (e) {
-            print("Parse user_info error: $e");
-          }
+          final userJson = jsonDecode(userInfoStr);
+          userIdStr = userJson['id']?.toString();
         }
       }
 
@@ -68,6 +69,8 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
       }
 
       int userId = int.parse(userIdStr);
+
+      // 2. Gọi API lấy toàn bộ log chấm công
       final data = await _api.getManagerAllAttendance(
         userId,
         widget.userRole,
@@ -75,7 +78,13 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
         _selectedMonth.year,
       );
 
-      setState(() => _records = data);
+      // 3. Xử lý dữ liệu Raw -> Timesheet Model
+      final processed = _processData(data);
+
+      setState(() {
+        _rawRecords = data;
+        _processedList = processed;
+      });
     } catch (e) {
       print("Error loading manager data: $e");
     } finally {
@@ -83,20 +92,121 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
     }
   }
 
-  List<AttendanceModel> _getFilteredRecords() {
-    return _records.where((item) {
-      if (_filterType != "ALL") {
-        if (item.type != _filterType) return false;
+  /// Hàm xử lý logic cốt lõi:
+  /// Gom các log rời rạc (AttendanceModel) thành bảng công ngày (TimesheetModel)
+  List<ManagerTimesheetDisplayItem> _processData(
+    List<AttendanceModel> rawList,
+  ) {
+    Map<String, List<AttendanceModel>> groupedLogs = {};
+
+    // 1. Gom nhóm (Giữ nguyên)
+    for (var record in rawList) {
+      DateTime date = DateTime.parse(record.checkInTime);
+      String dateKey = DateFormat('yyyyMMdd').format(date);
+      String key = "${record.email}_$dateKey";
+
+      if (!groupedLogs.containsKey(key)) {
+        groupedLogs[key] = [];
       }
-      if (_filterSpecificDate != null) {
-        DateTime itemDate = DateTime.parse(item.checkInTime);
-        bool isSameDay =
-            itemDate.year == _filterSpecificDate!.year &&
-            itemDate.month == _filterSpecificDate!.month &&
-            itemDate.day == _filterSpecificDate!.day;
-        if (!isSameDay) return false;
+      groupedLogs[key]!.add(record);
+    }
+
+    List<ManagerTimesheetDisplayItem> result = [];
+
+    // 2. Xử lý logic
+    groupedLogs.forEach((key, logs) {
+      logs.sort((a, b) => a.checkInTime.compareTo(b.checkInTime));
+      AttendanceModel userInfo = logs.first;
+
+      List<SessionModel> sessions = [];
+      double totalHours = 0.0;
+      String status = "OK";
+
+      for (int i = 0; i < logs.length; i++) {
+        var current = logs[i];
+
+        if (current.type == "CHECK_IN") {
+          // [SỬA 1] Khai báo biến lưu số phút trễ
+          int lateMinutes = 0;
+
+          // [LOGIC MỚI] Nếu Status là LATE thì lấy số phút trễ từ Model
+          if (current.status == "LATE") {
+            status = "LATE";
+            lateMinutes = current.lateMinutes ?? 0; // <--- LẤY DỮ LIỆU TẠI ĐÂY
+          }
+
+          String inTimeStr = DateFormat(
+            'HH:mm:ss',
+          ).format(DateTime.parse(current.checkInTime));
+          String? outTimeStr;
+          double duration = 0.0;
+
+          // Tìm cặp OUT (Giữ nguyên logic cũ)
+          if (i + 1 < logs.length && logs[i + 1].type == "CHECK_OUT") {
+            var next = logs[i + 1];
+            outTimeStr = DateFormat(
+              'HH:mm:ss',
+            ).format(DateTime.parse(next.checkInTime));
+
+            DateTime inDt = DateTime.parse(current.checkInTime);
+            DateTime outDt = DateTime.parse(next.checkInTime);
+            duration = outDt.difference(inDt).inMinutes / 60.0;
+            i++;
+          } else {
+            // Logic xử lý quên checkout (Giữ nguyên)
+            DateTime recordDate = DateTime.parse(current.checkInTime);
+            DateTime now = DateTime.now();
+            bool isToday =
+                recordDate.year == now.year &&
+                recordDate.month == now.month &&
+                recordDate.day == now.day;
+
+            if (isToday) {
+              status = "WORKING";
+            } else {
+              status = "MISSING_CHECKOUT";
+            }
+          }
+
+          // [SỬA 2] Truyền lateMinutes vào SessionModel
+          sessions.add(
+            SessionModel(
+              checkIn: inTimeStr,
+              checkOut: outTimeStr,
+              duration: double.parse(duration.toStringAsFixed(1)),
+              lateMinutes: lateMinutes, // <--- TRUYỀN VÀO ĐÂY
+            ),
+          );
+          totalHours += duration;
+        }
       }
-      return true;
+
+      TimesheetModel timesheet = TimesheetModel(
+        date: DateTime.parse(userInfo.checkInTime),
+        totalWorkingHours: double.parse(totalHours.toStringAsFixed(1)),
+        status: status,
+        sessions: sessions,
+      );
+
+      result.add(
+        ManagerTimesheetDisplayItem(userInfo: userInfo, timesheet: timesheet),
+      );
+    });
+
+    result.sort((a, b) => b.timesheet.date.compareTo(a.timesheet.date));
+    return result;
+  }
+
+  // Lọc danh sách theo ngày cụ thể (nếu user chọn filter)
+  List<ManagerTimesheetDisplayItem> _getFilteredList() {
+    if (_filterSpecificDate == null) {
+      return _processedList;
+    }
+    return _processedList.where((item) {
+      DateTime tDate = item.timesheet.date;
+      return tDate.year == _filterSpecificDate!.year &&
+          tDate.month == _filterSpecificDate!.month &&
+          tDate.day == _filterSpecificDate!.day;
     }).toList();
   }
 
@@ -110,14 +220,7 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: primaryColor,
-              onPrimary: Colors.white,
-              onSurface: textDark,
-            ),
-            textButtonTheme: TextButtonThemeData(
-              style: TextButton.styleFrom(foregroundColor: primaryColor),
-            ),
+            colorScheme: const ColorScheme.light(primary: primaryColor),
           ),
           child: child!,
         );
@@ -143,14 +246,7 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: primaryColor,
-              onPrimary: Colors.white,
-              onSurface: textDark,
-            ),
-            textButtonTheme: TextButtonThemeData(
-              style: TextButton.styleFrom(foregroundColor: primaryColor),
-            ),
+            colorScheme: const ColorScheme.light(primary: primaryColor),
           ),
           child: child!,
         );
@@ -158,15 +254,13 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
     );
 
     if (picked != null) {
-      setState(() {
-        _filterSpecificDate = picked;
-      });
+      setState(() => _filterSpecificDate = picked);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final filteredList = _getFilteredRecords();
+    final filteredList = _getFilteredList();
 
     return Scaffold(
       backgroundColor: bgColor,
@@ -182,26 +276,19 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
                     )
                   : Column(
                       children: [
-                        // Phần Toolbar (Filter)
+                        // Filter Section
                         Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 8,
-                          ),
-                          child: Column(
-                            children: [
-                              _buildFilterControlSection(filteredList.length),
-                              const SizedBox(height: 16),
-                              _buildTypeFilter(),
-                            ],
+                          padding: const EdgeInsets.all(16),
+                          child: _buildFilterControlSection(
+                            filteredList.length,
                           ),
                         ),
 
-                        // Danh sách nhân viên
+                        // List of Timesheets
                         Expanded(
                           child: filteredList.isEmpty
                               ? _buildEmptyState()
-                              : ListView.separated(
+                              : ListView.builder(
                                   padding: const EdgeInsets.fromLTRB(
                                     16,
                                     0,
@@ -209,12 +296,10 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
                                     20,
                                   ),
                                   itemCount: filteredList.length,
-                                  separatorBuilder: (_, __) =>
-                                      const SizedBox(height: 12),
-                                  itemBuilder: (context, index) =>
-                                      _buildModernEmployeeCard(
-                                        filteredList[index],
-                                      ),
+                                  itemBuilder: (context, index) {
+                                    final item = filteredList[index];
+                                    return _buildEmployeeTimesheetWrapper(item);
+                                  },
                                 ),
                         ),
                       ],
@@ -228,12 +313,88 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
 
   // --- WIDGETS ---
 
+  /// Wrapper hiển thị thông tin nhân viên + DailyTimesheetCard bên trong
+  Widget _buildEmployeeTimesheetWrapper(ManagerTimesheetDisplayItem item) {
+    return Column(
+      children: [
+        // --- [SỬA ĐỔI] Thêm InkWell để bắt sự kiện click ---
+        InkWell(
+          onTap: () {
+            // Gọi hàm hiển thị thông tin chi tiết
+            _showEmployeeDetails(item.userInfo);
+          },
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+            child: Row(
+              children: [
+                // Avatar
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: primaryColor.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    _getInitials(item.userInfo.fullName),
+                    style: const TextStyle(
+                      color: primaryColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+
+                // Tên & Info cơ bản
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.userInfo.fullName,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                          color: textDark,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        "${item.userInfo.role} • ${item.userInfo.departmentName}",
+                        style: const TextStyle(fontSize: 12, color: textGrey),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Icon chỉ dẫn (nhấn để xem thêm)
+                const Icon(Icons.info_outline, color: textGrey, size: 20),
+              ],
+            ),
+          ),
+        ),
+
+        // Body: Thẻ Timesheet chi tiết (Giữ nguyên)
+        DailyTimesheetCard(data: item.timesheet),
+
+        const SizedBox(height: 12),
+        const Divider(
+          height: 1,
+          color: Color(0xFFE2E8F0),
+        ), // Thêm dòng kẻ mờ ngăn cách các user
+        const SizedBox(height: 12),
+      ],
+    );
+  }
+
   Widget _buildCustomAppBar() {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
       color: bgColor,
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           IconButton(
             icon: const Icon(
@@ -245,14 +406,13 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
           ),
           const Expanded(
             child: Text(
-              "MANAGER ATTENDANCE",
+              "MANAGER TIMESHEET",
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.w800,
                 color: primaryColor,
                 fontFamily: 'Inter',
-                letterSpacing: 0.5,
               ),
             ),
           ),
@@ -280,7 +440,6 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
       ),
       child: Column(
         children: [
-          // Row 1: Month Selector
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -295,7 +454,7 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(
-                        Icons.calendar_view_month_rounded,
+                        Icons.calendar_month,
                         color: primaryColor,
                         size: 20,
                       ),
@@ -305,12 +464,8 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          "Month View",
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: textGrey,
-                            fontWeight: FontWeight.w600,
-                          ),
+                          "View Month",
+                          style: TextStyle(fontSize: 11, color: textGrey),
                         ),
                         Row(
                           children: [
@@ -323,7 +478,7 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
                               ),
                             ),
                             const Icon(
-                              Icons.keyboard_arrow_down_rounded,
+                              Icons.keyboard_arrow_down,
                               color: textGrey,
                               size: 20,
                             ),
@@ -334,8 +489,6 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
                   ],
                 ),
               ),
-
-              // Record Count Badge
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 10,
@@ -346,7 +499,7 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  "$count Records",
+                  "$count Items",
                   style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
@@ -356,41 +509,27 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
               ),
             ],
           ),
-
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 12),
-            child: Divider(height: 1, color: Color(0xFFF1F5F9)),
-          ),
-
-          // Row 2: Date Filter
+          const Divider(height: 24, color: Color(0xFFF1F5F9)),
           GestureDetector(
             onTap: _pickSpecificDate,
             child: Row(
               children: [
                 Icon(
-                  Icons.filter_alt_rounded,
+                  Icons.filter_alt,
                   size: 18,
                   color: _filterSpecificDate != null ? primaryColor : textGrey,
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  "Filter Date: ",
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: Colors.grey[600],
-                    fontWeight: FontWeight.w500,
-                  ),
+                const Text(
+                  "Filter Date:",
+                  style: TextStyle(fontSize: 13, color: textGrey),
                 ),
                 const Spacer(),
                 if (_filterSpecificDate != null)
                   Chip(
                     label: Text(
                       DateFormat('dd/MM/yyyy').format(_filterSpecificDate!),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
                     ),
                     backgroundColor: primaryColor,
                     deleteIcon: const Icon(
@@ -400,326 +539,19 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
                     ),
                     onDeleted: () => setState(() => _filterSpecificDate = null),
                     visualDensity: VisualDensity.compact,
-                    side: BorderSide.none,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                    ),
                   )
                 else
                   const Text(
                     "All Days",
                     style: TextStyle(
                       fontSize: 13,
-                      color: textDark,
                       fontWeight: FontWeight.bold,
+                      color: textDark,
                     ),
                   ),
-
                 if (_filterSpecificDate == null)
-                  const Icon(Icons.chevron_right_rounded, color: textGrey),
+                  const Icon(Icons.chevron_right, color: textGrey),
               ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTypeFilter() {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          _buildFilterChip("All", "ALL"),
-          const SizedBox(width: 10),
-          _buildFilterChip(
-            "Check In",
-            "CHECK_IN",
-            icon: Icons.login_rounded,
-            activeColor: colorIn,
-          ),
-          const SizedBox(width: 10),
-          _buildFilterChip(
-            "Check Out",
-            "CHECK_OUT",
-            icon: Icons.logout_rounded,
-            activeColor: colorOut,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFilterChip(
-    String label,
-    String value, {
-    IconData? icon,
-    Color? activeColor,
-  }) {
-    bool isSelected = _filterType == value;
-    Color color = activeColor ?? primaryColor;
-
-    return GestureDetector(
-      onTap: () => setState(() => _filterType = value),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        decoration: BoxDecoration(
-          color: isSelected ? color : Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: isSelected ? color : Colors.grey.shade200),
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: color.withOpacity(0.3),
-                    blurRadius: 8,
-                    offset: const Offset(0, 3),
-                  ),
-                ]
-              : [],
-        ),
-        child: Row(
-          children: [
-            if (icon != null) ...[
-              Icon(icon, size: 18, color: isSelected ? Colors.white : textGrey),
-              const SizedBox(width: 6),
-            ],
-            Text(
-              label,
-              style: TextStyle(
-                color: isSelected ? Colors.white : textGrey,
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // --- THẺ NHÂN VIÊN ĐẸP HƠN ---
-  Widget _buildModernEmployeeCard(AttendanceModel item) {
-    DateTime checkInTime = DateTime.parse(item.checkInTime);
-    String timeStr = DateFormat('HH:mm').format(checkInTime);
-    String dateStr = DateFormat('dd/MM/yyyy').format(checkInTime);
-
-    bool isLate = item.status == "LATE";
-    // Badge status (Late/OnTime)
-    Color statusColor = isLate
-        ? const Color(0xFFFF4757)
-        : const Color(0xFF2ED573);
-    Color statusBg = statusColor.withOpacity(0.1);
-    String statusText = isLate ? "Late" : "On Time";
-
-    // Logic IN/OUT
-    bool isCheckIn = item.type == "CHECK_IN";
-    Color typeColor = isCheckIn ? colorIn : colorOut;
-    String typeLabel = isCheckIn ? "IN" : "OUT";
-    IconData typeIcon = isCheckIn ? Icons.login_rounded : Icons.logout_rounded;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Theme(
-        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-        child: ExpansionTile(
-          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-
-          // Avatar
-          leading: Container(
-            width: 50,
-            height: 50,
-            decoration: BoxDecoration(
-              color: primaryColor.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              _getInitials(item.fullName),
-              style: const TextStyle(
-                color: primaryColor,
-                fontWeight: FontWeight.w900,
-                fontSize: 18,
-              ),
-            ),
-          ),
-
-          title: Text(
-            item.fullName,
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 15,
-              color: textDark,
-            ),
-          ),
-
-          subtitle: Padding(
-            padding: const EdgeInsets.only(top: 6),
-            child: Row(
-              children: [
-                _buildMiniBadge(
-                  item.role,
-                  Colors.blue.shade50,
-                  Colors.blue.shade700,
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    item.departmentName,
-                    style: const TextStyle(fontSize: 12, color: textGrey),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // Phần bên phải (Giờ & Loại)
-          trailing: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              // Badge IN/OUT
-              Container(
-                margin: const EdgeInsets.only(bottom: 4),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: typeColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(typeIcon, size: 10, color: typeColor),
-                    const SizedBox(width: 4),
-                    Text(
-                      typeLabel,
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w900,
-                        color: typeColor,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              // Time
-              Text(
-                timeStr,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w900,
-                  fontSize: 16,
-                  color: textDark,
-                ),
-              ),
-            ],
-          ),
-
-          children: [
-            const Divider(height: 1, color: Color(0xFFF1F5F9)),
-            const SizedBox(height: 16),
-
-            // Hàng Status & Date
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: statusBg,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        isLate
-                            ? Icons.warning_amber_rounded
-                            : Icons.check_circle_outline_rounded,
-                        size: 14,
-                        color: statusColor,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        statusText.toUpperCase(),
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: statusColor,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Text(
-                  dateStr,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey[400],
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 12),
-            _buildDetailRow(Icons.email_outlined, item.email),
-            _buildDetailRow(Icons.phone_outlined, item.phone),
-            _buildDetailRow(Icons.location_on_outlined, item.locationName),
-            _buildDetailRow(Icons.wifi, "BSSID: ${item.deviceBssid ?? 'N/A'}"),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMiniBadge(String text, Color bg, Color textColor) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Text(
-        text.toUpperCase(),
-        style: TextStyle(
-          fontSize: 9,
-          fontWeight: FontWeight.bold,
-          color: textColor,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDetailRow(IconData icon, String? value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          Icon(icon, size: 16, color: textGrey),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              value ?? "N/A",
-              style: const TextStyle(
-                fontSize: 13,
-                color: textDark,
-                fontWeight: FontWeight.w500,
-              ),
-              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
@@ -732,33 +564,11 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.03),
-                  blurRadius: 20,
-                  offset: const Offset(0, 10),
-                ),
-              ],
-            ),
-            child: Icon(
-              Icons.filter_list_off_rounded,
-              size: 48,
-              color: Colors.grey[300],
-            ),
-          ),
+          Icon(Icons.folder_open_rounded, size: 64, color: Colors.grey[300]),
           const SizedBox(height: 16),
           Text(
-            "No records found",
-            style: TextStyle(
-              color: Colors.grey[500],
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
-            ),
+            "No timesheets found",
+            style: TextStyle(color: Colors.grey[500]),
           ),
         ],
       ),
@@ -773,4 +583,207 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
     }
     return name[0].toUpperCase();
   }
+
+  // Hàm hiển thị Bottom Sheet thông tin nhân viên
+  void _showEmployeeDetails(AttendanceModel user) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true, // Cho phép chiều cao linh hoạt
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.all(24),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Thanh kéo nhỏ ở trên
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 24),
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+
+              // Avatar to
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: primaryColor.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  _getInitials(user.fullName),
+                  style: const TextStyle(
+                    color: primaryColor,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 28,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Tên to
+              Text(
+                user.fullName,
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: textDark,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              Text(
+                user.role,
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: primaryColor,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Các thông tin chi tiết
+              _buildDetailRow(Icons.email_outlined, "Email", user.email),
+              _buildDetailRow(
+                Icons.phone_outlined,
+                "Phone",
+                user.phone.isNotEmpty ? user.phone : "N/A",
+              ),
+              _buildDetailRow(
+                Icons.business,
+                "Department",
+                user.departmentName,
+              ),
+              _buildDetailRow(
+                Icons.cake_outlined,
+                "Birthday",
+                user.dateOfBirth ?? "N/A",
+              ),
+              // Hiển thị Device ID để quản lý kiểm tra thiết bị chấm công
+              _buildDetailRow(
+                Icons.phone_android,
+                "Device ID (BSSID)",
+                user.deviceBssid ?? "Not registered",
+              ),
+
+              const SizedBox(height: 24),
+
+              // Nút đóng
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: bgColor,
+                    foregroundColor: textDark,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text("Close"),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // Widget con để vẽ từng dòng thông tin
+  Widget _buildDetailRow(IconData icon, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, size: 20, color: textGrey),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                ),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                    color: textDark,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Color _getStatusColor(String status) {
+    switch (status) {
+      case 'OK':
+        return const Color(0xFF10B981); // Xanh lá
+      case 'LATE':
+        return Colors.orange; // Cam
+      case 'WORKING':
+        return const Color(0xFF2260FF); // Xanh dương
+      case 'MISSING_CHECKOUT':
+        return const Color(0xFFEF4444); // Đỏ
+      case 'ABSENT':
+        return Colors.grey;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  String _getStatusText(String status) {
+    switch (status) {
+      case 'OK':
+        return 'OK';
+      case 'LATE':
+        return 'Late';
+      case 'WORKING':
+        return 'In progress';
+      case 'MISSING_CHECKOUT':
+        return 'Forget to Checkout';
+      case 'ABSENT':
+        return 'Absent';
+      default:
+        return status;
+    }
+  }
+}
+
+// --- HELPER CLASS ---
+// Class này giúp ghép thông tin User (từ API Attendance)
+// với Timesheet đã xử lý để hiển thị lên UI
+class ManagerTimesheetDisplayItem {
+  final AttendanceModel userInfo;
+  final TimesheetModel timesheet;
+
+  ManagerTimesheetDisplayItem({
+    required this.userInfo,
+    required this.timesheet,
+  });
 }

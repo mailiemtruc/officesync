@@ -38,4 +38,6 @@ public class Attendance {
     private LocalDate dateOfBirth;
     private String role;
     private String departmentName;
+    @Column(name = "late_minutes")
+    private Integer lateMinutes;
 }

@@ -58,6 +58,8 @@ public class CompanyConfigConsumer {
             config.setAllowedRadius(event.getAllowedRadius());
             config.setWifiBssid(event.getWifiBssid());
             config.setWifiSsid(event.getWifiSsid());
+            config.setStartWorkTime(event.getStartWorkTime());
+            config.setEndWorkTime(event.getEndWorkTime());
 
             // Lưu xuống DB
             officeRepo.save(config);

@@ -1,5 +1,7 @@
 package com.officesync.core.dto;
 
+import java.time.LocalTime;
+
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import lombok.AllArgsConstructor;
@@ -18,4 +20,6 @@ public class CompanyConfigEvent {
     private Double allowedRadius;
     private String wifiBssid;
     private String wifiSsid;
+    private LocalTime startWorkTime;
+    private LocalTime endWorkTime;
 }

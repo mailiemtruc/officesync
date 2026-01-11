@@ -72,17 +72,18 @@ public class CompanyService {
         return companyRepository.findById(companyId).orElseThrow(() -> new RuntimeException("Company not found"));
     }
 
+    // Tìm đến hàm updateMyCompany và thay thế bằng đoạn này:
     public Company updateMyCompany(Long companyId, Map<String, Object> req) {
-        // 1. Lấy thông tin công ty hiện tại
-        Company company = getMyCompany(companyId);
+        Company company = companyRepository.findById(companyId)
+                .orElseThrow(() -> new RuntimeException("Company not found"));
 
-        // 2. Cập nhật thông tin cơ bản
+        // 1. Cập nhật thông tin cơ bản
         if (req.containsKey("name")) company.setName((String) req.get("name"));
         if (req.containsKey("industry")) company.setIndustry((String) req.get("industry"));
         if (req.containsKey("description")) company.setDescription((String) req.get("description"));
         if (req.containsKey("logoUrl")) company.setLogoUrl((String) req.get("logoUrl"));
 
-        // 3. Cập nhật thông tin Chấm công (Attendance Config)
+        // 2. Cập nhật cấu hình GPS/Wifi
         if (req.containsKey("latitude") && req.get("latitude") != null) {
             company.setLatitude(Double.valueOf(req.get("latitude").toString()));
         }
@@ -95,24 +96,40 @@ public class CompanyService {
         if (req.containsKey("wifiBssid")) company.setWifiBssid((String) req.get("wifiBssid"));
         if (req.containsKey("wifiSsid")) company.setWifiSsid((String) req.get("wifiSsid"));
 
-        // 4. Lưu vào Database (Core Service)
+        // 3. [THÊM MỚI] Cập nhật Giờ làm việc (Parse từ String "08:00")
+        if (req.containsKey("workStartTime")) {
+            String startStr = (String) req.get("workStartTime");
+            if (startStr != null && !startStr.isEmpty()) {
+                company.setWorkStartTime(java.time.LocalTime.parse(startStr));
+            }
+        }
+        if (req.containsKey("workEndTime")) {
+            String endStr = (String) req.get("workEndTime");
+            if (endStr != null && !endStr.isEmpty()) {
+                company.setWorkEndTime(java.time.LocalTime.parse(endStr));
+            }
+        }
+
+        // 4. Lưu vào Database Core
         Company updated = companyRepository.save(company);
 
-        // 5. [QUAN TRỌNG] Bắn Event sang Attendance Service để đồng bộ
+        // 5. Bắn Event sang Attendance Service
         try {
             CompanyConfigEvent event = new CompanyConfigEvent(
                 updated.getId(),
-                updated.getName() + " - HQ", // Tên văn phòng mặc định
+                updated.getName() + " - HQ",
                 updated.getLatitude(),
                 updated.getLongitude(),
-                updated.getAllowedRadius() != null ? updated.getAllowedRadius() : 100.0, // Default 100m
+                updated.getAllowedRadius() != null ? updated.getAllowedRadius() : 100.0,
                 updated.getWifiBssid(),
-                updated.getWifiSsid()
+                updated.getWifiSsid(),
+                // [MỚI] Truyền giờ đi
+                updated.getWorkStartTime(),
+                updated.getWorkEndTime()
             );
             rabbitProducer.sendCompanyConfigEvent(event);
         } catch (Exception e) {
-            // Log lỗi nếu bắn event thất bại nhưng không chặn flow chính
-            System.err.println("Lỗi gửi event chấm công: " + e.getMessage());
+            System.err.println("Lỗi gửi RabbitMQ: " + e.getMessage());
         }
 
         return updated;

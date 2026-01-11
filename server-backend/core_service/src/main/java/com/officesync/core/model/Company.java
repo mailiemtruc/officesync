@@ -1,6 +1,7 @@
 package com.officesync.core.model;
 
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -44,4 +45,9 @@ public class Company {
     private Double allowedRadius; // Bán kính (m)
     private String wifiBssid;     // MAC Address
     private String wifiSsid;      // Tên Wifi
+    @Column(name = "work_start_time")
+    private LocalTime workStartTime;
+
+    @Column(name = "work_end_time")
+    private LocalTime workEndTime;
 }
