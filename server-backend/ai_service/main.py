@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
 import google.generativeai as genai
+from google.ai.generativelanguage_v1beta.types import content
 
 # Import Manager
 from tool_manager import manager
@@ -75,7 +76,6 @@ async def chat_endpoint(req: ChatRequest):
                -> BƯỚC 1: Phân tích ngôn ngữ User đang dùng (Vietnamese hay English).
                -> BƯỚC 2: GỌI NGAY tool `set_language` với ngôn ngữ đó. (QUAN TRỌNG: Phải gọi tool này để hệ thống ghi nhớ).
                -> BƯỚC 3: Sau đó mới gọi tiếp các tool chấm công để trả lời câu hỏi.
-               -> LƯU Ý: Không cần thông báo "Đã lưu ngôn ngữ", hãy trả lời thẳng vào câu hỏi của User.
             
             3. Nếu User nói tên ngôn ngữ (VD: "Tiếng Việt", "vn", "English"):
                -> Gọi `set_language` và xác nhận.
@@ -97,8 +97,9 @@ async def chat_endpoint(req: ChatRequest):
         # 2. System Prompt
         full_system_instruction = f"""
         Thời gian hiện tại: {today.strftime('%Y-%m-%d')}.
-        Bạn là trợ lý ảo OfficeSync.
+        Bạn là trợ lý ảo OfficeSync. UserID hiện tại: {req.userId}.
         
+        --- ĐIỀU KHIỂN NGÔN NGỮ ---
         {lang_instruction}
         
         --- HƯỚNG DẪN NGHIỆP VỤ ---
@@ -113,53 +114,65 @@ async def chat_endpoint(req: ChatRequest):
         )
 
         user_history = CHAT_HISTORY.get(req.userId, [])
+        # enable_automatic_function_calling=False để ta tự xử lý vòng lặp
         chat = model.start_chat(history=user_history, enable_automatic_function_calling=False)
 
         # 4. Gửi tin nhắn User
         response = await chat.send_message_async(req.message)
 
-        # --- [SỬA ĐỔI QUAN TRỌNG] VÒNG LẶP XỬ LÝ TOOL ---
-        # Dùng vòng lặp để xử lý trường hợp Gemini gọi nhiều tool liên tiếp
-        # (VD: set_language -> Xong -> get_attendance -> Xong -> Trả lời text)
-        
+        # --- [FIX LỖI 400] XỬ LÝ SONG SONG (BATCH PROCESSING) ---
         final_text = ""
         
         while True:
-            function_call_part = None
+            # A. Tìm TẤT CẢ các Function Call trong phản hồi của AI
+            function_calls = []
             if response.candidates and response.candidates[0].content.parts:
                 for part in response.candidates[0].content.parts:
-                    if part.function_call:
-                        function_call_part = part
-                        break
-            
-            if function_call_part:
-                # --- CÓ GỌI TOOL ---
-                fc = function_call_part.function_call
-                tool_name = fc.name
-                args = {k: v for k, v in fc.args.items()}
-                
-                logger.info(f"🤖 Tool Call: {tool_name} | Args: {args}")
+                    # Kiểm tra kỹ xem part này có phải function call không
+                    if part.function_call and part.function_call.name:
+                        function_calls.append(part.function_call)
 
-                # Thực thi tool
-                tool_result = await manager.handle_tool_call(
-                    tool_name, req.userId, args, http_client, settings
-                )
+            # B. Nếu có Function Call (1 hoặc nhiều cái)
+            if function_calls:
+                response_parts = []
                 
-                # Gửi kết quả lại cho Gemini và NHẬN RESPONSE MỚI
-                response = await chat.send_message_async(
-                    genai.protos.Content(
-                        parts=[genai.protos.Part(
+                # Thực thi TỪNG tool một và gom kết quả lại
+                for fc in function_calls:
+                    tool_name = fc.name
+                    args = {k: v for k, v in fc.args.items()}
+                    
+                    logger.info(f"🤖 Tool Call: {tool_name} | Args: {args}")
+
+                    # Thực thi tool
+                    try:
+                        tool_result = await manager.handle_tool_call(
+                            tool_name, req.userId, args, http_client, settings
+                        )
+                    except Exception as e:
+                        tool_result = f"Error executing tool: {str(e)}"
+
+                    # Đóng gói kết quả vào list parts
+                    # LƯU Ý: Phải dùng đúng cấu trúc Part(function_response=...)
+                    response_parts.append(
+                        genai.protos.Part(
                             function_response=genai.protos.FunctionResponse(
                                 name=tool_name,
                                 response={"result": tool_result}
                             )
-                        )]
+                        )
                     )
+
+                # C. Gửi TOÀN BỘ kết quả về cho Gemini 1 lần duy nhất trong lượt này
+                # (Đáp ứng yêu cầu: số response parts == số call parts)
+                response = await chat.send_message_async(
+                    genai.protos.Content(parts=response_parts)
                 )
-                # Tiếp tục vòng lặp để kiểm tra xem response mới có gọi tool tiếp không
+                
+                # Quay lại đầu vòng while để xem Gemini có gọi tiếp tool nào không
                 continue 
+            
             else:
-                # --- KHÔNG GỌI TOOL (Là Text) ---
+                # --- KHÔNG GỌI TOOL (Chỉ là Text) ---
                 final_text = response.text
                 break # Thoát vòng lặp
 
@@ -170,7 +183,7 @@ async def chat_endpoint(req: ChatRequest):
 
     except Exception as e:
         logger.error(f"Error: {e}", exc_info=True)
-        return {"reply": "Xin lỗi, hệ thống đang gặp sự cố gián đoạn."}
+        return {"reply": "Xin lỗi, hệ thống đang gặp sự cố xử lý yêu cầu."}
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=5000, reload=True)

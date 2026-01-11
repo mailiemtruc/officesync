@@ -134,9 +134,10 @@ def format_timesheet_response(data: List[Dict]) -> Any:
         total_late = 0
         sessions = day.get("sessions", [])
         if sessions:
-            for s in sessions:
-                # Cộng dồn lateMinutes từ từng ca (nếu có)
-                total_late += s.get("lateMinutes", 0)
+            # Giả định danh sách session đã được sắp xếp theo thời gian từ sáng -> tối
+            # Lấy thông tin trễ của session đầu tiên
+            first_session = sessions[0] 
+            total_late = first_session.get("lateMinutes", 0)
 
         summary.append({
             "date": day.get("date"),
