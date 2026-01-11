@@ -365,24 +365,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
       // Sử dụng IndexedStack để giữ trạng thái các trang
       body: IndexedStack(index: _currentIndex, children: _pages),
 
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: SmartAiFab(
         onPressed: () {
-          // Điều hướng sang màn hình Chat
           Navigator.push(
             context,
             MaterialPageRoute(builder: (context) => const AiChatScreen()),
           );
         },
-        backgroundColor: AppColors.primary,
-        elevation: 4,
-        shape: const CircleBorder(), // Nút tròn
-        tooltip: 'AI Assistant',
-        child: const Icon(
-          Icons
-              .smart_toy_rounded, // Icon hình Robot hoặc dùng PhosphorIconsFill.chatCircleDots
-          color: Colors.white,
-          size: 28,
-        ),
       ),
 
       bottomNavigationBar: Container(
@@ -635,6 +624,238 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// --- DÁN ĐÈ CÁI NÀY VÀO CUỐI FILE dashboard_screen.dart ---
+
+class SmartAiFab extends StatefulWidget {
+  final VoidCallback onPressed;
+
+  const SmartAiFab({super.key, required this.onPressed});
+
+  @override
+  State<SmartAiFab> createState() => _SmartAiFabState();
+}
+
+class _SmartAiFabState extends State<SmartAiFab> with TickerProviderStateMixin {
+  late AnimationController _bubbleController;
+  late Animation<double> _bubbleAnimation;
+  late AnimationController _pulseController;
+
+  // [PRO] Danh sách câu thoại ngắn gọn, đúng trọng tâm công việc
+  final List<String> _aiMessages = [
+    "Ready to assist",
+    "How can I help?",
+    "Check attendance",
+    "View tasks",
+    "Any questions?",
+  ];
+
+  String _currentMessage = "OfficeSync AI";
+
+  @override
+  void initState() {
+    super.initState();
+
+    // 1. Animation Bong bóng: Mượt mà, dứt khoát (Không nảy tưng tưng)
+    _bubbleController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600), // Tốc độ vừa phải
+    );
+
+    _bubbleAnimation = CurvedAnimation(
+      parent: _bubbleController,
+      curve:
+          Curves.easeOutBack, // Hiệu ứng trượt ra và khóa vị trí (Professional)
+      reverseCurve: Curves.easeInBack,
+    );
+
+    // 2. Animation Nút: Nhịp thở nhẹ nhàng (Subtle Pulse)
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 3), // Chậm rãi hơn
+    )..repeat();
+
+    _scheduleMessageLoop();
+  }
+
+  void _scheduleMessageLoop() async {
+    await Future.delayed(const Duration(seconds: 2));
+    if (!mounted) return;
+
+    setState(() {
+      _currentMessage = _aiMessages[DateTime.now().second % _aiMessages.length];
+    });
+    _bubbleController.forward();
+
+    // Hiện lâu hơn một chút để người dùng kịp đọc
+    await Future.delayed(const Duration(seconds: 6));
+    if (!mounted) return;
+    _bubbleController.reverse();
+
+    while (mounted) {
+      await Future.delayed(const Duration(seconds: 15));
+      if (!mounted) return;
+
+      setState(() {
+        _currentMessage =
+            _aiMessages[DateTime.now().second % _aiMessages.length];
+      });
+
+      _bubbleController.forward();
+
+      await Future.delayed(const Duration(seconds: 6));
+      if (!mounted) return;
+      _bubbleController.reverse();
+    }
+  }
+
+  @override
+  void dispose() {
+    _bubbleController.dispose();
+    _pulseController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        // 1. MESSAGE BUBBLE (Premium Look)
+        FadeTransition(
+          opacity: _bubbleAnimation,
+          child: SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(0, 0.2), // Trượt nhẹ từ dưới lên
+              end: Offset.zero,
+            ).animate(_bubbleAnimation),
+
+            child: Container(
+              margin: const EdgeInsets.only(
+                bottom: 12,
+                right: 2,
+              ), // Căn chỉnh lề chuẩn
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                // Bo tròn hoàn toàn (Pill Shape) nhìn hiện đại hơn
+                borderRadius: BorderRadius.circular(30),
+                boxShadow: [
+                  // Lớp bóng 1: Mờ, rộng (Ambient)
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 20,
+                    offset: const Offset(0, 10),
+                  ),
+                  // Lớp bóng 2: Đậm, hẹp (Direct)
+                  BoxShadow(
+                    color: const Color(0xFF2260FF).withOpacity(0.1),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Text(
+                _currentMessage,
+                style: const TextStyle(
+                  color: Color(
+                    0xFF334155,
+                  ), // Màu xám xanh đậm (Slate 700) - Sang hơn đen tuyền
+                  fontWeight: FontWeight.w500, // Medium weight
+                  fontSize: 14,
+                  fontFamily: 'Inter',
+                  letterSpacing: 0.3, // Giãn chữ nhẹ cho thoáng
+                ),
+              ),
+            ),
+          ),
+        ),
+
+        // 2. AI FAB BUTTON (Glow Effect)
+        SizedBox(
+          width: 64,
+          height: 64,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // Vòng Glow lan tỏa mờ ảo
+              _buildSubtlePulse(),
+
+              // Nút chính
+              GestureDetector(
+                onTap: widget.onPressed,
+                child: Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    // Gradient chéo nhẹ nhàng
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF3B82F6), Color(0xFF2563EB)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF2563EB).withOpacity(0.3),
+                        blurRadius: 12,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons
+                        .smart_toy_outlined, // Dùng Outlined icon nhìn thanh thoát hơn
+                    color: Colors.white,
+                    size: 26,
+                  ),
+                ),
+              ),
+
+              // [Chi tiết nhỏ] Chấm xanh Online (Status Dot)
+              Positioned(
+                right: 2,
+                top: 2,
+                child: Container(
+                  width: 14,
+                  height: 14,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF10B981), // Green Emerald
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSubtlePulse() {
+    return FadeTransition(
+      opacity: Tween(begin: 0.3, end: 0.0).animate(
+        CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+      ),
+      child: ScaleTransition(
+        scale: Tween(begin: 1.0, end: 1.5).animate(
+          // Lan tỏa vừa phải
+          CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+        ),
+        child: Container(
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: const Color(
+              0xFF3B82F6,
+            ).withOpacity(0.2), // Màu nền mờ thay vì viền
           ),
         ),
       ),

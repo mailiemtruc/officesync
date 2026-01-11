@@ -25,5 +25,6 @@ public class DailyTimesheetDTO {
         private LocalTime checkIn;
         private LocalTime checkOut;
         private double duration; // Giờ làm của session này
+        private int lateMinutes;
     }
 }

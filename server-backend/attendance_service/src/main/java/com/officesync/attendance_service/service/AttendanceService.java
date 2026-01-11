@@ -32,31 +32,27 @@ public class AttendanceService {
     private final OfficeConfigRepository officeConfigRepo;
     private final AttendanceUserRepository userRepo;
 
-
-
     public Attendance processCheckIn(Long userId, Long companyId, Double lat, Double lng, String bssid) {
         
         // --- 1. XÁC ĐỊNH LOẠI CHẤM CÔNG (IN hay OUT) ---
         LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
         LocalDateTime endOfDay = LocalDate.now().atTime(LocalTime.MAX);
 
-        // Lấy danh sách chấm công hôm nay (Mới nhất lên đầu)
         List<Attendance> todayRecords = attendanceRepo.findByUserIdAndCheckInTimeBetweenOrderByCheckInTimeDesc(
                 userId, startOfDay, endOfDay
         );
 
         String attendanceType;
         if (todayRecords.isEmpty()) {
-            attendanceType = "CHECK_IN"; // Chưa có record nào -> Là Check-in
+            attendanceType = "CHECK_IN"; 
         } else {
             Attendance lastRecord = todayRecords.get(0);
             if ("CHECK_IN".equals(lastRecord.getType())) {
-                attendanceType = "CHECK_OUT"; // Trước đó là In -> Giờ là Out
+                attendanceType = "CHECK_OUT"; 
             } else {
-                attendanceType = "CHECK_IN";  // Trước đó là Out -> Giờ vào lại
+                attendanceType = "CHECK_IN";  
             }
 
-            // Chặn spam Check-out quá nhanh (< 1 phút)
             if ("CHECK_OUT".equals(attendanceType) && 
                 java.time.Duration.between(lastRecord.getCheckInTime(), LocalDateTime.now()).toMinutes() < 1) {
                 throw new RuntimeException("You have just checked in, please wait a little longer before checking out.");
@@ -71,16 +67,13 @@ public class AttendanceService {
 
         boolean isValid = false;
         String matchedLocation = "Unknown";
-        OfficeConfig matchedOffice = null; // [QUAN TRỌNG] Lưu lại config khớp để lấy giờ làm việc
+        OfficeConfig matchedOffice = null; 
 
         for (OfficeConfig office : offices) {
-            // --- 2.1 Check Wifi ---
-            // Kiểm tra xem công ty có cấu hình Wifi hay không
             boolean isWifiConfigured = office.getWifiBssid() != null && !office.getWifiBssid().isEmpty();
             boolean isWifiMatch = false;
 
             if (isWifiConfigured) {
-                // Nếu có cấu hình Wifi, so sánh BSSID (nếu user có gửi lên)
                 if (bssid != null) {
                     String cleanServerBssid = office.getWifiBssid().replace(":", "").toLowerCase();
                     String cleanClientBssid = bssid.replace(":", "").toLowerCase();
@@ -88,22 +81,15 @@ public class AttendanceService {
                         isWifiMatch = true;
                     }
                 }
-                // Lưu ý: Nếu bssid == null hoặc khác nhau -> isWifiMatch vẫn là false
             }
 
-            // --- 2.2 Check GPS (Haversine) ---
             double distance = calculateHaversineDistance(lat, lng, office.getLatitude(), office.getLongitude());
             boolean isGpsMatch = distance <= office.getAllowedRadius();
-
-            // --- 2.3 Logic Tổng Hợp (QUAN TRỌNG: SỬA TẠI ĐÂY) ---
-            // Điều kiện chấm công thành công:
-            // 1. GPS bắt buộc phải đúng.
-            // 2. VÀ: (Hoặc là công ty KHÔNG cấu hình Wifi, Hoặc là nếu có cấu hình thì phải khớp).
             
             if (isGpsMatch && (!isWifiConfigured || isWifiMatch)) { 
                 isValid = true;
                 matchedLocation = office.getOfficeName();
-                matchedOffice = office; // Lưu lại để tính giờ
+                matchedOffice = office; 
                 break;
             }
         }
@@ -112,29 +98,22 @@ public class AttendanceService {
             throw new RuntimeException("Check-in failed: Invalid location.");
         }
 
-        // --- 3. [MỚI] TÍNH TOÁN TRẠNG THÁI (LATE / ON_TIME) ---
+        // --- 3. TÍNH TOÁN TRẠNG THÁI (LATE / ON_TIME) ---
         LocalDateTime now = LocalDateTime.now();
         LocalTime timeNow = now.toLocalTime();
         
         String status = "ON_TIME";
         Integer lateMinutes = 0;
 
-        // Chỉ tính đi muộn nếu đây là CHECK_IN
         if ("CHECK_IN".equals(attendanceType) && matchedOffice != null && matchedOffice.getStartWorkTime() != null) {
             LocalTime startWorkTime = matchedOffice.getStartWorkTime();
             
-            // Cho phép trễ X phút (Grace Period), ví dụ 0 phút
-            // Nếu giờ hiện tại > giờ quy định
             if (timeNow.isAfter(startWorkTime)) {
                 status = "LATE";
-                // Tính số phút chênh lệch
                 lateMinutes = (int) java.time.temporal.ChronoUnit.MINUTES.between(startWorkTime, timeNow);
             }
         }
         
-        // (Mở rộng) Nếu CHECK_OUT, có thể tính về sớm (EARLY_LEAVE) nếu cần
-        // if ("CHECK_OUT".equals(attendanceType) ... )
-
         // --- 4. LƯU ATTENDANCE ---
         Attendance att = new Attendance();
         att.setUserId(userId);
@@ -158,23 +137,21 @@ public class AttendanceService {
         att.setDeviceBssid(bssid);
         att.setType(attendanceType);
         
-        // Set thông tin trạng thái mới tính toán
         att.setStatus(status);        
         att.setLateMinutes(lateMinutes); 
 
         return attendanceRepo.save(att);
     }
 
-    // Hàm phụ tính khoảng cách (Giữ nguyên nếu bạn đã có)
     private double calculateHaversineDistance(double lat1, double lon1, double lat2, double lon2) {
-        final int R = 6371; // Bán kính trái đất (km)
+        final int R = 6371; 
         double latDistance = Math.toRadians(lat2 - lat1);
         double lonDistance = Math.toRadians(lon2 - lon1);
         double a = Math.sin(latDistance / 2) * Math.sin(latDistance / 2)
                 + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
                 * Math.sin(lonDistance / 2) * Math.sin(lonDistance / 2);
         double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        return R * c * 1000; // Đổi ra mét
+        return R * c * 1000; 
     }
 
     public List<DailyTimesheetDTO> generateMonthlyTimesheet(Long userId, int month, int year) {
@@ -190,7 +167,7 @@ public class AttendanceService {
                 .collect(Collectors.groupingBy(log -> log.getCheckInTime().toLocalDate()));
 
         List<DailyTimesheetDTO> timesheet = new ArrayList<>();
-        LocalDate today = LocalDate.now(); // [MỚI] Lấy ngày hiện tại
+        LocalDate today = LocalDate.now(); 
 
         // 3. Duyệt từng ngày
         for (int day = 1; day <= yearMonth.lengthOfMonth(); day++) {
@@ -198,7 +175,6 @@ public class AttendanceService {
             
             // --- CASE 1: KHÔNG CÓ DỮ LIỆU ---
             if (!groupedByDay.containsKey(currentDate)) {
-                // Nếu là ngày tương lai -> Bỏ qua hoặc để null (tùy logic hiển thị)
                 if (currentDate.isAfter(today)) {
                      continue; 
                 }
@@ -225,7 +201,6 @@ public class AttendanceService {
             for (Attendance log : dailyLogs) {
                 if ("CHECK_IN".equals(log.getType())) {
                     if (tempIn != null) {
-                        // Có IN rồi mà lại gặp IN tiếp -> Quên Checkout lần trước
                         isMissingCheckout = true;
                     }
                     tempIn = log; 
@@ -235,10 +210,12 @@ public class AttendanceService {
                         // Ghép cặp thành công
                         double duration = java.time.Duration.between(tempIn.getCheckInTime(), log.getCheckInTime()).toMinutes() / 60.0;
                         
+                        // [ĐÃ SỬA] Thêm tham số lateMinutes vào cuối (lấy từ tempIn)
                         sessions.add(new DailyTimesheetDTO.Session(
                             tempIn.getCheckInTime().toLocalTime(),
                             log.getCheckInTime().toLocalTime(),
-                            Math.round(duration * 100.0) / 100.0
+                            Math.round(duration * 100.0) / 100.0,
+                            tempIn.getLateMinutes() != null ? tempIn.getLateMinutes() : 0 
                         ));
                         
                         totalHours += duration;
@@ -247,36 +224,31 @@ public class AttendanceService {
                 }
             }
 
-            // --- [ĐOẠN ĐÃ SỬA] XỬ LÝ CHECK-IN CUỐI CÙNG ---
-            String status = "OK"; // Mặc định là OK
+            // --- XỬ LÝ CHECK-IN CUỐI CÙNG ---
+            String status = "OK"; 
 
             if (tempIn != null) {
-                // Vẫn còn dư 1 lượt Check-in chưa đóng
-                
-                // Kiểm tra xem có phải hôm nay không?
                 if (currentDate.isEqual(today)) {
-                    // LÀ HÔM NAY -> ĐANG LÀM VIỆC (Không phải lỗi)
                     status = "WORKING";
-                    
-                    // Vẫn hiển thị session mở (giờ vào, giờ ra null)
+                    // [ĐÃ SỬA] Thêm tham số lateMinutes
                     sessions.add(new DailyTimesheetDTO.Session(
                             tempIn.getCheckInTime().toLocalTime(),
                             null, 
-                            0
+                            0,
+                            tempIn.getLateMinutes() != null ? tempIn.getLateMinutes() : 0
                     ));
                 } else {
-                    // LÀ NGÀY QUÁ KHỨ -> QUÊN CHECKOUT (Lỗi)
                     isMissingCheckout = true;
                     status = "MISSING_CHECKOUT";
-                    
+                    // [ĐÃ SỬA] Thêm tham số lateMinutes
                     sessions.add(new DailyTimesheetDTO.Session(
                             tempIn.getCheckInTime().toLocalTime(),
                             null, 
-                            0
+                            0,
+                            tempIn.getLateMinutes() != null ? tempIn.getLateMinutes() : 0
                     ));
                 }
             } else {
-                // tempIn == null (đã ghép cặp hết), nhưng trước đó có cờ lỗi (ví dụ 2 lần IN liên tiếp)
                 if (isMissingCheckout) {
                     status = "MISSING_CHECKOUT";
                 }
@@ -286,7 +258,7 @@ public class AttendanceService {
             timesheet.add(DailyTimesheetDTO.builder()
                     .date(currentDate)
                     .totalWorkingHours(Math.round(totalHours * 100.0) / 100.0)
-                    .status(status) // Sử dụng status đã tính toán kỹ ở trên
+                    .status(status) 
                     .sessions(sessions)
                     .build());
         }
