@@ -52,7 +52,7 @@ class EmployeeModel {
     return EmployeeModel(
       id: json['id']?.toString(),
       employeeCode: json['employeeCode']?.toString(), // [MỚI] Map field này
-      fullName: json['fullName'] ?? '',
+      fullName: json['fullName'] ?? 'Updating...',
       email: json['email'] ?? '',
       phone: json['phone'] ?? '',
       dateOfBirth: json['dateOfBirth']?.toString() ?? '',

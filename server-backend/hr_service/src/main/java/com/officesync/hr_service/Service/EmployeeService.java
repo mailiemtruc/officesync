@@ -2,7 +2,12 @@ package com.officesync.hr_service.Service;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
-
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired; // [1] NHỚ IMPORT CÁI NÀY
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.CacheEvict;
@@ -303,32 +308,45 @@ public class EmployeeService {
         return String.format("NV%06d", randomNum);
     }
 
-    public List<Employee> getAllEmployeesByRequester(Employee requester) {
-        // Logic phân luồng tối ưu cache
-        if (requester.getRole() == EmployeeRole.COMPANY_ADMIN) {
-            // [FIX] Gọi qua biến 'self' thay vì gọi trực tiếp để kích hoạt Cache
-            return self.getEmployeesByCompanyCached(requester.getCompanyId());
-        } 
-        else if (requester.getRole() == EmployeeRole.MANAGER) {
-            if (requester.getDepartment() != null) {
-                // [FIX] Gọi qua biến 'self'
-                return self.getEmployeesByDepartmentCached(requester.getDepartment().getId());
-            }
-        }
-        // Staff -> Không cache list
-        return List.of(requester);
-    }
-
-    // [CACHE CON 1]
+    // --- 3. GET LIST (TỐI ƯU CACHE ID) ---
     @Cacheable(value = "employees_by_company", key = "#companyId", sync = true)
-    public List<Employee> getEmployeesByCompanyCached(Long companyId) {
-        return employeeRepository.findByCompanyId(companyId);
+    public List<Long> getEmployeeIdsByCompanyCached(Long companyId) {
+        return employeeRepository.findIdsByCompanyId(companyId);
     }
 
-    // [CACHE CON 2]
     @Cacheable(value = "employees_by_department", key = "#deptId", sync = true)
-    public List<Employee> getEmployeesByDepartmentCached(Long deptId) {
-        return employeeRepository.findByDepartmentId(deptId);
+    public List<Long> getEmployeeIdsByDepartmentCached(Long deptId) {
+        return employeeRepository.findIdsByDepartmentId(deptId);
+    }
+
+    // [TỐI ƯU] Pattern: Get IDs from Cache -> Fetch Entities from DB
+    public List<Employee> getAllEmployeesByRequester(Employee requester) {
+        List<Long> ids = Collections.emptyList();
+
+        if (requester.getRole() == EmployeeRole.COMPANY_ADMIN) {
+            // Gọi qua 'self' để kích hoạt Cache Proxy
+            ids = self.getEmployeeIdsByCompanyCached(requester.getCompanyId());
+        } else if (requester.getRole() == EmployeeRole.MANAGER) {
+            if (requester.getDepartment() != null) {
+                ids = self.getEmployeeIdsByDepartmentCached(requester.getDepartment().getId());
+            }
+        } else {
+            return List.of(requester);
+        }
+
+        if (ids == null || ids.isEmpty()) return Collections.emptyList();
+
+        // [SAFE] Fetch Entities (DB call tối ưu bằng WHERE IN)
+        List<Employee> fetched = employeeRepository.findByIdInFetchDepartment(ids);
+        
+        // [SAFE] Re-order đúng thứ tự ID và lọc null (đề phòng data rác trong cache)
+        Map<Long, Employee> map = fetched.stream()
+            .collect(Collectors.toMap(Employee::getId, e -> e));
+            
+        return ids.stream()
+            .map(map::get)
+            .filter(Objects::nonNull) // Loại bỏ ID có trong cache nhưng không còn trong DB
+            .collect(Collectors.toList());
     }
 
   // --- HÀM 2: SỬA UPDATE (Xóa annotation gây lỗi & dùng code thủ công) ---

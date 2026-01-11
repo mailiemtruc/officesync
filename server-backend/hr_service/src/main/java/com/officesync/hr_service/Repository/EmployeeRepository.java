@@ -33,6 +33,14 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
     @Query("SELECT e FROM Employee e LEFT JOIN FETCH e.department WHERE e.companyId = :companyId")
     List<Employee> findByCompanyId(@Param("companyId") Long companyId);
 
+    @Query("SELECT e.id FROM Employee e WHERE e.companyId = :companyId")
+    List<Long> findIdsByCompanyId(@Param("companyId") Long companyId);
+
+    @Query("SELECT e.id FROM Employee e WHERE e.department.id = :departmentId")
+    List<Long> findIdsByDepartmentId(@Param("departmentId") Long departmentId);
+
+    @Query("SELECT e FROM Employee e LEFT JOIN FETCH e.department WHERE e.id IN :ids")
+    List<Employee> findByIdInFetchDepartment(@Param("ids") List<Long> ids);
     // [TỐI ƯU] Lấy nhân viên theo phòng ban
     // Mặc dù đã biết phòng ban, nhưng vẫn fetch để object Employee đầy đủ data nếu dùng ở nơi khác
     @Query("SELECT e FROM Employee e LEFT JOIN FETCH e.department WHERE e.department.id = :departmentId")
