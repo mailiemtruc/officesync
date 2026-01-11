@@ -300,16 +300,286 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
     super.dispose();
   }
 
-  // ... (Logic Lock Note & Show PIN Dialog giữ nguyên như cũ, tôi ẩn đi để code gọn) ...
+  // --- LOGIC XỬ LÝ KHÓA/MỞ KHÓA (GIAO DIỆN ĐỒNG BỘ MÀU #2260FF) ---
   Future<void> _handleLockNote() async {
-    /* Code cũ của bạn */
+    FocusScope.of(context).unfocus(); // Ẩn bàn phím
+
+    // TRƯỜNG HỢP 1: Đang có khóa -> Muốn gỡ bỏ
+    if (_currentPin != null) {
+      final bool? confirm = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => Dialog(
+          elevation: 0,
+          backgroundColor: Colors.transparent, // Để hiển thị bo góc đẹp hơn
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF2260FF).withOpacity(0.15),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // 1. Icon Mở khóa (Xanh chủ đạo)
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2260FF).withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    PhosphorIconsFill.lockKeyOpen, // Icon mở khóa
+                    size: 32,
+                    color: Color(0xFF2260FF),
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // 2. Tiêu đề & Nội dung
+                const Text(
+                  "Remove Lock",
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  "Are you sure you want to remove the PIN protection?",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // 3. Hai nút bấm (Cancel & Remove)
+                Row(
+                  children: [
+                    // Nút Cancel (Màu xám)
+                    Expanded(
+                      child: TextButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text(
+                          "Cancel",
+                          style: TextStyle(
+                            color: Colors.grey,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+
+                    // Nút Remove (Màu xanh chủ đạo 2260FF)
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.pop(ctx, true),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF2260FF),
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text(
+                          "Remove",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      // Xử lý kết quả sau khi bấm nút
+      if (confirm == true) {
+        setState(() {
+          _currentPin = null;
+          _isDirty = true;
+        });
+        if (mounted) {
+          CustomSnackBar.show(
+            context,
+            title: "Success",
+            message: "Lock removed successfully",
+            isError: false,
+          );
+        }
+      }
+    }
+    // TRƯỜNG HỢP 2: Chưa khóa -> Muốn đặt khóa mới
+    else {
+      final String? newPin = await _showPinDialog(context, isSetting: true);
+
+      if (newPin != null && newPin.length == 6) {
+        setState(() {
+          _currentPin = newPin;
+          _isDirty = true;
+        });
+        if (mounted) {
+          CustomSnackBar.show(
+            context,
+            title: "Success",
+            message: "Note locked successfully!",
+            isError: false,
+          );
+        }
+      }
+    }
   }
+
+  // --- DIALOG NHẬP PIN (Style Banking) ---
   Future<String?> _showPinDialog(
     BuildContext context, {
     bool isSetting = false,
   }) async {
-    /* Code cũ của bạn */
-    return null;
+    String currentPin = "";
+
+    return showDialog<String>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return Dialog(
+              elevation: 0,
+              backgroundColor: Colors.transparent,
+              child: Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF2260FF).withOpacity(0.2),
+                      blurRadius: 20,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2260FF).withOpacity(0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        isSetting
+                            ? PhosphorIconsFill.shieldCheck
+                            : PhosphorIconsFill.lockKey,
+                        size: 32,
+                        color: const Color(0xFF2260FF),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      isSetting ? "Set New PIN" : "Enter PIN Code",
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      isSetting
+                          ? "Enter 6 digits to lock this note"
+                          : "Enter 6 digits to unlock",
+                      style: const TextStyle(fontSize: 14, color: Colors.grey),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Ô nhập PIN ẩn
+                    Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: List.generate(6, (index) {
+                            bool isFilled = index < currentPin.length;
+                            return Container(
+                              margin: const EdgeInsets.symmetric(horizontal: 6),
+                              width: 16,
+                              height: 16,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: isFilled
+                                    ? const Color(0xFF2260FF)
+                                    : const Color(0xFFE3E3E8),
+                              ),
+                            );
+                          }),
+                        ),
+                        Opacity(
+                          opacity: 0.0,
+                          child: TextField(
+                            autofocus: true,
+                            keyboardType: TextInputType.number,
+                            maxLength: 6,
+                            onChanged: (value) {
+                              setStateDialog(() {
+                                currentPin = value;
+                              });
+                              if (value.length == 6) {
+                                Future.delayed(
+                                  const Duration(milliseconds: 100),
+                                  () {
+                                    Navigator.pop(ctx, value);
+                                  },
+                                );
+                              }
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text(
+                        "Cancel",
+                        style: TextStyle(color: Colors.grey, fontSize: 16),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   // --- Logic Lưu Note ---
