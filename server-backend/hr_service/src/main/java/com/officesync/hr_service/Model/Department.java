@@ -1,8 +1,6 @@
 package com.officesync.hr_service.Model;
 import java.util.List;
 
-import org.hibernate.annotations.Formula;
-
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
  
@@ -17,6 +15,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
@@ -43,10 +42,9 @@ public class Department extends BaseEntity {
     @Column(name = "color", length = 10)
     private String color;
   
-// [MỚI] Tự động đếm số nhân viên bằng câu lệnh SQL con (Sub-query)
-    // Lưu ý: 'employees' là tên bảng trong DB, 'department_id' là khóa ngoại
-    @Formula("(SELECT count(*) FROM employees e WHERE e.department_id = id)")
-    private int memberCount;
+// THAY BẰNG:
+@Transient
+private long memberCount = 0;
 
     @Column(name = "is_hr", nullable = false)
     private Boolean isHr = false; 

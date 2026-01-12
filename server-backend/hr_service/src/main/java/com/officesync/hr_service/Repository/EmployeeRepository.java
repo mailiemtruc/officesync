@@ -80,6 +80,9 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
            "OR LOWER(e.employeeCode) LIKE LOWER(CONCAT('%', :keyword, '%')))")
     List<Employee> searchEmployeesInDepartment(@Param("deptId") Long deptId, @Param("keyword") String keyword);
     
-    // Hàm này ít dùng hoặc chỉ để test, có thể giữ nguyên hoặc tối ưu tùy ý
-    List<Employee> findByFullNameContainingIgnoreCaseOrEmployeeCodeContainingIgnoreCase(String name, String code);
+    @Query("SELECT e.id FROM Employee e " +
+           "LEFT JOIN e.department d " +
+           "WHERE e.companyId = :companyId " +
+           "AND (e.role = 'COMPANY_ADMIN' OR e.role = 'MANAGER' OR d.isHr = true)")
+    List<Long> findApproverIdsByCompany(@Param("companyId") Long companyId);
 }

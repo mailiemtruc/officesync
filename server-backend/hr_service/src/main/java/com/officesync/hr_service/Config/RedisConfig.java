@@ -55,9 +55,7 @@ public class RedisConfig {
     public RedisCacheManager cacheManager(RedisConnectionFactory redisConnectionFactory) {
         Map<String, RedisCacheConfiguration> configMap = new HashMap<>();
         
-        // 1. Dữ liệu tĩnh (Phòng ban) - 4 giờ
-        configMap.put("departments", cacheConfiguration().entryTtl(Duration.ofHours(4))); 
-        configMap.put("hr_department", cacheConfiguration().entryTtl(Duration.ofHours(4)));
+      
         
         // 2. Dữ liệu nhân viên - 1 giờ
         configMap.put("employee_detail", cacheConfiguration().entryTtl(Duration.ofHours(1)));
@@ -66,7 +64,9 @@ public class RedisConfig {
 
         // 3. Request Detail - 1 ngày
         configMap.put("request_detail", cacheConfiguration().entryTtl(Duration.ofDays(1))); 
-
+        // Thêm config cho 2 loại cache mới
+       configMap.put("departments_metadata", cacheConfiguration().entryTtl(Duration.ofHours(24))); // Lưu lâu
+       configMap.put("departments_stats", cacheConfiguration().entryTtl(Duration.ofHours(2)));    // Lưu ngắn hơn
         // 4. Request List (User & Manager) - Short Lived (2 phút)
         // [FIX] Phải khai báo rõ ràng tên cache được dùng trong Service
         RedisCacheConfiguration shortLivedConfig = cacheConfiguration().entryTtl(Duration.ofMinutes(2));

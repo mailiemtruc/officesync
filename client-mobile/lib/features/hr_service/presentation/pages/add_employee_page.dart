@@ -8,8 +8,10 @@ import '../../data/datasources/employee_remote_data_source.dart';
 import '../../domain/repositories/employee_repository_impl.dart';
 import '../../domain/repositories/employee_repository.dart';
 import '../../data/models/department_model.dart';
+import '../../data/models/employee_model.dart'; // [MỚI] Import để dùng model
 import '../../../../core/config/app_colors.dart';
 import '../../widgets/selection_bottom_sheet.dart';
+import '../../widgets/confirm_bottom_sheet.dart'; // [MỚI] Import ConfirmBottomSheet
 import '../../data/datasources/department_remote_data_source.dart';
 import '../../domain/repositories/department_repository_impl.dart';
 import '../../domain/repositories/department_repository.dart';
@@ -65,8 +67,6 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
   }
 
   // [LOGIC MỚI] Hàm khởi tạo và kiểm tra quyền
-  // File: lib/features/hr_service/presentation/pages/add_employee_page.dart
-
   Future<void> _initDataAndCheckPermissions() async {
     try {
       // 1. Lấy thông tin user từ Storage
@@ -119,7 +119,6 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
   }
 
   Future<String?> _getCurrentUserId() async {
-    // Hàm này giữ lại để dùng lúc create (double check)
     return _currentUserId;
   }
 
@@ -244,27 +243,68 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
       return;
     }
 
-    // 5. Check Manager Assignment (Only relevant for Admin)
+    if (_currentUserId == null) {
+      _showErrorSnackBar("Session expired. Please login again.");
+      return;
+    }
+
+    // 5. Check Manager Assignment (ĐÃ SỬA LOGIC: Thay vì chặn -> Hỏi để thay thế)
     if (_selectedRole?.toUpperCase() == 'MANAGER' &&
         _selectedDepartment != null) {
       if (_selectedDepartment!.manager != null) {
         final currentManagerName =
             _selectedDepartment!.manager?.fullName ?? "Unknown";
+        final oldManager = _selectedDepartment!.manager!;
 
-        _showErrorSnackBar(
-          'Department "${_selectedDepartment!.name}" already has a Manager ($currentManagerName).',
+        // Hiện Dialog xác nhận thay thế
+        final bool? confirm = await showModalBottomSheet<bool>(
+          context: context,
+          backgroundColor: Colors.transparent,
+          isScrollControlled: true,
+          builder: (context) => ConfirmBottomSheet(
+            title: 'Replace Manager?',
+            message:
+                'Department "${_selectedDepartment!.name}" is currently managed by $currentManagerName.\n\nDo you want to demote $currentManagerName and assign the NEW employee as Manager?',
+            confirmText: 'Replace',
+            confirmColor: const Color(0xFFF97316),
+            onConfirm: () {
+              Navigator.pop(context, true);
+            },
+          ),
         );
-        return;
+
+        if (confirm != true) return; // Nếu không đồng ý thì dừng lại
+
+        // [LOGIC GIÁNG CHỨC]
+        // Thực hiện giáng chức ông quản lý cũ TRƯỚC khi tạo người mới
+        setState(() => _isLoading = true);
+        try {
+          if (oldManager.id != null) {
+            print("--> Demoting old manager: ${oldManager.fullName}");
+            await _employeeRepository.updateEmployee(
+              _currentUserId!,
+              oldManager.id!,
+              oldManager.fullName,
+              oldManager.phone,
+              oldManager.dateOfBirth,
+              email: oldManager.email,
+              avatarUrl: oldManager.avatarUrl,
+              status: oldManager.status,
+              role: 'STAFF', // Giáng xuống Staff
+              departmentId: _selectedDepartment!.id,
+            );
+          }
+        } catch (e) {
+          setState(() => _isLoading = false);
+          _showErrorSnackBar("Failed to demote old manager: $e");
+          return;
+        }
       }
     }
 
     setState(() => _isLoading = true);
 
     try {
-      if (_currentUserId == null) {
-        throw Exception("Session expired. Please login again.");
-      }
-
       String formattedDob = "";
       if (dob.isNotEmpty) {
         try {
@@ -275,6 +315,7 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
         }
       }
 
+      // [CREATE NEW EMPLOYEE]
       final String? newEmployeeId = await _employeeRepository.createEmployee(
         fullName: fullName,
         email: email,
@@ -288,7 +329,8 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
 
       // Nếu có ID trả về => Tạo thành công
       if (newEmployeeId != null) {
-        // [LOGIC MỚI] Tự động set Manager cho phòng ban
+        // [TỰ ĐỘNG GÁN MANAGER]
+        // Cập nhật lại Department để trỏ Manager về nhân viên mới tạo
         if (_selectedRole?.toUpperCase() == 'MANAGER' &&
             _selectedDepartment != null) {
           print(
@@ -314,7 +356,6 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
           Navigator.pop(context, true);
         }
       } else {
-        // Trường hợp API trả về 200 nhưng không có ID trong body (hiếm gặp)
         throw Exception("Employee created but failed to retrieve ID.");
       }
     } catch (e) {
@@ -345,7 +386,6 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
   }
 
   void _showErrorSnackBar(String message) {
-    // [ĐÃ SỬA] Dùng CustomSnackBar
     CustomSnackBar.show(
       context,
       title: 'Validation Error',
@@ -356,18 +396,15 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
 
   // --- UI HELPER ---
   void _showDepartmentSelector() {
-    // [LOGIC MỚI] Nếu là Manager thì không cho chọn (chặn click từ logic build rồi nhưng thêm check cho chắc)
     if (_isManager) return;
 
     if (_departments.isEmpty) {
-      // [ĐÃ SỬA] Dùng CustomSnackBar
       CustomSnackBar.show(
         context,
         title: 'Data Unavailable',
         message: 'Loading departments or no data available...',
         isError: true,
       );
-      // Thử load lại nếu trống
       _initDataAndCheckPermissions();
       return;
     }
@@ -402,7 +439,6 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
   }
 
   void _showRoleSelector() {
-    // [LOGIC MỚI] Manager không được chọn Role
     if (_isManager) return;
 
     showModalBottomSheet(
@@ -490,24 +526,17 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
                         ],
                       ),
                       const SizedBox(height: 24),
-                      // ... (Phần Avatar giữ nguyên) ...
                       Center(
                         child: Container(
                           width: 110,
                           height: 110,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-
-                            // [ĐÃ SỬA]
-                            // - Độ dày: 2 (như cũ)
-                            // - Màu: Colors.grey[200] (trùng màu nền avatar)
                             border: Border.all(
                               color: Colors.grey[300]!,
                               width: 2,
                             ),
-
-                            color: Colors.grey[200], // Màu nền
-
+                            color: Colors.grey[200],
                             boxShadow: [
                               BoxShadow(
                                 color: Colors.black.withOpacity(0.1),
@@ -656,17 +685,13 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
                         decoration: _buildBlockDecoration(),
                         child: Column(
                           children: [
-                            // [SỬA UI] Dept Selector
                             _buildSelectorItem(
                               label: 'Department',
                               value: _selectedDepartment?.name ?? 'Select Dept',
-                              // Nếu là Manager thì không bao giờ là placeholder (vì đã gán cứng)
                               isPlaceholder: _selectedDepartment == null,
-                              // Nếu là Manager -> Vô hiệu hóa tap (truyền null)
                               onTap: _isManager
                                   ? null
                                   : _showDepartmentSelector,
-                              // Nếu là Manager -> Hiển thị kiểu bị khóa (read-only)
                               isReadOnly: _isManager,
                             ),
                             const Padding(
@@ -676,14 +701,11 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
                                 color: Color(0xFFF1F5F9),
                               ),
                             ),
-                            // [SỬA UI] Role Selector
                             _buildSelectorItem(
                               label: 'Role',
                               value: _selectedRole ?? 'Select Role',
                               isPlaceholder: _selectedRole == null,
-                              // Nếu là Manager -> Vô hiệu hóa tap
                               onTap: _isManager ? null : _showRoleSelector,
-                              // Nếu là Manager -> Hiển thị kiểu bị khóa
                               isReadOnly: _isManager,
                             ),
                           ],
@@ -818,7 +840,6 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
     );
   }
 
-  // [ĐÃ SỬA] Cập nhật UI cho phép hiển thị trạng thái ReadOnly
   Widget _buildSelectorItem({
     required String label,
     required String value,

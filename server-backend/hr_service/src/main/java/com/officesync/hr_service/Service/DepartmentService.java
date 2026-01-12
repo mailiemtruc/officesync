@@ -1,11 +1,16 @@
 package com.officesync.hr_service.Service;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
+import java.util.stream.Collectors;
 
+import org.springframework.beans.factory.annotation.Autowired; 
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.Caching;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,6 +37,11 @@ public class DepartmentService {
     private final EmployeeRepository employeeRepository;
     private final EmployeeProducer employeeProducer;
     private final RequestRepository requestRepository; 
+    private DepartmentService self;
+    @Autowired
+    public void setSelf(@Lazy DepartmentService self) {
+        this.self = self;
+    }
     // [BẢO MẬT] Hàm check quyền dùng chung
     private void requireAdminRole(Employee actor) {
         if (actor.getRole() != EmployeeRole.COMPANY_ADMIN) {
@@ -56,14 +66,10 @@ public class DepartmentService {
         }
     }
     @Transactional
-    @Caching(evict = {
-        // Chỉ xóa danh sách phòng ban của CHÍNH CÔNG TY ĐÓ
-        @CacheEvict(value = "departments", key = "#creator.companyId"),
-        // Khi tạo phòng ban mới có thể update nhân viên -> xóa list nhân viên của cty đó
-        @CacheEvict(value = "employees_by_company", key = "#creator.companyId"), 
-        @CacheEvict(value = "hr_department", key = "#creator.companyId"),
-
-    })
+  @Caching(evict = {
+    @CacheEvict(value = "departments_metadata", key = "#creator.companyId"),
+    @CacheEvict(value = "employees_by_company", key = "#creator.companyId"),
+})
     public Department createDepartmentFull(Employee creator, String name, Long managerId, List<Long> memberIds,Boolean isHr) {
         // 1. Kiểm tra quyền
         requireAdminRole(creator);
@@ -143,9 +149,9 @@ public class DepartmentService {
     }
 
     @Transactional
-    @Caching(evict = {
-        @CacheEvict(value = "departments", key = "#updater.companyId"),
-        @CacheEvict(value = "hr_department", key = "#updater.companyId"),
+   @Caching(evict = {
+        @CacheEvict(value = "departments_metadata", key = "#updater.companyId"),
+        @CacheEvict(value = "departments_stats", key = "#updater.companyId"), 
         @CacheEvict(value = "employees_by_company", key = "#updater.companyId"),
         @CacheEvict(value = "employees_by_department", key = "#deptId")
     })
@@ -238,13 +244,12 @@ public class DepartmentService {
     }
     
     @Transactional
-   @Caching(evict = {
-        @CacheEvict(value = "departments", key = "#deleter.companyId"),
-        @CacheEvict(value = "hr_department", key = "#deleter.companyId"),
-        @CacheEvict(value = "employees_by_company", key = "#deleter.companyId"),
-        @CacheEvict(value = "employees_by_department", key = "#deptId")
-
-    })
+  @Caching(evict = {
+    @CacheEvict(value = "departments_metadata", key = "#deleter.companyId"),
+    @CacheEvict(value = "departments_stats", key = "#deleter.companyId"),
+    @CacheEvict(value = "employees_by_company", key = "#deleter.companyId"),
+    @CacheEvict(value = "employees_by_department", key = "#deptId")
+   })
     public void deleteDepartment(Employee deleter, Long deptId) {
         // 1. Kiểm tra quyền
         requireAdminRole(deleter);
@@ -348,25 +353,79 @@ public class DepartmentService {
         return String.format("DEP%04d", randomNum);
     }
 
- // Sửa hàm này: Nhận object Employee thay vì Long requesterId
-@Cacheable(value = "departments", key = "#requester.companyId", sync = true)
-public List<Department> getAllDepartments(Employee requester) { // <--- Tham số là Object
-    return departmentRepository.findByCompanyId(requester.getCompanyId());
-}
-   @Transactional(readOnly = true)
+
+
+// 1. Metadata (Tên phòng, Manager) - Ít thay đổi -> Cache lâu
+    @Cacheable(value = "departments_metadata", key = "#requester.companyId")
+    public List<Department> getDepartmentsMetadata(Employee requester) {
+        log.info("--> [DB HIT] Fetching Departments Metadata for Company: {}", requester.getCompanyId());
+        return departmentRepository.findByCompanyId(requester.getCompanyId());
+    }
+
+   // [SỬA] Đổi Key từ Long -> String để tương thích JSON Redis
+    @Cacheable(value = "departments_stats", key = "#requester.companyId")
+    public Map<String, Long> getDepartmentStats(Employee requester) {
+        log.info("--> [DB HIT] Fetching Departments Stats for Company: {}", requester.getCompanyId());
+        List<Object[]> results = departmentRepository.countMembersByCompany(requester.getCompanyId());
+        
+        log.info("--> Stats Results size: {}", results.size());
+        
+        return results.stream()
+            .collect(Collectors.toMap(
+                row -> String.valueOf(row[0]), // [QUAN TRỌNG] Convert ID thành String
+                row -> (Long) row[1]
+            ));
+    }
+
+ // [HÀM CHUNG] Ghép số lượng
+    private void populateMemberCounts(List<Department> departments, Employee requester) {
+        if (departments == null || departments.isEmpty()) return;
+
+        // [SỬA] Map key là String
+        Map<String, Long> stats = self.getDepartmentStats(requester);
+
+        for (Department dept : departments) {
+            // [SỬA] Convert ID của phòng ban sang String để tìm trong Map
+            // Lúc này dù Map đến từ DB hay Redis thì key đều là String -> Luôn tìm thấy
+            long count = stats.getOrDefault(String.valueOf(dept.getId()), 0L);
+            dept.setMemberCount(count);
+        }
+    }
+
+    // 3. Hàm chính: LẤY TẤT CẢ (Sử dụng Cache)
+    public List<Department> getAllDepartments(Employee requester) {
+        // [QUAN TRỌNG] Gọi qua self để kích hoạt Cache Metadata
+        List<Department> departments = self.getDepartmentsMetadata(requester);
+        
+        // Ghép số lượng
+        populateMemberCounts(departments, requester);
+        
+        return departments;
+    }
+
+    // 4. Hàm tìm kiếm: SEARCH (Cũng phải ghép số lượng)
+    @Transactional(readOnly = true)
     public List<Department> searchDepartments(Long requesterId, String keyword) {
         Employee requester = employeeRepository.findById(requesterId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
-        return departmentRepository.searchDepartments(requester.getCompanyId(), keyword);
+        
+        // Tìm kiếm trong DB (Metadata)
+        List<Department> results = departmentRepository.searchDepartments(requester.getCompanyId(), keyword);
+        
+        // [QUAN TRỌNG] Phải gọi hàm ghép số lượng vào kết quả tìm kiếm
+        // Nếu không dòng này, kết quả tìm kiếm sẽ luôn hiển thị 0 thành viên
+        populateMemberCounts(results, requester);
+        
+        return results;
     }
 
-   // [TỐI ƯU CACHE KEY] 
-   // [Service] DepartmentService.java
-
-    @Cacheable(value = "hr_department", key = "#requester.companyId", sync = true)
     public Department getHrDepartment(Employee requester) {
-        // Không cần tìm user nữa vì Controller đã truyền vào
-        return departmentRepository.findByCompanyIdAndIsHrTrue(requester.getCompanyId())
+        Department hrDept = departmentRepository.findByCompanyIdAndIsHrTrue(requester.getCompanyId())
                 .orElseThrow(() -> new RuntimeException("Chưa thiết lập phòng HR cho công ty này."));
+        
+        // Ghép số lượng (tạo list 1 phần tử để tái sử dụng hàm)
+        populateMemberCounts(Collections.singletonList(hrDept), requester);
+        
+        return hrDept;
     }
 }

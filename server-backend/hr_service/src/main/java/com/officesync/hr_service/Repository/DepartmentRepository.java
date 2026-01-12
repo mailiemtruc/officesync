@@ -32,4 +32,12 @@ public interface DepartmentRepository extends JpaRepository<Department, Long> {
     // Tìm phòng HR
     @Query("SELECT d FROM Department d LEFT JOIN FETCH d.manager WHERE d.companyId = :companyId AND d.isHr = true")
     Optional<Department> findByCompanyIdAndIsHrTrue(@Param("companyId") Long companyId);
+
+  
+
+    @Query("SELECT e.department.id, COUNT(e) " +
+       "FROM Employee e " +
+       "WHERE e.companyId = :companyId AND e.department.id IS NOT NULL " +
+       "GROUP BY e.department.id")
+    List<Object[]> countMembersByCompany(@Param("companyId") Long companyId);
 }
