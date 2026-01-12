@@ -19,6 +19,7 @@ dependencies:
   # --- UI & Utilities ---
   flutter_staggered_grid_view: ^0.7.0
   flutter_secure_storage: ^9.0.0
+  flutter_linkify: ^6.0.0
   url_launcher: ^6.3.0
   cupertino_icons: ^1.0.8
   phosphor_flutter: ^2.1.0
