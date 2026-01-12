@@ -283,40 +283,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
           route:
               '/admin_companies', // Cần đảm bảo route này đã khai báo trong main.dart
           width: itemWidth,
-          // Nếu chưa có route riêng, có thể điều hướng về Tab Home (index 0) nơi có list công ty
-          onTapOverride: () {
-            setState(() => _currentIndex = 0);
-          },
-        ),
-
-        // 2. Thống kê hệ thống
-        _buildMenuItem(
-          context,
-          title: 'System Stats',
-          icon: PhosphorIconsFill.chartLineUp,
-          color: const Color(0xFF059669), // Xanh lá đậm
-          route: '/system_stats', // Route giả định
-          width: itemWidth,
-        ),
-
-        // 3. Quản lý User toàn cục
-        _buildMenuItem(
-          context,
-          title: 'Global Users',
-          icon: PhosphorIconsFill.usersFour,
-          color: const Color(0xFFD97706), // Vàng cam đậm
-          route: '/global_users', // Route giả định
-          width: itemWidth,
-        ),
-
-        // 4. Cấu hình ứng dụng
-        _buildMenuItem(
-          context,
-          title: 'App Settings',
-          icon: PhosphorIconsFill.gear,
-          color: const Color(0xFF475569), // Xám xanh
-          route: '/app_settings', // Route giả định
-          width: itemWidth,
         ),
       ],
     );
