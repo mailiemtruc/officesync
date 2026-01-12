@@ -284,6 +284,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
               '/admin_companies', // Cần đảm bảo route này đã khai báo trong main.dart
           width: itemWidth,
         ),
+
+        // 2. Create New Admin
+        _buildMenuItem(
+          context,
+          title: 'New Admin', // Tiêu đề ngắn gọn
+          icon: PhosphorIconsFill.userPlus, // Icon thêm người
+          color: const Color(0xFF9333EA), // Màu Tím quyền lực
+          route: '/create_admin', // Dẫn tới trang tạo Admin
+          width: itemWidth,
+        ),
       ],
     );
   }

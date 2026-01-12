@@ -13,6 +13,7 @@ import 'features/attendance_service/presentation/pages/attendance_screen.dart';
 import 'features/attendance_service/presentation/pages/manager_attendance_screen.dart';
 import 'features/core_service/presentation/pages/director_company_profile_screen.dart';
 import 'features/core_service/presentation/pages/all_companies_screen.dart';
+import 'features/core_service/presentation/pages/create_admin_screen.dart';
 
 // --- THÊM IMPORT CÁC TRANG MỚI ---
 import 'features/hr_service/presentation/pages/my_requests_page.dart';
@@ -162,7 +163,7 @@ class OfficeSyncApp extends StatelessWidget {
         },
         '/company_profile': (context) => const DirectorCompanyProfileScreen(),
         '/admin_companies': (context) => const AllCompaniesScreen(),
-
+        '/create_admin': (context) => const CreateAdminScreen(),
         // ======================= TASK_SERVICE ==============================
         // Logic phân quyền: Route này nhận 'role' từ Dashboard gửi sang
         '/tasks': (context) {
