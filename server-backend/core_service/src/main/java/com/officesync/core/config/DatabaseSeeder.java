@@ -1,59 +1,34 @@
 package com.officesync.core.config;
 
 import java.time.LocalDate;
-import java.util.List;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import com.officesync.core.dto.UserCreatedEvent; // Import DTO
 import com.officesync.core.model.Company;
 import com.officesync.core.model.User;
-import com.officesync.core.repository.CompanyRepository;
 import com.officesync.core.repository.UserRepository;
+import com.officesync.core.service.RabbitMQProducer; // Import Producer
 
 @Configuration
 public class DatabaseSeeder {
 
+    // Inject Producer để bắn message
+    @Autowired
+    private RabbitMQProducer rabbitMQProducer;
+
     @Bean
     CommandLineRunner initDatabase(UserRepository userRepository, 
-                                   CompanyRepository companyRepository, 
                                    PasswordEncoder passwordEncoder) {
         return args -> {
-            // 1. TẠO CÔNG TY "FPT Software" NẾU CHƯA CÓ
-            Company fptCompany = null;
-            // Tìm xem công ty đã có chưa (dựa theo domain hoặc tên)
-            // Ở đây mình tìm trong list, nếu project lớn nên viết hàm findByDomain trong Repository
-            List<Company> companies = companyRepository.findAll();
-            for (Company c : companies) {
-                if ("fpt".equals(c.getDomain())) {
-                    fptCompany = c;
-                    break;
-                }
-            }
-
-            if (fptCompany == null) {
-                fptCompany = new Company();
-                fptCompany.setName("FPT Software");
-                fptCompany.setDomain("fpt");
-                fptCompany.setStatus("ACTIVE");
-                fptCompany = companyRepository.save(fptCompany);
-                System.out.println("--> Đã tạo công ty: FPT Software");
-            }
-
-            // 2. TẠO CÁC USER (Mật khẩu '123456' sẽ được mã hóa BCrypt)
+            // --- CHỈ TẠO SUPER ADMIN ---
+            // Company là null vì Super Admin không thuộc công ty nào cụ thể
             createUserIfNotFound(userRepository, passwordEncoder, 
                 "admin@system.com", "Super Admin", "SUPER_ADMIN", null);
-
-            createUserIfNotFound(userRepository, passwordEncoder, 
-                "boss@fpt.com", "FPT Boss", "COMPANY_ADMIN", fptCompany);
-
-            createUserIfNotFound(userRepository, passwordEncoder, 
-                "manager@abc.com", "Nguyen Van B", "MANAGER", fptCompany);
-
-            createUserIfNotFound(userRepository, passwordEncoder, 
-                "staff@abc.com", "Nguyen Van A", "STAFF", fptCompany);
         };
     }
 
@@ -64,20 +39,41 @@ public class DatabaseSeeder {
             User user = new User();
             user.setEmail(email);
             user.setFullName(fullName);
-            // Mã hóa mật khẩu "123456" bằng BCrypt để đăng nhập được
+            // Mật khẩu mặc định là 123456
             user.setPassword(passwordEncoder.encode("123456")); 
             user.setRole(role);
             
+            // Nếu có company thì set ID, nếu null (Super Admin) thì bỏ qua
             if (company != null) {
                 user.setCompanyId(company.getId());
             }
             
-            // Set thêm dữ liệu giả cho mobile/dob để không bị null
+            // Dữ liệu giả định bắt buộc
             user.setMobileNumber("0900000000");
             user.setDateOfBirth(LocalDate.of(1990, 1, 1));
+            user.setStatus("ACTIVE");
 
-            userRepository.save(user);
+            // 1. Lưu vào DB
+            User savedUser = userRepository.save(user);
             System.out.println("--> Đã tạo User: " + email + " (Pass: 123456)");
+
+            // 2. [FIX] Bắn sự kiện sang RabbitMQ để HR/Profile Service đồng bộ
+            try {
+                UserCreatedEvent event = new UserCreatedEvent();
+                event.setId(savedUser.getId());
+                event.setCompanyId(savedUser.getCompanyId()); // Có thể null với Super Admin
+                event.setEmail(savedUser.getEmail());
+                event.setFullName(savedUser.getFullName());
+                event.setMobileNumber(savedUser.getMobileNumber());
+                event.setDateOfBirth(savedUser.getDateOfBirth());
+                event.setRole(savedUser.getRole());
+                event.setStatus(savedUser.getStatus());
+
+                rabbitMQProducer.sendUserCreatedEvent(event);
+                System.out.println("    -> [Seeder] Đã gửi sự kiện UserCreatedEvent cho " + email);
+            } catch (Exception e) {
+                System.err.println("    -> [Seeder] Lỗi gửi RabbitMQ: " + e.getMessage());
+            }
         }
     }
 }
