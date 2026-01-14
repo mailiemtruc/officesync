@@ -1,3 +1,4 @@
+// staff_home_view.dart
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'dart:async';
@@ -278,10 +279,10 @@ class _StaffHomeViewState extends State<StaffHomeView> {
             fontWeight: FontWeight.w700,
           ),
         ),
-
         TextButton(
           onPressed: () {
-            print("Bấm View all");
+            // ✅ Điều hướng sang StaffPage
+            Navigator.pushNamed(context, '/tasks', arguments: 'STAFF');
           },
           child: const Text(
             "View all",

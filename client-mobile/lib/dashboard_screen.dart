@@ -1,3 +1,4 @@
+// D:\officesync\client-mobile\lib\dashboard_screen.dart
 // import 'package:flutter/material.dart';
 // import 'package:phosphor_flutter/phosphor_flutter.dart';
 // import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -500,18 +501,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       width: itemWidth,
                     ),
 
-                    // ======================= TASK_SERVICE ==============================
-                    _buildMenuItem(
-                      context,
-                      title: 'Task Management',
-                      icon: PhosphorIconsFill.checkSquare,
-                      color: const Color(0xFF10B981), // Màu xanh lá
-                      route: '/tasks',
-                      arguments: role,
-                      width: itemWidth,
-                    ),
-
-                    // ======================= TASK_SERVICE ==============================
+                    
                     _buildMenuItem(
                       context,
                       title: 'Attendance', // Chấm công
