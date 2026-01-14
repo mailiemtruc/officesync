@@ -481,13 +481,17 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
                       _showDepartmentOptions(dept) // [ĐÃ SỬA]
                 : null,
 
+            // [SỬA ĐOẠN NÀY]
             onTap: () {
               Navigator.push(
                 context,
                 MaterialPageRoute(
                   builder: (context) => DepartmentDetailsPage(department: dept),
                 ),
-              ).then((_) => _fetchData());
+              ).then((_) {
+                // [QUAN TRỌNG] Load lại dữ liệu khi quay về để cập nhật Manager mới
+                _fetchData(keyword: _searchController.text);
+              });
             },
           ),
         );

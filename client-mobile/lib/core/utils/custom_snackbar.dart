@@ -7,7 +7,9 @@ class CustomSnackBar {
     required String title,
     required String message,
     bool isError = false,
-    double? marginBottom, // [MỚI] Thêm tham số tùy chỉnh khoảng cách đáy
+    double? marginBottom,
+    Color?
+    backgroundColor, // [MỚI] Thêm tham số này để tùy chỉnh màu (Vàng/Cam/Xanh dương...)
   }) {
     ScaffoldMessenger.of(context).clearSnackBars();
 
@@ -19,22 +21,24 @@ class CustomSnackBar {
         backgroundColor: Colors.transparent,
         elevation: 0,
         behavior: SnackBarBehavior.floating,
-
-        // [SỬA ĐỔI QUAN TRỌNG] Thay margin cố định bằng margin linh hoạt
         margin: EdgeInsets.only(
           left: 20,
           right: 20,
           top: 20,
-          // Nếu có truyền marginBottom thì dùng, không thì mặc định là 20
           bottom: marginBottom ?? 20,
         ),
-
         duration: Duration(milliseconds: autoDuration),
-
         content: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: isError ? const Color(0xFFEF4444) : const Color(0xFF10B981),
+            // [LOGIC MỚI]
+            // 1. Nếu có truyền backgroundColor -> Dùng màu đó.
+            // 2. Nếu không, kiểm tra isError -> Dùng Đỏ.
+            // 3. Mặc định -> Dùng Xanh lá.
+            color:
+                backgroundColor ??
+                (isError ? const Color(0xFFEF4444) : const Color(0xFF10B981)),
+
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
@@ -48,6 +52,7 @@ class CustomSnackBar {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Icon(
+                // Logic icon: Nếu là lỗi thì hiện Warning, còn lại hiện Check
                 isError
                     ? PhosphorIconsBold.warningCircle
                     : PhosphorIconsBold.checkCircle,
@@ -55,7 +60,6 @@ class CustomSnackBar {
                 size: 32,
               ),
               const SizedBox(width: 12),
-
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

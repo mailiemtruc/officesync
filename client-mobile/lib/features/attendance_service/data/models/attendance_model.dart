@@ -7,13 +7,16 @@ class AttendanceModel {
   final String status; // ON_TIME, LATE...
   final String? type; // CHECK_IN, CHECK_OUT
 
-  // --- THÔNG TIN NHÂN VIÊN MỚI THÊM ---
+  // [THÊM MỚI] Số phút đi muộn (nếu có)
+  final int? lateMinutes;
+
+  // --- THÔNG TIN NHÂN VIÊN ---
   final String fullName;
   final String email;
   final String phone;
   final String role;
   final String departmentName;
-  final String? dateOfBirth; // Có thể null
+  final String? dateOfBirth;
   final String? deviceBssid;
 
   AttendanceModel({
@@ -22,7 +25,8 @@ class AttendanceModel {
     required this.locationName,
     required this.status,
     this.type,
-    // Default values để tránh lỗi null nếu backend chưa trả về kịp
+    this.lateMinutes, // [THÊM VÀO CONSTRUCTOR]
+
     this.fullName = "Unknown User",
     this.email = "",
     this.phone = "",
@@ -41,6 +45,9 @@ class AttendanceModel {
       locationName: json['locationName'] ?? 'Unknown Location',
       status: json['status'] ?? 'UNKNOWN',
       type: json['type'],
+
+      // [THÊM MỚI] Map từ JSON
+      lateMinutes: json['lateMinutes'],
 
       // Map các trường thông tin nhân viên
       fullName: json['fullName'] ?? "Unknown User",

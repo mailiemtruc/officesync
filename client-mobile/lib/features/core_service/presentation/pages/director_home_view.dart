@@ -4,6 +4,7 @@ import 'package:officesync/features/communication_service/presentation/pages/new
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'dart:async';
 import '../../../../core/config/app_colors.dart';
+import 'package:officesync/features/chat_service/presentation/pages/chat_screen.dart';
 //import '../../../../communication_service/presentation/pages/newsfeed_screen.dart';
 
 import 'director_company_profile_screen.dart';
@@ -178,10 +179,9 @@ class _DirectorHomeViewState extends State<DirectorHomeView> {
             }),
             const SizedBox(width: 12),
             _buildCircleIcon(PhosphorIconsBold.chatCircleDots, () {
-              CustomSnackBar.show(
+              Navigator.push(
                 context,
-                title: "Messages",
-                message: "Opening chat...",
+                MaterialPageRoute(builder: (context) => const ChatScreen()),
               );
             }),
           ],

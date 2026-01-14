@@ -4,6 +4,8 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'dart:async';
 import '../../../../core/config/app_colors.dart';
 import 'package:officesync/features/notification_service/presentation/pages/notification_list_screen.dart';
+import 'package:officesync/features/communication_service/presentation/pages/newsfeed_screen.dart';
+import 'package:officesync/features/chat_service/presentation/pages/chat_screen.dart';
 
 class StaffHomeView extends StatefulWidget {
   final int currentUserId; // 👈 Thêm dòng này
@@ -173,7 +175,10 @@ class _StaffHomeViewState extends State<StaffHomeView> {
             }),
             const SizedBox(width: 12),
             _buildCircleIcon(PhosphorIconsBold.chatCircleDots, () {
-              print("Đã nhấn chat");
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const ChatScreen()),
+              );
             }),
           ],
         ),
@@ -261,7 +266,12 @@ class _StaffHomeViewState extends State<StaffHomeView> {
         _buildActionItem("Request", PhosphorIconsBold.calendarBlank, () {}),
         _buildActionItem("Note", PhosphorIconsBold.notePencil, () {}),
         _buildActionItem("OT", PhosphorIconsBold.clock, () {}),
-        _buildActionItem("News", PhosphorIconsBold.newspaper, () {}),
+        _buildActionItem("News", PhosphorIconsBold.newspaper, () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const NewsfeedScreen()),
+          );
+        }),
       ],
     );
   }

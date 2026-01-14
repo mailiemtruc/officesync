@@ -4,7 +4,7 @@ import java.time.LocalDateTime;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
-import jakarta.persistence.Column;
+import jakarta.persistence.Column; // Sử dụng * cho gọn
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -12,24 +12,34 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.Data;
-import lombok.EqualsAndHashCode; // [IMPORT QUAN TRỌNG]
+import lombok.EqualsAndHashCode;
 @Entity
-@Table(name = "requests")
+@Table(name = "requests", indexes = {
+    @Index(name = "idx_request_user", columnList = "user_id"), 
+    @Index(name = "idx_request_dept", columnList = "department_id"),
+    @Index(name = "idx_request_status", columnList = "status"), 
+    @Index(name = "idx_request_code", columnList = "request_code"), 
+    @Index(name = "idx_request_type", columnList = "type"),
+    @Index(name = "idx_req_company_created", columnList = "company_id, created_at")
+})
 @Data
 @EqualsAndHashCode(callSuper = true)
+@JsonIgnoreProperties(value = {"hibernateLazyInitializer", "handler"}, ignoreUnknown = true)
 public class Request extends BaseEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-  @Column(name = "request_code", length = 20, unique = true, updatable = false)
+    @Column(name = "request_code", length = 20, unique = true, updatable = false)
     private String requestCode;
+
    @ManyToOne(fetch = FetchType.LAZY)
-    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "password", "requests"}) 
+   @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "password", "requests"})
     @JoinColumn(name = "user_id", nullable = false)
     private Employee requester;
 
@@ -66,6 +76,7 @@ public class Request extends BaseEntity {
     private String evidenceUrl; 
 
     @ManyToOne(fetch = FetchType.LAZY)
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "requests"}) // Thêm ignore cho approver
     @JoinColumn(name = "approver_id")
     private Employee approver; 
 

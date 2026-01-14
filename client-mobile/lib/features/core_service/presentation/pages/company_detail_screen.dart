@@ -154,7 +154,8 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF3F5F9),
+      backgroundColor: const Color(0xFFF3F5F9), // Màu nền tổng thể sáng sủa
+      // --- HEADER (GIỮ NGUYÊN NHƯ YÊU CẦU) ---
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
@@ -181,6 +182,8 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
           ],
         ),
       ),
+
+      // --- BODY ---
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : TabBarView(
@@ -190,27 +193,39 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
     );
   }
 
+  // --- TAB 1: OVERVIEW (NÂNG CẤP) ---
   Widget _buildOverviewTab() {
     if (_company == null) return const Center(child: Text("No info"));
+    final isCompanyLocked = _company!.status == 'LOCKED';
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
         children: [
+          // 1. Thẻ thông tin chính (Modern Card)
           Container(
+            width: double.infinity,
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF2260FF).withOpacity(0.08),
+                  blurRadius: 20,
+                  offset: const Offset(0, 8),
+                ),
+              ],
             ),
             child: Column(
               children: [
+                // Logo / Avatar
                 Container(
-                  width: 100,
-                  height: 100,
+                  width: 80,
+                  height: 80,
                   decoration: BoxDecoration(
                     color: AppColors.primary.withOpacity(0.1),
                     shape: BoxShape.circle,
-                    // Nếu có URL ảnh -> Hiển thị ảnh
                     image:
                         (_company!.logoUrl != null &&
                             _company!.logoUrl!.isNotEmpty)
@@ -220,14 +235,13 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
                           )
                         : null,
                   ),
-
                   child:
                       (_company!.logoUrl == null || _company!.logoUrl!.isEmpty)
                       ? Center(
                           child: Text(
                             _company!.name.isNotEmpty ? _company!.name[0] : "C",
                             style: const TextStyle(
-                              fontSize: 40,
+                              fontSize: 32,
                               color: AppColors.primary,
                               fontWeight: FontWeight.bold,
                             ),
@@ -236,77 +250,116 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
                       : null,
                 ),
 
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
 
+                // Tên công ty
                 Text(
                   _company!.name,
                   textAlign: TextAlign.center,
                   style: const TextStyle(
-                    fontSize: 22,
+                    fontSize: 20,
                     fontWeight: FontWeight.bold,
                     color: Colors.black87,
                   ),
                 ),
-                const SizedBox(height: 30),
-
-                _buildInfoRow(
-                  PhosphorIconsBold.globe,
-                  "Domain",
-                  "${_company!.domain}.officesync.com",
+                const SizedBox(height: 4),
+                // Domain
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    "${_company!.domain}.officesync.com",
+                    style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                  ),
                 ),
-                const Divider(),
 
-                _buildInfoRow(
+                const SizedBox(height: 24),
+                const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                const SizedBox(height: 24),
+
+                // Danh sách thông tin chi tiết
+                _buildModernInfoRow(
                   PhosphorIconsBold.buildings,
                   "Industry",
                   _company!.industry ?? "Not specified",
                 ),
-                const Divider(),
 
-                _buildInfoRow(
-                  PhosphorIconsBold.checkCircle,
-                  "Status",
-                  _company!.status,
-                  isStatus: true,
-                  color: _company!.status == 'ACTIVE'
-                      ? Colors.green
-                      : Colors.red,
-                ),
-                const Divider(),
+                const SizedBox(height: 16),
 
-                _buildInfoRow(
+                _buildModernInfoRow(
                   PhosphorIconsBold.users,
                   "Total Employees",
-                  "${_users.length}",
+                  "${_users.length} Members",
                 ),
 
+                const SizedBox(height: 16),
+
+                // Status Row (Custom)
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[50],
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        PhosphorIconsBold.checkCircle,
+                        size: 20,
+                        color: Colors.grey[400],
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    const Expanded(
+                      child: Text(
+                        "Current Status",
+                        style: TextStyle(
+                          color: Colors.grey,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    _buildModernStatusBadge(_company!.status),
+                  ],
+                ),
+
+                // About Section
                 if (_company!.description != null &&
                     _company!.description!.isNotEmpty) ...[
-                  const SizedBox(height: 20),
-                  const Align(
+                  const SizedBox(height: 30),
+                  Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
                       "About Company",
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
-                        color: Colors.black87,
+                        color: Colors.blueGrey[800],
                       ),
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 12),
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF8FAFC),
-                      borderRadius: BorderRadius.circular(12),
+                      color: const Color(0xFFF8FAFC), // Xám xanh rất nhạt
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.grey.withOpacity(0.1)),
                     ),
                     child: Text(
                       _company!.description!,
                       style: const TextStyle(
                         color: Color(0xFF64748B),
-                        height: 1.5,
+                        height: 1.6,
+                        fontSize: 14,
                       ),
                     ),
                   ),
@@ -314,26 +367,26 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
               ],
             ),
           ),
-          const SizedBox(height: 20),
 
+          const SizedBox(height: 24),
+
+          // Action Button (Lock/Unlock)
           SizedBox(
             width: double.infinity,
-            height: 50,
+            height: 56, // Cao hơn chút cho dễ bấm
             child: ElevatedButton.icon(
               onPressed: () async {
+                // Logic xử lý lock/unlock
                 String newStatus = _company!.status == 'ACTIVE'
                     ? 'LOCKED'
                     : 'ACTIVE';
                 final client = ApiClient();
-
                 try {
                   await client.put(
                     '/admin/companies/${_company!.id}/status',
                     data: {"status": newStatus},
                   );
-
                   _fetchDetail();
-
                   CustomSnackBar.show(
                     context,
                     title: "Success",
@@ -352,95 +405,114 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
                 }
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: _company!.status == 'ACTIVE'
-                    ? Colors.red.withOpacity(0.1)
-                    : Colors.green.withOpacity(0.1),
-                elevation: 0,
-                foregroundColor: _company!.status == 'ACTIVE'
-                    ? Colors.red
-                    : Colors.green,
+                backgroundColor: isCompanyLocked
+                    ? const Color(0xFF22C55E)
+                    : const Color(0xFFEF4444),
+                foregroundColor: Colors.white,
+                elevation: 4,
+                shadowColor: (isCompanyLocked ? Colors.green : Colors.red)
+                    .withOpacity(0.4),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
               ),
               icon: Icon(
-                _company!.status == 'ACTIVE'
-                    ? PhosphorIconsBold.lock
-                    : PhosphorIconsBold.lockOpen,
+                isCompanyLocked
+                    ? PhosphorIconsBold.lockOpen
+                    : PhosphorIconsBold.lock,
+                size: 22,
               ),
               label: Text(
-                _company!.status == 'ACTIVE'
-                    ? "Lock Company"
-                    : "Activate Company",
+                isCompanyLocked ? "Activate Company" : "Lock Company",
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ),
+          const SizedBox(height: 30),
         ],
       ),
     );
   }
 
-  Widget _buildInfoRow(
-    IconData icon,
-    String label,
-    String value, {
-    bool isStatus = false,
-    Color? color,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 20, color: Colors.grey),
-          const SizedBox(width: 15),
+  // Helper cho Overview Row
+  Widget _buildModernInfoRow(IconData icon, String label, String value) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: Colors.grey[50],
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(icon, size: 20, color: Colors.grey[400]),
+        ),
+        const SizedBox(width: 16),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                color: Colors.grey,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              value,
+              style: const TextStyle(
+                color: Colors.black87,
+                fontWeight: FontWeight.w600,
+                fontSize: 15,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
 
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 15,
-              color: Colors.grey,
-              fontWeight: FontWeight.w500,
+  // Helper Badge Status (Pill + Dot style)
+  Widget _buildModernStatusBadge(String status) {
+    final isLocked = status == 'LOCKED';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: isLocked
+            ? Colors.red.withOpacity(0.08)
+            : Colors.green.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              color: isLocked ? Colors.red : Colors.green,
+              shape: BoxShape.circle,
             ),
           ),
-
-          const SizedBox(width: 10),
-
-          Expanded(
-            child: isStatus
-                ? Align(
-                    alignment: Alignment.centerRight,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: color!.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        value,
-                        style: TextStyle(
-                          color: color,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                  )
-                : Text(
-                    value,
-                    textAlign: TextAlign.end,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.black87,
-                    ),
-                  ),
+          const SizedBox(width: 6),
+          Text(
+            isLocked ? "Locked" : "Active",
+            style: TextStyle(
+              color: isLocked ? Colors.red[700] : Colors.green[700],
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+            ),
           ),
         ],
       ),
     );
   }
 
+  // --- TAB 2: MEMBERS (NÂNG CẤP) ---
   Widget _buildMembersTab() {
     final directors = _users.where((u) => u.role == 'COMPANY_ADMIN').toList();
     final managers = _users.where((u) => u.role == 'MANAGER').toList();
@@ -465,108 +537,133 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.symmetric(vertical: 10),
+          padding: const EdgeInsets.fromLTRB(4, 10, 0, 10),
           child: Row(
             children: [
               Container(
                 width: 4,
-                height: 16,
-                color: color,
-                margin: const EdgeInsets.only(right: 8),
+                height: 18,
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+                margin: const EdgeInsets.only(right: 10),
               ),
               Text(
                 "$title (${users.length})",
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  color: color,
+                  color: Colors.blueGrey[800],
                 ),
               ),
             ],
           ),
         ),
-        ...users.map((user) => _buildUserItem(user)).toList(),
-        const SizedBox(height: 10),
+        ...users.map((user) => _buildModernUserItem(user)).toList(),
+        const SizedBox(height: 16),
       ],
     );
   }
 
-  Widget _buildUserItem(UserModel user) {
+  Widget _buildModernUserItem(UserModel user) {
     final isLocked = user.status == 'LOCKED';
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
+      margin: const EdgeInsets.only(
+        bottom: 12,
+      ), // Tăng khoảng cách giữa các item
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
+        // Shadow nhẹ, clean hơn
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
+            color: const Color(0xFF2260FF).withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
         ],
-        border: isLocked
-            ? Border.all(color: Colors.red.withOpacity(0.3))
-            : null,
+        border: Border.all(
+          color: isLocked ? Colors.red.withOpacity(0.2) : Colors.transparent,
+        ),
       ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        leading: CircleAvatar(
-          backgroundColor: isLocked ? Colors.grey[200] : AppColors.inputFill,
-          child: isLocked
-              ? const Icon(Icons.lock, size: 20, color: Colors.grey)
-              : Text(
-                  user.fullName.isNotEmpty
-                      ? user.fullName[0].toUpperCase()
-                      : "U",
-                  style: const TextStyle(
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.bold,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          // Bấm vào item để mở menu hành động (tùy chọn)
+          onTap: () => _showUserAction(user),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                // Avatar
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: isLocked
+                        ? Colors.red.withOpacity(0.1)
+                        : AppColors.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Center(
+                    child: Text(
+                      user.fullName.isNotEmpty
+                          ? user.fullName[0].toUpperCase()
+                          : "U",
+                      style: TextStyle(
+                        color: isLocked ? Colors.red : AppColors.primary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                      ),
+                    ),
                   ),
                 ),
-        ),
-        title: Row(
-          children: [
-            Flexible(
-              child: Text(
-                user.fullName,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: isLocked ? Colors.grey : Colors.black,
+
+                const SizedBox(width: 16),
+
+                // Info
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        user.fullName,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                          color: isLocked ? Colors.grey : Colors.black87,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        user.email,
+                        style: TextStyle(color: Colors.grey[500], fontSize: 13),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: isLocked
-                    ? const Color(0xFFFEE2E2)
-                    : const Color(0xFFDCFCE7),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Text(
-                user.status,
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  color: isLocked
-                      ? const Color(0xFFDC2626)
-                      : const Color(0xFF16A34A),
+
+                const SizedBox(width: 8),
+
+                // Status Badge & Action Icon
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    _buildModernStatusBadge(user.status),
+                    // Icon dots nhỏ nếu cần, hoặc để trống vì đã có onTap
+                  ],
                 ),
-              ),
+              ],
             ),
-          ],
-        ),
-        subtitle: Text(
-          user.email,
-          style: TextStyle(color: isLocked ? Colors.grey : null),
-        ),
-        trailing: IconButton(
-          icon: Icon(PhosphorIconsBold.dotsThree, color: Colors.grey),
-          onPressed: () => _showUserAction(user),
+          ),
         ),
       ),
     );

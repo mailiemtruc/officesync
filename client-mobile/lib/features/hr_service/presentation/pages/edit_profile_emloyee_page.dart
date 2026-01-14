@@ -186,7 +186,7 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
     );
   }
 
-  // --- LOGIC XỬ LÝ LƯU ---
+  // --- LOGIC XỬ LÝ LƯU (ĐÃ SỬA: Thay thế lỗi bằng Dialog xác nhận + Logic giáng chức) ---
   Future<void> _handleSave() async {
     final email = _emailController.text.trim();
     final emailRegex = RegExp(
@@ -197,33 +197,88 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
       return;
     }
 
-    if (_selectedRole == 'Manager' && _selectedDepartmentObj != null) {
-      if (_selectedDepartmentObj!.manager != null) {
-        final currentManagerId = _selectedDepartmentObj!.manager!.id;
-        final myId = widget.employee.id;
-        if (currentManagerId.toString() != myId.toString()) {
-          final currentManagerName =
-              _selectedDepartmentObj!.manager?.fullName ?? "Unknown";
-          _showErrorSnackBar(
-            'Department "${_selectedDepartmentName}" already has a Manager ($currentManagerName).',
-          );
-          return;
-        }
-      }
-    }
-
     if (_currentUserId == null) {
       _showErrorSnackBar('Session expired. Please login again.');
       return;
     }
 
+    // --- LOGIC XỬ LÝ MANAGER MỚI (ĐÃ SỬA) ---
+    bool shouldProceed = true;
+    EmployeeModel? oldManager; // Lưu thông tin ông quản lý cũ để giáng chức
+
+    if (_selectedRole == 'Manager' && _selectedDepartmentObj != null) {
+      if (_selectedDepartmentObj!.manager != null) {
+        final currentManagerId = _selectedDepartmentObj!.manager!.id;
+        final myId = widget.employee.id;
+
+        // Nếu người đang giữ chức không phải là chính mình
+        if (currentManagerId.toString() != myId.toString()) {
+          final currentManagerName =
+              _selectedDepartmentObj!.manager?.fullName ?? "Unknown";
+
+          oldManager = _selectedDepartmentObj!.manager; // Lưu lại ông cũ
+
+          // HIỆN DIALOG XÁC NHẬN
+          final bool? confirm = await showModalBottomSheet<bool>(
+            context: context,
+            backgroundColor: Colors.transparent,
+            isScrollControlled: true,
+            builder: (context) => ConfirmBottomSheet(
+              title: 'Replace Manager?',
+              message:
+                  'Department "${_selectedDepartmentName}" is currently managed by $currentManagerName.\n\nDo you want to demote $currentManagerName and assign this employee as the new Manager?',
+              confirmText: 'Replace',
+              confirmColor: const Color(0xFFF97316),
+              onConfirm: () {
+                Navigator.pop(context, true);
+              },
+            ),
+          );
+
+          if (confirm != true) shouldProceed = false;
+        }
+      }
+    }
+
+    if (!shouldProceed) return;
+
     setState(() => _isLoading = true);
+
     try {
+      // ---------------------------------------------------------
+      // BƯỚC 1: GIÁNG CHỨC NGƯỜI CŨ (Nếu có người cần thay thế)
+      // ---------------------------------------------------------
+      if (oldManager != null && oldManager.id != null) {
+        // Gọi API update người cũ về STAFF
+        await _repository.updateEmployee(
+          _currentUserId!,
+          oldManager.id!,
+          oldManager.fullName,
+          oldManager.phone,
+          oldManager.dateOfBirth,
+          // Các thông tin khác giữ nguyên
+          email: oldManager.email,
+          avatarUrl: oldManager.avatarUrl,
+          status: oldManager.status,
+
+          // QUAN TRỌNG NHẤT: Set role về STAFF
+          role: 'STAFF',
+
+          // Giữ nguyên phòng ban (vẫn ở phòng cũ nhưng làm lính)
+          // Hoặc set về null nếu muốn đuổi khỏi phòng
+          departmentId: _selectedDepartmentObj!.id,
+        );
+
+        print("--> Demoted old manager: ${oldManager.fullName}");
+      }
+
+      // ---------------------------------------------------------
+      // BƯỚC 2: CẬP NHẬT NGƯỜI MỚI (Logic cũ của bạn)
+      // ---------------------------------------------------------
       String statusToSend = _isActive ? "ACTIVE" : "LOCKED";
       String roleToSend = _selectedRole.toUpperCase();
       int? deptIdToSend = _selectedDepartmentObj?.id;
 
-      // [SỬA] Truyền _currentUserId vào hàm updateEmployee
       final success = await _repository.updateEmployee(
         _currentUserId!,
         widget.employee.id!,
@@ -240,7 +295,6 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
       if (mounted) {
         setState(() => _isLoading = false);
         if (success) {
-          // [ĐÃ SỬA]
           CustomSnackBar.show(
             context,
             title: 'Success',
@@ -260,7 +314,6 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
   }
 
   void _showErrorSnackBar(String message) {
-    // [ĐÃ SỬA]
     CustomSnackBar.show(
       context,
       title: 'Error',
@@ -301,7 +354,6 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
             setState(() => _isLoading = false);
             if (success) {
               Navigator.pop(context, true);
-              // [ĐÃ SỬA]
               CustomSnackBar.show(
                 context,
                 title: 'Deleted',
@@ -414,14 +466,12 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
                           ? Image.network(
                               widget.employee.avatarUrl!,
                               fit: BoxFit.cover,
-                              // [SỬA 1]
                               errorBuilder: (_, __, ___) => Icon(
                                 PhosphorIcons.user(PhosphorIconsStyle.fill),
                                 size: 60,
                                 color: Colors.grey,
                               ),
                             )
-                          // [SỬA 2]
                           : Icon(
                               PhosphorIcons.user(PhosphorIconsStyle.fill),
                               size: 60,

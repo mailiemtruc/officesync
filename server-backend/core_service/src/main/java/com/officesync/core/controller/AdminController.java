@@ -7,13 +7,17 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.officesync.core.model.User;
 import com.officesync.core.service.CompanyService;
 import com.officesync.core.service.UserService;
+
+import lombok.Data;
 
 @RestController
 @RequestMapping("/api/admin")
@@ -70,5 +74,30 @@ public class AdminController {
         } catch (Exception e) {
             return ResponseEntity.notFound().build();
         }
+    }
+
+    @PostMapping("/create-admin")
+    public ResponseEntity<?> createSuperAdmin(@RequestBody CreateAdminRequest req) {
+        try {
+            // Bây giờ đã có import User, dòng này sẽ hết lỗi
+            User newAdmin = userService.createSuperAdmin(
+                req.getFullName(),
+                req.getEmail(),
+                req.getPassword(),
+                req.getMobileNumber()
+            );
+            return ResponseEntity.ok("A new Super Admin has been created: " + newAdmin.getEmail());
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    // DTO hứng dữ liệu gửi lên
+    @Data
+    public static class CreateAdminRequest {
+        private String fullName;
+        private String email;
+        private String password;
+        private String mobileNumber;
     }
 }

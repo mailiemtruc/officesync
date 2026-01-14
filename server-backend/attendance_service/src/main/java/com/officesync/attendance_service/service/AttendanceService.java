@@ -3,10 +3,16 @@ package com.officesync.attendance_service.service;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.YearMonth;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 
+import com.officesync.attendance_service.dto.DailyTimesheetDTO;
 import com.officesync.attendance_service.model.Attendance;
 import com.officesync.attendance_service.model.AttendanceUser;
 import com.officesync.attendance_service.model.OfficeConfig;
@@ -28,82 +34,114 @@ public class AttendanceService {
 
     public Attendance processCheckIn(Long userId, Long companyId, Double lat, Double lng, String bssid) {
         
-        // --- 1. KIỂM TRA SỐ LẦN CHẤM CÔNG HÔM NAY ---
-        LocalDateTime startOfDay = LocalDate.now().atStartOfDay(); // 00:00:00 hôm nay
-        LocalDateTime endOfDay = LocalDate.now().atTime(LocalTime.MAX); // 23:59:59 hôm nay
+        // --- 1. XÁC ĐỊNH LOẠI CHẤM CÔNG (IN hay OUT) ---
+        LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
+        LocalDateTime endOfDay = LocalDate.now().atTime(LocalTime.MAX);
 
-        List<Attendance> todayRecords = attendanceRepo.findByUserIdAndCheckInTimeBetween(userId, startOfDay, endOfDay);
+        List<Attendance> todayRecords = attendanceRepo.findByUserIdAndCheckInTimeBetweenOrderByCheckInTimeDesc(
+                userId, startOfDay, endOfDay
+        );
 
-        if (todayRecords.size() >= 2) {
-            throw new RuntimeException("You have completed your timekeeping for today (Entry/Exit counts are sufficient).");
+        String attendanceType;
+        if (todayRecords.isEmpty()) {
+            attendanceType = "CHECK_IN"; 
+        } else {
+            Attendance lastRecord = todayRecords.get(0);
+            if ("CHECK_IN".equals(lastRecord.getType())) {
+                attendanceType = "CHECK_OUT"; 
+            } else {
+                attendanceType = "CHECK_IN";  
+            }
+
+            if ("CHECK_OUT".equals(attendanceType) && 
+                java.time.Duration.between(lastRecord.getCheckInTime(), LocalDateTime.now()).toMinutes() < 1) {
+                throw new RuntimeException("You have just checked in, please wait a little longer before checking out.");
+            }
         }
 
-        // Xác định loại chấm công:
-        // - Nếu chưa có bản ghi nào -> CHECK_IN
-        // - Nếu đã có 1 bản ghi -> CHECK_OUT
-        String attendanceType = todayRecords.isEmpty() ? "CHECK_IN" : "CHECK_OUT";
-
-        // --- 2. LOGIC KIỂM TRA VỊ TRÍ & WIFI (GIỮ NGUYÊN) ---
+        // --- 2. KIỂM TRA VỊ TRÍ & WIFI ---
         List<OfficeConfig> offices = officeConfigRepo.findByCompanyId(companyId);
         if (offices.isEmpty()) {
-            throw new RuntimeException("The company hasn't configured the office location yet!");
+            throw new RuntimeException("The company hasn't configured the timekeeping location yet!");
         }
 
         boolean isValid = false;
         String matchedLocation = "Unknown";
+        OfficeConfig matchedOffice = null; 
 
         for (OfficeConfig office : offices) {
+            boolean isWifiConfigured = office.getWifiBssid() != null && !office.getWifiBssid().isEmpty();
             boolean isWifiMatch = false;
-            if (office.getWifiBssid() != null && bssid != null) {
-                String cleanServerBssid = office.getWifiBssid().replace(":", "").toLowerCase();
-                String cleanClientBssid = bssid.replace(":", "").toLowerCase();
-                if (cleanClientBssid.equals(cleanServerBssid)) isWifiMatch = true;
+
+            if (isWifiConfigured) {
+                if (bssid != null) {
+                    String cleanServerBssid = office.getWifiBssid().replace(":", "").toLowerCase();
+                    String cleanClientBssid = bssid.replace(":", "").toLowerCase();
+                    if (cleanClientBssid.equals(cleanServerBssid)) {
+                        isWifiMatch = true;
+                    }
+                }
             }
 
             double distance = calculateHaversineDistance(lat, lng, office.getLatitude(), office.getLongitude());
             boolean isGpsMatch = distance <= office.getAllowedRadius();
-
-            if (isWifiMatch && isGpsMatch) {
+            
+            if (isGpsMatch && (!isWifiConfigured || isWifiMatch)) { 
                 isValid = true;
                 matchedLocation = office.getOfficeName();
+                matchedOffice = office; 
                 break;
             }
         }
 
         if (!isValid) {
-            throw new RuntimeException("Check-in failed: Incorrect location or Wi-Fi network.");
+            throw new RuntimeException("Check-in failed: Invalid location.");
         }
 
-        // --- 3. LƯU LẠI ---
+        // --- 3. TÍNH TOÁN TRẠNG THÁI (LATE / ON_TIME) ---
+        LocalDateTime now = LocalDateTime.now();
+        LocalTime timeNow = now.toLocalTime();
+        
+        String status = "ON_TIME";
+        Integer lateMinutes = 0;
+
+        if ("CHECK_IN".equals(attendanceType) && matchedOffice != null && matchedOffice.getStartWorkTime() != null) {
+            LocalTime startWorkTime = matchedOffice.getStartWorkTime();
+            
+            if (timeNow.isAfter(startWorkTime)) {
+                status = "LATE";
+                lateMinutes = (int) java.time.temporal.ChronoUnit.MINUTES.between(startWorkTime, timeNow);
+            }
+        }
+        
+        // --- 4. LƯU ATTENDANCE ---
         Attendance att = new Attendance();
         att.setUserId(userId);
         att.setCompanyId(companyId);
         
-        // [MỚI] LẤY THÔNG TIN USER VÀ LƯU (Snapshot data)
         AttendanceUser user = userRepo.findById(userId).orElse(null);
         if (user != null) {
             att.setFullName(user.getFullName());
             att.setEmail(user.getEmail());
             att.setPhone(user.getPhone());
             att.setDateOfBirth(user.getDateOfBirth());
-            att.setRole(user.getRole());                     
+            att.setRole(user.getRole());                    
             att.setDepartmentName(user.getDepartmentName());
         } else {
-            // Fallback nếu chưa đồng bộ kịp (Tránh lỗi null)
-            att.setFullName("Unknown");
+            att.setFullName("Unknown User");
             att.setRole("UNKNOWN");
-            att.setDepartmentName("UNKNOWN");
         }
 
-        att.setCheckInTime(LocalDateTime.now());
+        att.setCheckInTime(now);
         att.setLocationName(matchedLocation);
         att.setDeviceBssid(bssid);
-        att.setType(attendanceType); 
-        att.setStatus("ON_TIME"); 
+        att.setType(attendanceType);
+        
+        att.setStatus(status);        
+        att.setLateMinutes(lateMinutes); 
 
         return attendanceRepo.save(att);
     }
-    
 
     private double calculateHaversineDistance(double lat1, double lon1, double lat2, double lon2) {
         final int R = 6371; 
@@ -114,5 +152,117 @@ public class AttendanceService {
                 * Math.sin(lonDistance / 2) * Math.sin(lonDistance / 2);
         double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         return R * c * 1000; 
+    }
+
+    public List<DailyTimesheetDTO> generateMonthlyTimesheet(Long userId, int month, int year) {
+        YearMonth yearMonth = YearMonth.of(year, month);
+        LocalDateTime start = yearMonth.atDay(1).atStartOfDay();
+        LocalDateTime end = yearMonth.atEndOfMonth().atTime(23, 59, 59);
+
+        // 1. Lấy logs
+        List<Attendance> logs = attendanceRepo.findByUserIdAndCheckInTimeBetweenOrderByCheckInTimeDesc(userId, start, end);
+
+        // 2. Group logs
+        Map<LocalDate, List<Attendance>> groupedByDay = logs.stream()
+                .collect(Collectors.groupingBy(log -> log.getCheckInTime().toLocalDate()));
+
+        List<DailyTimesheetDTO> timesheet = new ArrayList<>();
+        LocalDate today = LocalDate.now(); 
+
+        // 3. Duyệt từng ngày
+        for (int day = 1; day <= yearMonth.lengthOfMonth(); day++) {
+            LocalDate currentDate = yearMonth.atDay(day);
+            
+            // --- CASE 1: KHÔNG CÓ DỮ LIỆU ---
+            if (!groupedByDay.containsKey(currentDate)) {
+                if (currentDate.isAfter(today)) {
+                     continue; 
+                }
+                
+                timesheet.add(DailyTimesheetDTO.builder()
+                        .date(currentDate)
+                        .totalWorkingHours(0)
+                        .status("ABSENT") 
+                        .sessions(new ArrayList<>())
+                        .build());
+                continue;
+            }
+
+            // --- CASE 2: CÓ DỮ LIỆU (ĐI LÀM) ---
+            List<Attendance> dailyLogs = groupedByDay.get(currentDate);
+            dailyLogs.sort(Comparator.comparing(Attendance::getCheckInTime));
+
+            List<DailyTimesheetDTO.Session> sessions = new ArrayList<>();
+            double totalHours = 0;
+            boolean isMissingCheckout = false;
+            
+            Attendance tempIn = null;
+
+            for (Attendance log : dailyLogs) {
+                if ("CHECK_IN".equals(log.getType())) {
+                    if (tempIn != null) {
+                        isMissingCheckout = true;
+                    }
+                    tempIn = log; 
+                } 
+                else if ("CHECK_OUT".equals(log.getType())) {
+                    if (tempIn != null) {
+                        // Ghép cặp thành công
+                        double duration = java.time.Duration.between(tempIn.getCheckInTime(), log.getCheckInTime()).toMinutes() / 60.0;
+                        
+                        // [ĐÃ SỬA] Thêm tham số lateMinutes vào cuối (lấy từ tempIn)
+                        sessions.add(new DailyTimesheetDTO.Session(
+                            tempIn.getCheckInTime().toLocalTime(),
+                            log.getCheckInTime().toLocalTime(),
+                            Math.round(duration * 100.0) / 100.0,
+                            tempIn.getLateMinutes() != null ? tempIn.getLateMinutes() : 0 
+                        ));
+                        
+                        totalHours += duration;
+                        tempIn = null; 
+                    }
+                }
+            }
+
+            // --- XỬ LÝ CHECK-IN CUỐI CÙNG ---
+            String status = "OK"; 
+
+            if (tempIn != null) {
+                if (currentDate.isEqual(today)) {
+                    status = "WORKING";
+                    // [ĐÃ SỬA] Thêm tham số lateMinutes
+                    sessions.add(new DailyTimesheetDTO.Session(
+                            tempIn.getCheckInTime().toLocalTime(),
+                            null, 
+                            0,
+                            tempIn.getLateMinutes() != null ? tempIn.getLateMinutes() : 0
+                    ));
+                } else {
+                    isMissingCheckout = true;
+                    status = "MISSING_CHECKOUT";
+                    // [ĐÃ SỬA] Thêm tham số lateMinutes
+                    sessions.add(new DailyTimesheetDTO.Session(
+                            tempIn.getCheckInTime().toLocalTime(),
+                            null, 
+                            0,
+                            tempIn.getLateMinutes() != null ? tempIn.getLateMinutes() : 0
+                    ));
+                }
+            } else {
+                if (isMissingCheckout) {
+                    status = "MISSING_CHECKOUT";
+                }
+            }
+
+            // Build DTO
+            timesheet.add(DailyTimesheetDTO.builder()
+                    .date(currentDate)
+                    .totalWorkingHours(Math.round(totalHours * 100.0) / 100.0)
+                    .status(status) 
+                    .sessions(sessions)
+                    .build());
+        }
+
+        return timesheet;
     }
 }

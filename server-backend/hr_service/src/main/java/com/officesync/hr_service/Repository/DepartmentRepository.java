@@ -11,20 +11,33 @@ import org.springframework.stereotype.Repository;
 import com.officesync.hr_service.Model.Department;
 
 @Repository
-public interface DepartmentRepository extends JpaRepository<Department, Long> {
+public interface DepartmentRepository extends JpaRepository<Department, Long> { 
 
-    List<Department> findByCompanyId(Long companyId);
+    // [MỚI - CHUẨN DOANH NGHIỆP]
+    // Sử dụng LEFT JOIN FETCH để load luôn thông tin Manager trong cùng 1 câu lệnh SQL
+    @Query("SELECT d FROM Department d LEFT JOIN FETCH d.manager WHERE d.companyId = :companyId")
+    List<Department> findByCompanyId(@Param("companyId") Long companyId);
 
-    // SỬA: Đổi findByCode -> findByDepartmentCode
-    Optional<Department> findByDepartmentCode(String departmentCode);
-    // [MỚI] Tìm phòng ban mà nhân viên này đang làm quản lý
-    Optional<Department> findByManagerId(Long managerId);
-
-    @Query("SELECT d FROM Department d WHERE d.companyId = :companyId " +
+    // SỬA: Tìm kiếm cũng phải fetch manager luôn để hiển thị lên Card
+    @Query("SELECT d FROM Department d LEFT JOIN FETCH d.manager WHERE d.companyId = :companyId " +
            "AND (LOWER(d.name) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
            "OR LOWER(d.departmentCode) LIKE LOWER(CONCAT('%', :keyword, '%')))")
     List<Department> searchDepartments(@Param("companyId") Long companyId, @Param("keyword") String keyword);
-    
 
-    Optional<Department> findByCompanyIdAndIsHrTrue(Long companyId);
+
+    // Các hàm phụ trợ khác giữ nguyên hoặc thêm FETCH nếu cần
+    Optional<Department> findByDepartmentCode(String departmentCode);
+    Optional<Department> findByManagerId(Long managerId);
+    
+    // Tìm phòng HR
+    @Query("SELECT d FROM Department d LEFT JOIN FETCH d.manager WHERE d.companyId = :companyId AND d.isHr = true")
+    Optional<Department> findByCompanyIdAndIsHrTrue(@Param("companyId") Long companyId);
+
+  
+
+    @Query("SELECT e.department.id, COUNT(e) " +
+       "FROM Employee e " +
+       "WHERE e.companyId = :companyId AND e.department.id IS NOT NULL " +
+       "GROUP BY e.department.id")
+    List<Object[]> countMembersByCompany(@Param("companyId") Long companyId);
 }

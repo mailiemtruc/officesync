@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
-// [MỚI] Import thư viện để lấy vị trí và wifi
+// Import thư viện để lấy vị trí và wifi
 import 'package:geolocator/geolocator.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -24,20 +24,19 @@ class DirectorCompanyProfileScreen extends StatefulWidget {
 
 class _DirectorCompanyProfileScreenState
     extends State<DirectorCompanyProfileScreen> {
-  // Controllers thông tin chung
+  // --- CONTROLLERS ---
   final _nameController = TextEditingController();
   final _industryController = TextEditingController();
   final _descController = TextEditingController();
   final _domainController = TextEditingController();
 
-  // [MỚI] Controllers cấu hình chấm công
   final _latController = TextEditingController();
   final _longController = TextEditingController();
-  final _radiusController = TextEditingController(
-    text: "100.0",
-  ); // Mặc định 100m
+  final _radiusController = TextEditingController(text: "100.0");
   final _wifiSsidController = TextEditingController();
   final _wifiBssidController = TextEditingController();
+  final _startTimeController = TextEditingController();
+  final _endTimeController = TextEditingController();
 
   String? _serverLogoUrl;
   File? _localImageFile;
@@ -50,6 +49,23 @@ class _DirectorCompanyProfileScreenState
   void initState() {
     super.initState();
     _fetchCompanyInfo();
+  }
+
+  // Dispose controllers để tránh memory leak
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _industryController.dispose();
+    _descController.dispose();
+    _domainController.dispose();
+    _latController.dispose();
+    _longController.dispose();
+    _radiusController.dispose();
+    _wifiSsidController.dispose();
+    _wifiBssidController.dispose();
+    _startTimeController.dispose();
+    _endTimeController.dispose();
+    super.dispose();
   }
 
   // --- LẤY THÔNG TIN CÔNG TY ---
@@ -65,17 +81,21 @@ class _DirectorCompanyProfileScreenState
         _industryController.text = data['industry'] ?? '';
         _descController.text = data['description'] ?? '';
 
-        // [MỚI] Điền thông tin chấm công nếu đã có trên server
-        if (data['latitude'] != null)
+        if (data['latitude'] != null) {
           _latController.text = data['latitude'].toString();
-        if (data['longitude'] != null)
+        }
+        if (data['longitude'] != null) {
           _longController.text = data['longitude'].toString();
-        if (data['allowedRadius'] != null)
+        }
+        if (data['allowedRadius'] != null) {
           _radiusController.text = data['allowedRadius'].toString();
-        if (data['wifiSsid'] != null)
-          _wifiSsidController.text = data['wifiSsid'];
-        if (data['wifiBssid'] != null)
-          _wifiBssidController.text = data['wifiBssid'];
+        }
+        _startTimeController.text =
+            data['workStartTime'] ?? ''; // Ví dụ: "08:00"
+        _endTimeController.text = data['workEndTime'] ?? ''; // Ví dụ: "17:30"
+
+        _wifiSsidController.text = data['wifiSsid'] ?? '';
+        _wifiBssidController.text = data['wifiBssid'] ?? '';
 
         setState(() {
           _serverLogoUrl = data['logoUrl'];
@@ -83,59 +103,88 @@ class _DirectorCompanyProfileScreenState
         });
       }
     } catch (e) {
-      print("Error: $e");
-      if (mounted) setState(() => _isLoading = false);
+      debugPrint("Error fetching company info: $e");
+      if (mounted) {
+        setState(() => _isLoading = false);
+        CustomSnackBar.show(
+          context,
+          title: "Error",
+          message: "Unable to load company information",
+          isError: true,
+        );
+      }
     }
   }
 
-  // --- [MỚI] HÀM LẤY VỊ TRÍ & WIFI HIỆN TẠI ---
+  // --- LẤY VỊ TRÍ & WIFI AN TOÀN ---
   Future<void> _getCurrentLocationAndWifi() async {
-    setState(() => _isSaving = true); // Tận dụng biến loading xoay nhẹ
-    try {
-      // 1. Xin quyền Location (Bắt buộc cho cả GPS và lấy BSSID trên Android 10+)
-      Map<Permission, PermissionStatus> statuses = await [
-        Permission.location,
-        Permission.locationWhenInUse,
-      ].request();
+    FocusScope.of(context).unfocus(); // Ẩn bàn phím
+    setState(() => _isSaving = true);
 
-      if (statuses[Permission.location]!.isDenied) {
+    try {
+      // 1. Kiểm tra dịch vụ Location
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
         throw Exception(
-          "Please grant location permissions to use this feature.",
+          "Please turn on GPS (Location Services) on your device.",
         );
       }
 
-      // 2. Lấy GPS
+      // 2. Xin quyền Location
+      var status = await Permission.location.status;
+      if (!status.isGranted) {
+        status = await Permission.location.request();
+        if (!status.isGranted) {
+          throw Exception(
+            "Need location permission to get coordinates and Wifi info.",
+          );
+        }
+      }
+
+      // 3. Lấy tọa độ GPS
       Position position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
+        timeLimit: const Duration(seconds: 10),
       );
 
       _latController.text = position.latitude.toString();
       _longController.text = position.longitude.toString();
 
-      // 3. Lấy Wifi
+      // 4. Lấy Wifi Info
       final info = NetworkInfo();
       String? bssid = await info.getWifiBSSID();
       String? ssid = await info.getWifiName();
 
-      // Lưu ý: Trên iOS Simulator sẽ luôn null, cần máy thật
+      if (ssid != null) {
+        if (ssid.startsWith('"') && ssid.endsWith('"')) {
+          ssid = ssid.substring(1, ssid.length - 1);
+        }
+      }
+
       _wifiBssidController.text = bssid ?? "";
-      _wifiSsidController.text = (ssid ?? "").replaceAll(
-        '"',
-        '',
-      ); // Bỏ dấu ngoặc kép
+      _wifiSsidController.text = ssid ?? "";
 
       if (mounted) {
+        String msg = "Coordinates have been updated!";
+        if (bssid == null) {
+          msg +=
+              "\n⚠️ Unable to get Wi-Fi (Please make sure you are connected to Wi-Fi).";
+        } else {
+          msg += "\nWifi: $ssid";
+        }
+
         CustomSnackBar.show(
           context,
           title: "Success",
-          message: "Current coordinates and Wi-Fi network have been obtained!",
+          message: msg,
+          isError: bssid == null,
         );
       }
     } catch (e) {
       if (mounted) {
         CustomSnackBar.show(
           context,
-          title: "Lỗi",
+          title: "Error",
           message: e.toString().replaceAll("Exception: ", ""),
           isError: true,
         );
@@ -145,12 +194,33 @@ class _DirectorCompanyProfileScreenState
     }
   }
 
-  // --- CHỌN ẢNH TỪ THƯ VIỆN ---
+  Future<void> _selectTime(TextEditingController controller) async {
+    final TimeOfDay? picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.now(),
+      builder: (context, child) {
+        return MediaQuery(
+          data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null) {
+      // Format giờ thành dạng HH:mm (ví dụ 08:30)
+      final String formattedTime =
+          '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
+      controller.text = formattedTime;
+    }
+  }
+
+  // --- CHỌN ẢNH ---
   Future<void> _pickImage() async {
     try {
       final XFile? pickedFile = await _picker.pickImage(
         source: ImageSource.gallery,
-        imageQuality: 80,
+        imageQuality: 70,
+        maxWidth: 1024,
       );
 
       if (pickedFile != null) {
@@ -162,27 +232,72 @@ class _DirectorCompanyProfileScreenState
       CustomSnackBar.show(
         context,
         title: "Error",
-        message: "Cannot pick image: $e",
+        message: "Unable to select image: $e",
         isError: true,
       );
     }
   }
 
+  // --- VALIDATE DATA ---
+  bool _validateInputs() {
+    if (_nameController.text.trim().isEmpty) {
+      CustomSnackBar.show(
+        context,
+        title: "Missing Information",
+        message: "Company name cannot be empty",
+        isError: true,
+      );
+      return false;
+    }
+
+    try {
+      if (_latController.text.isNotEmpty) {
+        double lat = double.parse(_latController.text.trim());
+        if (lat < -90 || lat > 90)
+          throw Exception("Latitude is invalid (-90 to 90)");
+      }
+      if (_longController.text.isNotEmpty) {
+        double long = double.parse(_longController.text.trim());
+        if (long < -180 || long > 180)
+          throw Exception("Longitude is invalid (-180 to 180)");
+      }
+      if (_radiusController.text.isNotEmpty) {
+        double rad = double.parse(_radiusController.text.trim());
+        if (rad <= 0) throw Exception("Radius must be greater than 0");
+      }
+    } catch (e) {
+      CustomSnackBar.show(
+        context,
+        title: "Invalid Data",
+        message: e.toString().replaceAll("Exception: ", ""),
+        isError: true,
+      );
+      return false;
+    }
+
+    return true;
+  }
+
   // --- LƯU THAY ĐỔI ---
   Future<void> _saveChanges() async {
     FocusScope.of(context).unfocus();
+
+    if (!_validateInputs()) return;
+
     setState(() => _isSaving = true);
 
     try {
       final client = ApiClient();
       String? finalLogoUrl = _serverLogoUrl;
 
-      // 1. Upload ảnh nếu có
       if (_localImageFile != null) {
         finalLogoUrl = await client.uploadImageToStorage(_localImageFile!.path);
       }
 
-      // 2. Cập nhật thông tin sang Core Service
+      final lat = double.tryParse(_latController.text.trim());
+      final long = double.tryParse(_longController.text.trim());
+      final radius = double.tryParse(_radiusController.text.trim());
+
       await client.put(
         '/company/me',
         data: {
@@ -190,11 +305,11 @@ class _DirectorCompanyProfileScreenState
           "industry": _industryController.text.trim(),
           "description": _descController.text.trim(),
           "logoUrl": finalLogoUrl,
-
-          // [MỚI] Gửi thông tin cấu hình chấm công
-          "latitude": _latController.text.trim(),
-          "longitude": _longController.text.trim(),
-          "allowedRadius": _radiusController.text.trim(),
+          "latitude": lat,
+          "longitude": long,
+          "allowedRadius": radius,
+          "workStartTime": _startTimeController.text.trim(),
+          "workEndTime": _endTimeController.text.trim(),
           "wifiBssid": _wifiBssidController.text.trim(),
           "wifiSsid": _wifiSsidController.text.trim(),
         },
@@ -204,17 +319,16 @@ class _DirectorCompanyProfileScreenState
         CustomSnackBar.show(
           context,
           title: "Success",
-          message: "Company profile & Attendance settings updated!",
+          message: "Company profile updated successfully!",
         );
         Navigator.pop(context);
       }
     } catch (e) {
       if (mounted) {
-        String msg = e.toString().replaceAll("Exception: ", "");
         CustomSnackBar.show(
           context,
-          title: "Update Failed",
-          message: msg,
+          title: "Error",
+          message: e.toString().replaceAll("Exception: ", ""),
           isError: true,
         );
       }
@@ -250,82 +364,21 @@ class _DirectorCompanyProfileScreenState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // --- AVATAR SECTION ---
-                  Center(
-                    child: Stack(
-                      children: [
-                        Container(
-                          width: 110,
-                          height: 110,
-                          decoration: BoxDecoration(
-                            color: AppColors.primary.withOpacity(0.1),
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 4),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.1),
-                                blurRadius: 10,
-                                offset: const Offset(0, 5),
-                              ),
-                            ],
-                            image: _getDecorationImage(),
-                          ),
-                          child:
-                              (_localImageFile == null &&
-                                  (_serverLogoUrl == null ||
-                                      _serverLogoUrl!.isEmpty))
-                              ? Center(
-                                  child: Text(
-                                    _nameController.text.isNotEmpty
-                                        ? _nameController.text[0].toUpperCase()
-                                        : "C",
-                                    style: const TextStyle(
-                                      fontSize: 40,
-                                      color: AppColors.primary,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                )
-                              : null,
-                        ),
-                        Positioned(
-                          bottom: 0,
-                          right: 0,
-                          child: GestureDetector(
-                            onTap: _pickImage,
-                            child: Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: const BoxDecoration(
-                                color: AppColors.primary,
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                PhosphorIconsBold.camera,
-                                color: Colors.white,
-                                size: 18,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  _buildAvatarSection(),
                   const SizedBox(height: 30),
 
-                  // --- GENERAL INFORMATION ---
-                  _buildSectionTitle("General Information"),
+                  _buildSectionTitle("General information"),
                   const SizedBox(height: 15),
-
-                  _buildLabel("Company Name"),
+                  _buildLabel("Company name"),
                   CustomTextField(
                     controller: _nameController,
-                    hintText: "E.g. FPT Software",
+                    hintText: "Enter company name",
                   ),
 
-                  _buildLabel("Industry / Sector"),
+                  _buildLabel("Field"),
                   CustomTextField(
                     controller: _industryController,
-                    hintText: "E.g. Technology...",
+                    hintText: "For example: Information technology...",
                     prefixIcon: Icon(
                       PhosphorIconsRegular.buildings,
                       color: Colors.grey,
@@ -335,7 +388,7 @@ class _DirectorCompanyProfileScreenState
                   _buildLabel("Domain (Fixed)"),
                   CustomTextField(
                     controller: _domainController,
-                    hintText: "domain",
+                    hintText: "domain.com", // Đã thêm hintText
                     readOnly: true,
                     fillColor: Colors.grey[100],
                     prefixIcon: Icon(
@@ -346,14 +399,12 @@ class _DirectorCompanyProfileScreenState
 
                   const SizedBox(height: 30),
 
-                  // --- [MỚI] ATTENDANCE SETTINGS ---
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      _buildSectionTitle("Attendance Settings"),
-                      // Nút lấy vị trí nhanh
+                      _buildSectionTitle("Attendance configuration"),
                       InkWell(
-                        onTap: _getCurrentLocationAndWifi,
+                        onTap: _isSaving ? null : _getCurrentLocationAndWifi,
                         child: Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 12,
@@ -373,7 +424,7 @@ class _DirectorCompanyProfileScreenState
                               ),
                               SizedBox(width: 5),
                               Text(
-                                "Use Current Location",
+                                "Location",
                                 style: TextStyle(
                                   color: Colors.orange,
                                   fontWeight: FontWeight.bold,
@@ -388,7 +439,6 @@ class _DirectorCompanyProfileScreenState
                   ),
                   const SizedBox(height: 15),
 
-                  // Hàng Latitude / Longitude
                   Row(
                     children: [
                       Expanded(
@@ -399,6 +449,10 @@ class _DirectorCompanyProfileScreenState
                             CustomTextField(
                               controller: _latController,
                               hintText: "10.123...",
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                    decimal: true,
+                                  ),
                             ),
                           ],
                         ),
@@ -412,6 +466,10 @@ class _DirectorCompanyProfileScreenState
                             CustomTextField(
                               controller: _longController,
                               hintText: "106.123...",
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                    decimal: true,
+                                  ),
                             ),
                           ],
                         ),
@@ -419,30 +477,83 @@ class _DirectorCompanyProfileScreenState
                     ],
                   ),
 
-                  _buildLabel("Allowed Radius (meters)"),
+                  _buildLabel("Allowable radius (meters)"),
                   CustomTextField(
                     controller: _radiusController,
-                    hintText: "e.g. 100.0",
-                    keyboardType: TextInputType.number,
+                    hintText: "For example: 100.0",
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                   ),
 
-                  _buildLabel("Wi-Fi SSID (Name)"),
+                  const SizedBox(height: 15),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildLabel("Start time"),
+                            GestureDetector(
+                              onTap: () => _selectTime(_startTimeController),
+                              child: AbsorbPointer(
+                                // Ngăn bàn phím hiện lên
+                                child: CustomTextField(
+                                  controller: _startTimeController,
+                                  hintText: "08:00",
+                                  prefixIcon: const Icon(
+                                    PhosphorIconsRegular.clock,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildLabel("End time"),
+                            GestureDetector(
+                              onTap: () => _selectTime(_endTimeController),
+                              child: AbsorbPointer(
+                                // Ngăn bàn phím hiện lên
+                                child: CustomTextField(
+                                  controller: _endTimeController,
+                                  hintText: "17:30",
+                                  prefixIcon: const Icon(
+                                    PhosphorIconsRegular.clockAfternoon,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  _buildLabel("Wifi Name (SSID)"),
                   CustomTextField(
                     controller: _wifiSsidController,
-                    hintText: "e.g. Office_Wifi_5G",
+                    hintText: "Office_Wifi",
                   ),
 
-                  _buildLabel("Wi-Fi BSSID (MAC Address) - Important"),
+                  _buildLabel("Wi-Fi MAC Address (BSSID) - Important"),
                   CustomTextField(
                     controller: _wifiBssidController,
-                    hintText: "e.g. 00:11:22:33:44:55",
+                    hintText: "00:11:22:33:44:55",
                     prefixIcon: Icon(
                       PhosphorIconsRegular.wifiHigh,
                       color: Colors.grey,
                     ),
                   ),
                   const Text(
-                    "* This is crucial for attendance validation.",
+                    "* Used to authenticate wifi more accurately than the Wifi name.",
                     style: TextStyle(
                       color: Colors.grey,
                       fontSize: 12,
@@ -451,11 +562,8 @@ class _DirectorCompanyProfileScreenState
                   ),
 
                   const SizedBox(height: 30),
-
-                  // --- ABOUT COMPANY ---
-                  _buildSectionTitle("About Company"),
+                  _buildSectionTitle("Introduction"),
                   const SizedBox(height: 15),
-
                   CustomTextField(
                     controller: _descController,
                     hintText: "Describe your company...",
@@ -463,39 +571,7 @@ class _DirectorCompanyProfileScreenState
                   ),
 
                   const SizedBox(height: 40),
-
-                  // --- SAVE BUTTON ---
-                  SizedBox(
-                    width: double.infinity,
-                    height: 55,
-                    child: ElevatedButton(
-                      onPressed: _isSaving ? null : _saveChanges,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        elevation: 5,
-                      ),
-                      child: _isSaving
-                          ? const SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2,
-                              ),
-                            )
-                          : const Text(
-                              "Save Changes",
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
-                    ),
-                  ),
+                  _buildSaveButton(),
                   const SizedBox(height: 30),
                 ],
               ),
@@ -503,7 +579,101 @@ class _DirectorCompanyProfileScreenState
     );
   }
 
-  // Hàm helper để hiển thị ảnh
+  Widget _buildAvatarSection() {
+    return Center(
+      child: Stack(
+        children: [
+          Container(
+            width: 110,
+            height: 110,
+            decoration: BoxDecoration(
+              color: AppColors.primary.withOpacity(0.1),
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: 4),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 10,
+                  offset: const Offset(0, 5),
+                ),
+              ],
+              image: _getDecorationImage(),
+            ),
+            child:
+                (_localImageFile == null &&
+                    (_serverLogoUrl == null || _serverLogoUrl!.isEmpty))
+                ? Center(
+                    child: Text(
+                      _nameController.text.isNotEmpty
+                          ? _nameController.text[0].toUpperCase()
+                          : "C",
+                      style: const TextStyle(
+                        fontSize: 40,
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  )
+                : null,
+          ),
+          Positioned(
+            bottom: 0,
+            right: 0,
+            child: GestureDetector(
+              onTap: _pickImage,
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: const BoxDecoration(
+                  color: AppColors.primary,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  PhosphorIconsBold.camera,
+                  color: Colors.white,
+                  size: 18,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSaveButton() {
+    return SizedBox(
+      width: double.infinity,
+      height: 55,
+      child: ElevatedButton(
+        onPressed: _isSaving ? null : _saveChanges,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.primary,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          elevation: 5,
+        ),
+        child: _isSaving
+            ? const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  color: Colors.white,
+                  strokeWidth: 2,
+                ),
+              )
+            : const Text(
+                "Save changes",
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+      ),
+    );
+  }
+
   DecorationImage? _getDecorationImage() {
     if (_localImageFile != null) {
       return DecorationImage(

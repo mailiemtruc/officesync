@@ -10,6 +10,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
@@ -17,10 +18,16 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
 @Entity
-@Table(name = "employees")
+@Table(name = "employees", indexes = {
+    @Index(name = "idx_emp_comp_name", columnList = "company_id, full_name"),
+    @Index(name = "idx_emp_comp_code", columnList = "company_id, employee_code"),
+    @Index(name = "idx_emp_dept", columnList = "department_id"),
+    @Index(name = "idx_emp_email", columnList = "email"),
+    @Index(name = "idx_emp_phone", columnList = "phone")
+})
 @Data
 @EqualsAndHashCode(callSuper = true)
-@JsonIgnoreProperties(ignoreUnknown = true)
+@JsonIgnoreProperties(value = {"hibernateLazyInitializer", "handler"}, ignoreUnknown = true)
 public class Employee extends BaseEntity {
 
     @Id
@@ -52,7 +59,8 @@ public class Employee extends BaseEntity {
     @ManyToOne
     @JoinColumn(name = "department_id")
     @EqualsAndHashCode.Exclude // [QUAN TRỌNG] Ngắt vòng lặp hashCode
-    @ToString.Exclude          // [QUAN TRỌNG] Ngắt vòng lặp toString
+    @ToString.Exclude  
+    @JsonIgnoreProperties({"employees", "manager", "hibernateLazyInitializer", "handler"})        // [QUAN TRỌNG] Ngắt vòng lặp toString
     private Department department;
 
     @Enumerated(EnumType.STRING)

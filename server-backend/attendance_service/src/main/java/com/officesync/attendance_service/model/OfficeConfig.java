@@ -1,5 +1,7 @@
 package com.officesync.attendance_service.model;
 
+import java.time.LocalTime;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -29,4 +31,10 @@ public class OfficeConfig {
     // --- CẤU HÌNH WIFI ---
     private String wifiBssid; // Địa chỉ MAC của Router (Quan trọng)
     private String wifiSsid;  // Tên Wifi (Để hiển thị cho dễ nhớ)
+
+    @Column(name = "start_work_time")
+    private LocalTime startWorkTime;
+
+    @Column(name = "end_work_time")
+    private LocalTime endWorkTime;
 }

@@ -1,21 +1,26 @@
 package com.officesync.hr_service.Service;
 import java.time.LocalDate;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
-import java.util.Optional; // [1] NHỚ IMPORT CÁI NÀY
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
-import org.springframework.cache.annotation.CacheEvict; // [THÊM]
-import org.springframework.cache.annotation.Cacheable; // [THÊM]
-import org.springframework.cache.annotation.Caching; // [THÊM]
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable; // [1] NHỚ IMPORT CÁI NÀY
+import org.springframework.cache.annotation.Caching;
 import org.springframework.context.annotation.Lazy;
-import org.springframework.dao.DataIntegrityViolationException; 
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.dao.DataIntegrityViolationException; // [THÊM]
+import org.springframework.stereotype.Service; // [THÊM]
+import org.springframework.transaction.annotation.Transactional; // [THÊM]
 
 import com.officesync.hr_service.Config.SnowflakeIdGenerator;
 import com.officesync.hr_service.DTO.EmployeeSyncEvent;
+import com.officesync.hr_service.DTO.NotificationEvent; // [1] Import cái này
 import com.officesync.hr_service.DTO.UserCreatedEvent;
 import com.officesync.hr_service.DTO.UserStatusChangedEvent;
 import com.officesync.hr_service.Model.Department;
@@ -23,15 +28,15 @@ import com.officesync.hr_service.Model.Employee;
 import com.officesync.hr_service.Model.EmployeeRole;
 import com.officesync.hr_service.Model.EmployeeStatus;
 import com.officesync.hr_service.Model.Request;
-import com.officesync.hr_service.Model.RequestAuditLog; // [THÊM]
-import com.officesync.hr_service.Producer.EmployeeProducer; // [THÊM]
-import com.officesync.hr_service.Repository.DepartmentRepository; // [THÊM]
-import com.officesync.hr_service.Repository.EmployeeRepository; // [THÊM]
+import com.officesync.hr_service.Model.RequestAuditLog;
+import com.officesync.hr_service.Producer.EmployeeProducer;
+import com.officesync.hr_service.Repository.DepartmentRepository;
+import com.officesync.hr_service.Repository.EmployeeRepository;
 import com.officesync.hr_service.Repository.RequestAuditLogRepository;
-import com.officesync.hr_service.Repository.RequestRepository;
+import com.officesync.hr_service.Repository.RequestRepository; // [THÊM]
 
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import lombok.extern.slf4j.Slf4j; // [THÊM]
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -50,27 +55,66 @@ public class EmployeeService {
     public void setSelf(@Lazy EmployeeService self) {
         this.self = self;
     }
-
-    // [3] THÊM HÀM PHỤ TRỢ NÀY (Để xóa cache chính xác)
-    private void evictDepartmentCache(Long deptId) {
+   // [MỚI] Hàm gửi thông báo (Copy từ DepartmentService sang)
+    private void sendNotification(Employee receiver, String title, String body) {
+        try {
+            NotificationEvent event = new NotificationEvent(
+                receiver.getId(),
+                title,
+                body,
+                "SYSTEM", // Loại thông báo
+                null      // ID tham chiếu
+            );
+            employeeProducer.sendNotification(event);
+        } catch (Exception e) {
+            log.error("Lỗi gửi thông báo cho user {}: {}", receiver.getId(), e.getMessage());
+        }
+    }
+    
+  private void evictDepartmentCache(Long deptId) {
         if (deptId != null) {
             try {
-                // Chỉ xóa cache của đúng phòng ban đó
-                Objects.requireNonNull(cacheManager.getCache("employees_by_department")).evict(deptId);
-                log.info("--> [Cache] Đã xóa cache danh sách nhân viên phòng ban ID: {}", deptId);
+                // [FIX] Kiểm tra null trước khi gọi evict
+                var cache = cacheManager.getCache("employees_by_department");
+                if (cache != null) {
+                    cache.evict(deptId);
+                    log.info("--> [Cache] Đã xóa cache danh sách nhân viên phòng ban ID: {}", deptId);
+                } else {
+                    log.warn("--> [Cache] Không tìm thấy cache tên 'employees_by_department'");
+                }
             } catch (Exception e) {
                 log.warn("--> [Cache] Lỗi xóa cache deptId {}: {}", deptId, e.getMessage());
             }
         }
     }
+    // [3] Viết thêm hàm hỗ trợ xóa cache SaaS
+    private void evictSaaSCaches(Long companyId) {
+        try {
+            // Lấy vùng cache "request_list_manager"
+            Cache managerCache = cacheManager.getCache("request_list_manager");
+            
+            if (managerCache != null) {
+                // A. Tìm tất cả người có quyền duyệt trong công ty
+                List<Long> approverIds = employeeRepository.findApproverIdsByCompany(companyId);
+                
+                // B. Xóa cache của từng người này
+                for (Long approverId : approverIds) {
+                    // Key format phải trùng với @Cacheable bên RequestService: "mgr_" + ID
+                    managerCache.evict("mgr_" + approverId);
+                }
+                log.info("--> [SaaS Cache] Đã xóa cache danh sách đơn của {} người duyệt trong công ty {}", approverIds.size(), companyId);
+            }
+        } catch (Exception e) {
+            log.error("Lỗi xóa cache SaaS: {}", e.getMessage());
+        }
+    }
 
   // --- HÀM 1: SỬA CREATE (Sửa lỗi tên biến trong annotation & Logic Manager) ---
      @Transactional
-    @Caching(evict = {
-        @CacheEvict(value = "employees_by_company", key = "#creator.companyId"),
-        @CacheEvict(value = "departments", key = "#creator.companyId"),
-        @CacheEvict(value = "employees_by_department", key = "#departmentId", condition = "#departmentId != null")
-    })
+  @Caching(evict = {
+    @CacheEvict(value = "departments_stats", key = "#creator.companyId"),
+    @CacheEvict(value = "employees_by_company", key = "#creator.companyId")
+})
     public Employee createEmployee(Employee newEmployee, Employee creator, Long departmentId, String password) {
         
         // 1. Check Quyền
@@ -300,41 +344,55 @@ public class EmployeeService {
         return String.format("NV%06d", randomNum);
     }
 
-    public List<Employee> getAllEmployeesByRequester(Employee requester) {
-        // Logic phân luồng tối ưu cache
-        if (requester.getRole() == EmployeeRole.COMPANY_ADMIN) {
-            // [FIX] Gọi qua biến 'self' thay vì gọi trực tiếp để kích hoạt Cache
-            return self.getEmployeesByCompanyCached(requester.getCompanyId());
-        } 
-        else if (requester.getRole() == EmployeeRole.MANAGER) {
-            if (requester.getDepartment() != null) {
-                // [FIX] Gọi qua biến 'self'
-                return self.getEmployeesByDepartmentCached(requester.getDepartment().getId());
-            }
-        }
-        // Staff -> Không cache list
-        return List.of(requester);
-    }
-
-    // [CACHE CON 1]
+    // --- 3. GET LIST (TỐI ƯU CACHE ID) ---
     @Cacheable(value = "employees_by_company", key = "#companyId", sync = true)
-    public List<Employee> getEmployeesByCompanyCached(Long companyId) {
-        return employeeRepository.findByCompanyId(companyId);
+    public List<Long> getEmployeeIdsByCompanyCached(Long companyId) {
+        return employeeRepository.findIdsByCompanyId(companyId);
     }
 
-    // [CACHE CON 2]
     @Cacheable(value = "employees_by_department", key = "#deptId", sync = true)
-    public List<Employee> getEmployeesByDepartmentCached(Long deptId) {
-        return employeeRepository.findByDepartmentId(deptId);
+    public List<Long> getEmployeeIdsByDepartmentCached(Long deptId) {
+        return employeeRepository.findIdsByDepartmentId(deptId);
+    }
+
+    // [TỐI ƯU] Pattern: Get IDs from Cache -> Fetch Entities from DB
+    public List<Employee> getAllEmployeesByRequester(Employee requester) {
+        List<Long> ids = Collections.emptyList();
+
+        if (requester.getRole() == EmployeeRole.COMPANY_ADMIN) {
+            // Gọi qua 'self' để kích hoạt Cache Proxy
+            ids = self.getEmployeeIdsByCompanyCached(requester.getCompanyId());
+        } else if (requester.getRole() == EmployeeRole.MANAGER) {
+            if (requester.getDepartment() != null) {
+                ids = self.getEmployeeIdsByDepartmentCached(requester.getDepartment().getId());
+            }
+        } else {
+            return List.of(requester);
+        }
+
+        if (ids == null || ids.isEmpty()) return Collections.emptyList();
+
+        // [SAFE] Fetch Entities (DB call tối ưu bằng WHERE IN)
+        List<Employee> fetched = employeeRepository.findByIdInFetchDepartment(ids);
+        
+        // [SAFE] Re-order đúng thứ tự ID và lọc null (đề phòng data rác trong cache)
+        Map<Long, Employee> map = fetched.stream()
+            .collect(Collectors.toMap(Employee::getId, e -> e));
+            
+        return ids.stream()
+            .map(map::get)
+            .filter(Objects::nonNull) // Loại bỏ ID có trong cache nhưng không còn trong DB
+            .collect(Collectors.toList());
     }
 
   // --- HÀM 2: SỬA UPDATE (Xóa annotation gây lỗi & dùng code thủ công) ---
     @Transactional
-    @Caching(evict = {
-        @CacheEvict(value = "employee_detail", key = "#id"),
-        @CacheEvict(value = "employees_by_company", key = "#updater.companyId"),
-        @CacheEvict(value = "departments", key = "#updater.companyId")
-    })
+   @Caching(evict = {
+    @CacheEvict(value = "departments_metadata", key = "#updater.companyId"),
+    @CacheEvict(value = "departments_stats", key = "#updater.companyId"),
+    @CacheEvict(value = "employee_detail", key = "#id"),
+    @CacheEvict(value = "employees_by_company", key = "#updater.companyId")
+})
     public Employee updateEmployee(
             Employee updater, Long id, String fullName, String phone, String dob, 
             String avatarUrl, String statusStr, String roleStr, Long departmentId, String email
@@ -345,7 +403,7 @@ public class EmployeeService {
 
         // [QUAN TRỌNG] Lấy ID phòng ban cũ để xóa cache sau khi update
         Long oldDeptId = (targetEmployee.getDepartment() != null) ? targetEmployee.getDepartment().getId() : null;
-
+        String oldDeptName = (targetEmployee.getDepartment() != null) ? targetEmployee.getDepartment().getName() : "Unassigned";
         // 2. Logic Permission Check (Giữ nguyên code cũ)
         if (updater.getRole() == EmployeeRole.STAFF) throw new RuntimeException("Truy cập bị từ chối.");
         if (updater.getRole() == EmployeeRole.MANAGER) {
@@ -439,7 +497,23 @@ public class EmployeeService {
                 evictDepartmentCache(newDeptId); // Refresh phòng mới
             }
         }
+        // 7. [MỚI - GỬI THÔNG BÁO CHUYỂN PHÒNG]
+        Long currentDeptId = (savedEmployee.getDepartment() != null) ? savedEmployee.getDepartment().getId() : null;
+        String currentDeptName = (savedEmployee.getDepartment() != null) ? savedEmployee.getDepartment().getName() : "Unassigned";
 
+        // Kiểm tra xem phòng ban có thay đổi không
+        if (!Objects.equals(oldDeptId, currentDeptId)) {
+            String title = "Department Transfer";
+            String body = "You have been transferred to department: " + currentDeptName;
+            
+            // Nếu bị xóa khỏi phòng (về Unassigned)
+            if (currentDeptId == null) {
+                body = "You have been removed from department " + oldDeptName + ". Status: Unassigned.";
+            }
+            
+            sendNotification(savedEmployee, title, body);
+            log.info("--> Đã gửi thông báo chuyển phòng cho user {}", savedEmployee.getEmail());
+        }
         // 7. RabbitMQ (Giữ nguyên code cũ)
         try {
             String deptName = (savedEmployee.getDepartment() != null) ? savedEmployee.getDepartment().getName() : "N/A";
@@ -459,12 +533,13 @@ public class EmployeeService {
     }
 
   @Transactional
-    @Caching(evict = {
-        @CacheEvict(value = "employee_detail", key = "#targetId"),
-        @CacheEvict(value = "employees_by_company", key = "#deleter.companyId"),
-        @CacheEvict(value = "departments", key = "#deleter.companyId")
-        // [FIX] Bỏ employees_by_department ở đây vì tham số #deptId không tồn tại
-    })
+   @Caching(evict = {
+    @CacheEvict(value = "departments_stats", key = "#deleter.companyId"),
+    @CacheEvict(value = "employee_detail", key = "#targetId"),
+    @CacheEvict(value = "employees_by_company", key = "#deleter.companyId"),
+    @CacheEvict(value = "request_list_user", key = "#targetId"),
+    @CacheEvict(value = "departments_metadata", key = "#deleter.companyId"),
+})
     public void deleteEmployee(Employee deleter, Long targetId) { 
         Employee targetEmployee = employeeRepository.findById(targetId)
                 .orElseThrow(() -> new RuntimeException("Employee not found"));
@@ -526,7 +601,7 @@ public class EmployeeService {
 
         // [FIX] Xóa cache thủ công
         evictDepartmentCache(deptId);
-
+        evictSaaSCaches(targetEmployee.getCompanyId());
         log.info("--> XÓA THÀNH CÔNG NHÂN VIÊN ID: {}", targetId);
     }
 
@@ -545,7 +620,7 @@ public class EmployeeService {
             log.error("Lỗi khi gửi sự kiện xóa file: {}", e.getMessage());
         }
     }
-
+@Transactional(readOnly = true)
     public List<Employee> searchStaff(Long requesterId, String keyword) {
         // 1. Lấy thông tin người tìm
         Employee requester = employeeRepository.findById(requesterId)
@@ -560,7 +635,7 @@ public class EmployeeService {
     }
 
 
-
+@Transactional(readOnly = true)
     public List<Employee> searchEmployees(Long requesterId, String keyword) {
         Employee requester = employeeRepository.findById(requesterId)
                 .orElseThrow(() -> new RuntimeException("User not found"));

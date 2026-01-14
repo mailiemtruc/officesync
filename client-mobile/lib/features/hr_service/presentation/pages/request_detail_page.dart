@@ -668,7 +668,7 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '#$displayCode',
+                  '$displayCode',
                   style: const TextStyle(
                     color: Color(0xFF94A3B8),
                     fontSize: 14,

@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam; // [MỚI]
 import org.springframework.web.bind.annotation.RestController;
 
+import com.officesync.attendance_service.dto.DailyTimesheetDTO;
 import com.officesync.attendance_service.model.Attendance;
 import com.officesync.attendance_service.model.AttendanceUser;
 import com.officesync.attendance_service.repository.AttendanceRepository;
@@ -147,5 +148,26 @@ public class AttendanceController {
         );
 
         return ResponseEntity.ok(results);
+    }
+
+    @GetMapping("/timesheet")
+    public ResponseEntity<?> getMonthlyTimesheet(
+            @RequestHeader("X-User-Id") Long userId, // Lấy ID từ Header (do Gateway truyền vào)
+            @RequestParam(required = false) Integer month,
+            @RequestParam(required = false) Integer year) {
+
+        // Nếu không truyền tháng/năm thì lấy hiện tại
+        if (month == null || year == null) {
+            LocalDateTime now = LocalDateTime.now();
+            month = now.getMonthValue();
+            year = now.getYear();
+        }
+
+        try {
+            List<DailyTimesheetDTO> result = attendanceService.generateMonthlyTimesheet(userId, month, year);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(e.getMessage());
+        }
     }
 }

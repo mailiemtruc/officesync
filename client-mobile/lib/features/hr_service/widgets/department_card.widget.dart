@@ -34,11 +34,17 @@ class DepartmentCard extends StatelessWidget {
     // 1. Lấy màu sắc từ model
     final Color themeColor = _parseColor(department.color);
 
-    // 2. Lấy tên quản lý
-    final String managerName = department.manager?.fullName ?? "No Manager";
+    // [SỬA] Xử lý tên Manager: Nếu null hoặc rỗng thì hiện "No Manager"
+    String managerName = department.manager?.fullName ?? "";
+    if (managerName.trim().isEmpty) {
+      managerName = "No Manager";
+    }
 
-    // 3. Logic Avatar
-    final String? avatarUrl = department.manager?.avatarUrl;
+    // [SỬA] Xử lý Avatar: Nếu chuỗi rỗng thì coi như null để hiện icon mặc định
+    String? avatarUrl = department.manager?.avatarUrl;
+    if (avatarUrl != null && avatarUrl.trim().isEmpty) {
+      avatarUrl = null;
+    }
     final bool hasAvatar = avatarUrl != null && avatarUrl.isNotEmpty;
 
     return Container(

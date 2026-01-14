@@ -3,6 +3,7 @@
 import 'package:dio/dio.dart'; // Import để dùng Options set Header
 import '../../../core/api/api_client.dart';
 import 'models/attendance_model.dart';
+import 'models/timesheet_model.dart';
 
 class AttendanceApi {
   final ApiClient _apiClient = ApiClient();
@@ -87,6 +88,30 @@ class AttendanceApi {
       return [];
     } catch (e) {
       print("Manager Fetch Error: $e");
+      return [];
+    }
+  }
+
+  Future<List<TimesheetModel>> getTimesheet(
+    int userId,
+    int month,
+    int year,
+  ) async {
+    try {
+      final response = await _apiClient.get(
+        '$_serviceUrl/timesheet', // Gọi endpoint mới
+        queryParameters: {'month': month, 'year': year},
+        options: Options(headers: {'X-User-Id': userId}),
+      );
+
+      if (response.data is List) {
+        return (response.data as List)
+            .map((e) => TimesheetModel.fromJson(e))
+            .toList();
+      }
+      return [];
+    } catch (e) {
+      print("Error fetching timesheet: $e");
       return [];
     }
   }

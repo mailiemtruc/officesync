@@ -13,6 +13,8 @@ import 'features/hr_service/presentation/pages/user_profile_page.dart';
 import 'features/attendance_service/presentation/pages/attendance_screen.dart';
 import 'features/attendance_service/presentation/pages/manager_attendance_screen.dart';
 import 'features/core_service/presentation/pages/director_company_profile_screen.dart';
+import 'features/core_service/presentation/pages/all_companies_screen.dart';
+import 'features/core_service/presentation/pages/create_admin_screen.dart';
 
 // --- THÊM IMPORT CÁC TRANG MỚI ---
 import 'features/hr_service/presentation/pages/my_requests_page.dart';
@@ -22,6 +24,7 @@ import 'features/hr_service/presentation/pages/employee_list_page.dart';
 import 'features/note_service/presentation/pages/note_list_screen.dart';
 // ======================= notification_SERVICE ==============================
 import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 import 'features/notification_service/notification_service.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 // ======================= notification_SERVICE ==============================
@@ -33,7 +36,7 @@ import 'features/task_service/presentation/pages/staff_page.dart';
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   // Cần khởi tạo Firebase để xử lý ngầm
-  await Firebase.initializeApp();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   print(
     "🌙 Nhận thông báo ngầm (Background/Terminated): ${message.notification?.title}",
   );
@@ -41,7 +44,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   // 👇 2. ĐĂNG KÝ HÀM BACKGROUND
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
@@ -115,6 +118,9 @@ class OfficeSyncApp extends StatelessWidget {
           return ManagerAttendanceScreen(userRole: role);
         },
         '/company_profile': (context) => const DirectorCompanyProfileScreen(),
+
+        '/admin_companies': (context) => const AllCompaniesScreen(),
+        '/create_admin': (context) => const CreateAdminScreen(),
       },
     );
   }
