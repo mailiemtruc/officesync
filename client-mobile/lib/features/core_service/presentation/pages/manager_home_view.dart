@@ -3,6 +3,8 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'dart:async';
 import '../../../../core/config/app_colors.dart';
 import 'package:officesync/features/notification_service/presentation/pages/notification_list_screen.dart';
+import 'package:officesync/features/communication_service/presentation/pages/newsfeed_screen.dart';
+import 'package:officesync/features/chat_service/presentation/pages/chat_screen.dart';
 
 class ManagerHomeView extends StatefulWidget {
   final int currentUserId; // 👈 Thêm dòng này
@@ -169,7 +171,12 @@ class _ManagerHomeViewState extends State<ManagerHomeView> {
               );
             }),
             const SizedBox(width: 12),
-            _buildCircleIcon(PhosphorIconsBold.chatCircleDots, () {}),
+            _buildCircleIcon(PhosphorIconsBold.chatCircleDots, () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const ChatScreen()),
+              );
+            }),
           ],
         ),
       ],
@@ -258,7 +265,12 @@ class _ManagerHomeViewState extends State<ManagerHomeView> {
         _buildActionItem("Assign Task", PhosphorIconsBold.clipboardText, () {
           Navigator.pushNamed(context, '/tasks', arguments: 'MANAGER');
         }),
-        _buildActionItem("News", PhosphorIconsBold.newspaper, () {}),
+        _buildActionItem("News", PhosphorIconsBold.newspaper, () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const NewsfeedScreen()),
+          );
+        }),
       ],
     );
   }
