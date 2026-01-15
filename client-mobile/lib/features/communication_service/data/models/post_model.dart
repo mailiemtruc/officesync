@@ -30,7 +30,6 @@ class PostModel {
       imageUrl: json['imageUrl'],
       authorId: json['authorId'],
       authorName: json['authorName'] ?? "Unknown",
-      // Tạo avatar mặc định nếu null
       authorAvatar:
           json['authorAvatar'] ??
           "https://ui-avatars.com/api/?name=${json['authorName']}&background=random",
@@ -38,6 +37,29 @@ class PostModel {
       reactionCount: json['reactionCount'] ?? 0,
       commentCount: json['commentCount'] ?? 0,
       myReaction: json['myReaction'],
+    );
+  }
+
+  // ✅ BẠN ĐANG THIẾU ĐOẠN NÀY NÊN BỊ ĐỎ:
+  PostModel copyWith({
+    int? reactionCount,
+    int? commentCount,
+    String? myReaction,
+    bool clearReaction = false, // Cờ để xóa reaction (khi bỏ like)
+  }) {
+    return PostModel(
+      id: id,
+      content: content,
+      imageUrl: imageUrl,
+      authorId: authorId,
+      authorName: authorName,
+      authorAvatar: authorAvatar,
+      createdAt: createdAt,
+      // Nếu có truyền giá trị mới thì lấy, không thì giữ nguyên cái cũ
+      reactionCount: reactionCount ?? this.reactionCount,
+      commentCount: commentCount ?? this.commentCount,
+      // Nếu cờ clearReaction = true thì set null, ngược lại lấy giá trị mới hoặc giữ nguyên
+      myReaction: clearReaction ? null : (myReaction ?? this.myReaction),
     );
   }
 }

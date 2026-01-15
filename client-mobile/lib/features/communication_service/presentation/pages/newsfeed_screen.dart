@@ -164,11 +164,10 @@ class _NewsfeedScreenState extends State<NewsfeedScreen> {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                if (snapshot.hasError) {
-                  return Center(child: Text("Error: ${snapshot.error}"));
-                }
-
+                // ✅ SỬA LOGIC Ở ĐÂY
+                // Nếu snapshot có data, ta gán vào 1 biến list tạm để có thể chỉnh sửa
                 final posts = snapshot.data ?? [];
+
                 if (posts.isEmpty) {
                   return const Center(child: Text("No news yet."));
                 }
@@ -181,15 +180,29 @@ class _NewsfeedScreenState extends State<NewsfeedScreen> {
                     itemBuilder: (context, index) {
                       return PostCard(
                         post: posts[index],
-                        onTap: () {
-                          // Bấm vào thẻ bài viết -> Sang màn hình chi tiết
-                          Navigator.push(
+                        onTap: () async {
+                          // ✅ LOGIC ĐỒNG BỘ: Chờ kết quả trả về từ trang chi tiết
+                          final result = await Navigator.push(
                             context,
                             MaterialPageRoute(
                               builder: (context) =>
                                   PostDetailScreen(post: posts[index]),
                             ),
                           );
+                          // ✅ Nếu có dữ liệu trả về -> Cập nhật ngay tại chỗ
+                          if (result != null && result is Map) {
+                            setState(() {
+                              // Cập nhật lại đúng bài viết tại vị trí index
+                              posts[index] = posts[index].copyWith(
+                                reactionCount: result['reactionCount'],
+                                commentCount: result['commentCount'],
+                                myReaction: result['isLiked'] == true
+                                    ? "LOVE"
+                                    : null,
+                                clearReaction: result['isLiked'] == false,
+                              );
+                            });
+                          }
                         },
                       );
                     },
