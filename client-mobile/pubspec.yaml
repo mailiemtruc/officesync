@@ -8,15 +8,16 @@ environment:
   sdk: ^3.10.1
 
 dependencies:
-  stomp_dart_client: ^1.0.0
   flutter:
     sdk: flutter
 
-  geolocator: ^10.1.0 # Lấy GPS
-  network_info_plus: ^5.0.1 # Lấy thông tin Wi-Fi (BSSID)
-  permission_handler: ^11.0.1 # Quản lý quyền
+  # --- CHAT SOCKET (QUAN TRỌNG NHẤT CHO CHAT) ---
+  stomp_dart_client: ^1.0.0 # Không có dòng này là code Chat đỏ hết
 
-  # --- UI & Utilities ---
+  # --- Utilities ---
+  geolocator: ^10.1.0
+  network_info_plus: ^5.0.1
+  permission_handler: ^11.0.1
   flutter_staggered_grid_view: ^0.7.0
   flutter_secure_storage: ^9.0.0
   flutter_linkify: ^6.0.0
@@ -34,14 +35,17 @@ dependencies:
   # --- Networking & Security ---
   dio: ^5.9.0
   bcrypt: ^1.1.3
+  http: ^1.6.0 # Dùng cho API Chat
 
-  # --- Editor (Cố định version) ---
+  # --- Editor & Firebase ---
   flutter_quill: 10.8.4
-  firebase_core: ^4.3.0
-  firebase_messaging: ^16.1.0
-  flutter_local_notifications: ^19.5.0
-  http: ^1.6.0
   speech_to_text: ^7.3.0
+
+  # Firebase & Notification (Chỉ khai báo 1 lần ở đây)
+  firebase_core: ^2.24.2
+  firebase_messaging: ^14.7.9
+  flutter_local_notifications: ^17.0.0
+  timeago: ^3.7.1
 
 dev_dependencies:
   flutter_test:
@@ -49,7 +53,7 @@ dev_dependencies:
   flutter_launcher_icons: ^0.13.1
   flutter_lints: ^6.0.0
 
-# --- Cấu hình Override (Quan trọng) ---
+# --- Cấu hình Override (Tránh xung đột version) ---
 dependency_overrides:
   intl: ^0.20.2
 
@@ -58,6 +62,7 @@ flutter:
   assets:
     - assets/images/
 
+# Cấu hình icon App
 flutter_launcher_icons:
   android: true
   ios: true
@@ -65,8 +70,3 @@ flutter_launcher_icons:
   adaptive_icon_background: "#FFFFFF"
   image_path: "assets/images/logo.png"
   min_sdk_android: 21
-
-  # ✅ THÊM 3 CÁI NÀY:
-  firebase_core: ^2.24.2
-  firebase_messaging: ^14.7.9
-  flutter_local_notifications: ^16.3.0 # Để hiện thông báo khi đang mở app
