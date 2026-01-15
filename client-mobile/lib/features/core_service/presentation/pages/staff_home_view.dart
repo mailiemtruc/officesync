@@ -288,10 +288,10 @@ class _StaffHomeViewState extends State<StaffHomeView> {
             fontWeight: FontWeight.w700,
           ),
         ),
-
         TextButton(
           onPressed: () {
-            print("Bấm View all");
+            // ✅ Điều hướng sang StaffPage
+            Navigator.pushNamed(context, '/tasks', arguments: 'STAFF');
           },
           child: const Text(
             "View all",

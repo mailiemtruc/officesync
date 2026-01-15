@@ -256,7 +256,7 @@ class _ManagerHomeViewState extends State<ManagerHomeView> {
         _buildActionItem("Request", PhosphorIconsBold.calendarBlank, () {}),
         _buildActionItem("Note", PhosphorIconsBold.notePencil, () {}),
         _buildActionItem("Assign Task", PhosphorIconsBold.clipboardText, () {
-          print("Giao việc");
+          Navigator.pushNamed(context, '/tasks', arguments: 'MANAGER');
         }),
         _buildActionItem("News", PhosphorIconsBold.newspaper, () {}),
       ],
@@ -268,7 +268,7 @@ class _ManagerHomeViewState extends State<ManagerHomeView> {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         const Text(
-          'My Job',
+          'Assigned Tasks', // Đã đổi tên tiêu đề cho phù hợp Manager
           style: TextStyle(
             color: Color(0xFF1E293B),
             fontSize: 24,
@@ -276,10 +276,10 @@ class _ManagerHomeViewState extends State<ManagerHomeView> {
             fontWeight: FontWeight.w700,
           ),
         ),
-
         TextButton(
           onPressed: () {
-            print("Bấm View all");
+            // ✅ Điều hướng sang ManagerPage
+            Navigator.pushNamed(context, '/tasks', arguments: 'MANAGER');
           },
           child: const Text(
             "View all",

@@ -292,11 +292,8 @@ class _DirectorHomeViewState extends State<DirectorHomeView> {
         }),
 
         _buildActionItem("Assign Task", PhosphorIconsBold.clipboardText, () {
-          CustomSnackBar.show(
-            context,
-            title: "Assign",
-            message: "Assign task module.",
-          );
+          // SỬA TẠI ĐÂY: Thay thế CustomSnackBar bằng lệnh điều hướng
+          Navigator.pushNamed(context, '/tasks', arguments: 'COMPANY_ADMIN');
         }),
 
         _buildActionItem("News", PhosphorIconsBold.newspaper, () {
@@ -314,17 +311,29 @@ class _DirectorHomeViewState extends State<DirectorHomeView> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        const Text(
-          'Assigned Tasks',
-          style: TextStyle(
-            color: Color(0xFF1E293B),
-            fontSize: 24,
-            fontFamily: 'Inter',
-            fontWeight: FontWeight.w700,
+        // SỬA TẠI ĐÂY: Bao bọc Text bằng InkWell để bắt sự kiện chạm
+        InkWell(
+          onTap: () {
+            Navigator.pushNamed(context, '/tasks', arguments: 'COMPANY_ADMIN');
+          },
+          borderRadius: BorderRadius.circular(8),
+          child: const Padding(
+            padding: EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+            child: Text(
+              'Assigned Tasks',
+              style: TextStyle(
+                color: Color(0xFF1E293B),
+                fontSize: 24,
+                fontFamily: 'Inter',
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ),
         ),
         TextButton(
-          onPressed: () {},
+          onPressed: () {
+            Navigator.pushNamed(context, '/tasks', arguments: 'COMPANY_ADMIN');
+          },
           child: const Text(
             "View all",
             style: TextStyle(

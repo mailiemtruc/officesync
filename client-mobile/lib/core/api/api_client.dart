@@ -12,6 +12,9 @@ class ApiClient {
   // Base URL cho Note Service (Port 8082)
   static const String noteUrl = 'http://10.0.2.2:8082/api';
 
+  //Base URL cho Task Service (Port 8086)
+  static const String taskUrl = 'http://10.0.2.2:8086/api';
+
   final Dio _dio = Dio(
     BaseOptions(
       baseUrl: baseUrl,
