@@ -15,9 +15,17 @@ public class ChatMessage {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private String chatId;
+    // [MỚI] Quan trọng nhất: Tin nhắn thuộc về Phòng nào
+    @Column(name = "room_id")
+    private Long roomId;
+
+    // Vẫn giữ lại để tương thích code cũ (nhưng sau này sẽ ít dùng)
+    private String chatId; 
+
     private Long senderId;
-    private Long recipientId;
+    
+    // Chat 1-1 thì có recipientId, Chat Group thì field này có thể NULL
+    private Long recipientId; 
     
     @Column(columnDefinition = "TEXT")
     private String content;
@@ -25,12 +33,17 @@ public class ChatMessage {
     private Date timestamp;
 
     @Enumerated(EnumType.STRING)
-    private MessageType type; // Thêm trường này
+    private MessageType type; 
 
-    // --- THÊM ĐOẠN NÀY ĐỂ HẾT LỖI ĐỎ ---
     public enum MessageType {
-        CHAT,
-        JOIN,
-        LEAVE
+        CHAT,   // Tin nhắn văn bản
+        JOIN,   // Tham gia phòng
+        LEAVE,  // Rời phòng
+        IMAGE,  // [MỚI] Tin nhắn hình ảnh
+        FILE    // [MỚI] Tin nhắn tệp tin
     }
+    @Transient
+    private String senderName;
+    @Transient
+    private String avatarUrl;
 }
