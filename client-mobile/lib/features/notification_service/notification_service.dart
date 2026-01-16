@@ -67,6 +67,20 @@ class NotificationService {
     );
 
     await _localNotifications.initialize(initSettings);
+    const AndroidNotificationChannel channel = AndroidNotificationChannel(
+      'high_importance_channel',      // id (Phải trùng với Backend)
+      'High Importance Notifications', // name
+      description: 'This channel is used for important notifications.',
+      importance: Importance.max,      // ✅ Mức độ cao nhất (Banner + Âm thanh)
+    );
+
+    await _localNotifications
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(channel);
+    
+    print("✅ Đã tạo kênh thông báo: high_importance_channel");
+  
   }
 
   // Hàm hiển thị thông báo dạng Banner
