@@ -67,7 +67,7 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
 
         // 2. Tiêu đề màu xanh và đậm
         title: const Text(
-          "THÔNG BÁO", // Viết hoa nhìn cho "Pro"
+          "Notification", // Viết hoa nhìn cho "Pro"
           style: TextStyle(
             color: Color(0xFF2260FF), // Mã màu xanh chuẩn của App bạn
             fontWeight: FontWeight.bold,

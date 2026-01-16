@@ -4,6 +4,7 @@ import com.officesync.communication_service.dto.*;
 import com.officesync.communication_service.enums.ReactionType;
 import com.officesync.communication_service.model.*;
 import com.officesync.communication_service.repository.*;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -20,17 +21,18 @@ public class NewsfeedService {
     @Autowired private UserRepository userRepository;
     @Autowired private PostViewRepository viewRepository;
     @Autowired private NotificationProducer notificationProducer;
+    @Autowired private SimpMessagingTemplate messagingTemplate;
     // Danh sách các vai trò được phép bắn thông báo (VIP)
     private static final List<String> VIP_ROLES = List.of("COMPANY_ADMIN", "MANAGER", "DIRECTOR");
     
     // 1. Tạo bài viết
     // 1. TẠO BÀI VIẾT (Đã tích hợp Notification cho VIP)
-    public Post createPost(PostRequestDTO request, User currentUser) {
+  public Post createPost(PostRequestDTO request, User currentUser) {
         // A. Logic Lazy Sync: Cập nhật User nếu Avatar thay đổi
         if (request.getUserAvatar() != null && !request.getUserAvatar().isEmpty()) {
             if (!request.getUserAvatar().equals(currentUser.getAvatarUrl())) {
                 currentUser.setAvatarUrl(request.getUserAvatar());
-                userRepository.save(currentUser); // Lưu avatar mới vào DB
+                userRepository.save(currentUser); 
             }
         }
 
@@ -39,29 +41,35 @@ public class NewsfeedService {
         post.setContent(request.getContent());
         post.setImageUrl(request.getImageUrl());
         post.setAuthorId(currentUser.getId());
-        post.setCompanyId(currentUser.getCompanyId() != null ? currentUser.getCompanyId() : 1L); // Lấy CompanyID chuẩn
+        post.setCompanyId(currentUser.getCompanyId() != null ? currentUser.getCompanyId() : 1L); 
         post.setAuthorName(currentUser.getFullName());
         post.setAuthorAvatar(currentUser.getAvatarUrl());
         
         Post savedPost = postRepository.save(post);
 
-        // C. LOGIC THÔNG BÁO: Chỉ bắn thông báo nếu là Sếp (VIP)
-        if (VIP_ROLES.contains(currentUser.getRole())) {
-            // Lấy danh sách toàn bộ nhân viên công ty
-            List<User> allEmployees = userRepository.findAllByCompanyId(savedPost.getCompanyId());
+        // ✅ [MỚI] BẮN SOCKET REAL-TIME
+        // Gửi bài mới vào kênh: /topic/company/{companyId}
+        try {
+            PostResponseDTO postDTO = convertToPostResponseDTO(savedPost, currentUser);
+            String destination = "/topic/company/" + savedPost.getCompanyId();
+            messagingTemplate.convertAndSend(destination, postDTO);
+            System.out.println("--> [WebSocket] Đã bắn bài mới vào kênh: " + destination);
+        } catch (Exception e) {
+            System.err.println("Lỗi gửi WebSocket: " + e.getMessage());
+        }
 
+        // C. LOGIC THÔNG BÁO (NOTIFICATION SERVICE) - Giữ nguyên logic cũ
+        if (VIP_ROLES.contains(currentUser.getRole())) {
+            List<User> allEmployees = userRepository.findAllByCompanyId(savedPost.getCompanyId());
             for (User employee : allEmployees) {
-                // Không báo lại cho chính người đăng
                 if (!employee.getId().equals(currentUser.getId())) {
                     NotificationEvent event = NotificationEvent.builder()
                             .userId(employee.getId())
-                            .title("📢 THÔNG BÁO TỪ " + currentUser.getFullName().toUpperCase())
-                            .body(getShortContent(savedPost.getContent())) // Cắt ngắn nội dung
-                            .type("ANNOUNCEMENT") // Loại tin quan trọng
+                            .title("📢 NEW POST FROM " + currentUser.getFullName().toUpperCase())
+                            .body(getShortContent(savedPost.getContent()))
+                            .type("ANNOUNCEMENT")
                             .referenceId(savedPost.getId())
                             .build();
-                    
-                    // Gửi RabbitMQ
                     notificationProducer.sendNotification(event);
                 }
             }
@@ -167,40 +175,41 @@ public class NewsfeedService {
 
         PostComment savedComment = commentRepository.save(comment);
 
-        // C. LOGIC THÔNG BÁO: Báo cho chủ bài viết
-        Post post = postRepository.findById(postId).orElse(null);
-        String commenterName = (user != null) ? user.getFullName() : "Ai đó";
+        // ✅ [MỚI] BẮN SOCKET REAL-TIME
+        // Gửi comment mới vào kênh: /topic/post/{postId}
+        try {
+            CommentResponseDTO commentDTO = convertToCommentResponseDTO(savedComment, user);
+            String destination = "/topic/post/" + postId;
+            messagingTemplate.convertAndSend(destination, commentDTO);
+            System.out.println("--> [WebSocket] Đã bắn comment mới vào kênh: " + destination);
+            
+            // Trả về DTO này luôn để Controller trả về Frontend (đỡ phải convert 2 lần)
+            // (Nhưng logic dưới vẫn cần chạy Notification nên ta cứ để nó chạy tiếp)
+        } catch (Exception e) {
+             System.err.println("Lỗi gửi WebSocket: " + e.getMessage());
+        }
 
-        // Chỉ báo nếu người comment KHÔNG PHẢI là chủ bài viết
+        // C. LOGIC THÔNG BÁO (NOTIFICATION SERVICE) - Giữ nguyên logic cũ
+        Post post = postRepository.findById(postId).orElse(null);
+        String commenterName = (user != null) ? user.getFullName() : "Someone";
+
         if (post != null && !post.getAuthorId().equals(userId)) {
             NotificationEvent event = NotificationEvent.builder()
-                    .userId(post.getAuthorId()) // Gửi cho chủ bài viết
-                    .title("Bình luận mới")
-                    .body(commenterName + " đã bình luận: " + getShortContent(savedComment.getContent()))
+                    .userId(post.getAuthorId())
+                    .title("New Comment")
+                    .body(commenterName + " commented: " + getShortContent(savedComment.getContent()))
                     .type("COMMENT")
                     .referenceId(postId)
                     .build();
-
             notificationProducer.sendNotification(event);
         }
 
-        // (Tùy chọn) Báo cho người được reply nếu đây là reply comment
-        // ... (Bạn có thể thêm logic báo cho comment cha ở đây nếu muốn)
-
-        return CommentResponseDTO.builder()
-                .id(savedComment.getId())
-                .content(savedComment.getContent())
-                .parentId(request.getParentId())
-                .userId(userId)
-                .authorName(user != null ? user.getFullName() : "Unknown User")
-                .authorAvatar(user != null ? user.getAvatarUrl() : "https://ui-avatars.com/api/?name=U")
-                .createdAt(savedComment.getCreatedAt())
-                .build();
+        // Trả về kết quả
+        return convertToCommentResponseDTO(savedComment, user);
     }
-
     // Hàm phụ trợ: Cắt ngắn nội dung để hiển thị trên thông báo cho đẹp
     private String getShortContent(String content) {
-        if (content == null || content.isEmpty()) return "đã gửi một ảnh";
+        if (content == null || content.isEmpty()) return "sent a photo";
         return content.length() > 50 ? content.substring(0, 47) + "..." : content;
     }
     // Hàm đếm lượt xem
@@ -241,4 +250,31 @@ public class NewsfeedService {
             userRepository.save(newUser);
         }
     }
+    private PostResponseDTO convertToPostResponseDTO(Post post, User author) {
+         return PostResponseDTO.builder()
+                .id(post.getId())
+                .content(post.getContent())
+                .imageUrl(post.getImageUrl())
+                .authorId(post.getAuthorId())
+                .authorName(author.getFullName())
+                .authorAvatar(author.getAvatarUrl())
+                .createdAt(post.getCreatedAt())
+                .reactionCount(0) // Mới tạo thì là 0
+                .commentCount(0)
+                .myReaction(null)
+                .build();
+    }
+
+    private CommentResponseDTO convertToCommentResponseDTO(PostComment comment, User author) {
+        return CommentResponseDTO.builder()
+                .id(comment.getId())
+                .content(comment.getContent())
+                .parentId(comment.getParentComment() != null ? comment.getParentComment().getId() : null)
+                .userId(comment.getUserId())
+                .authorName(author != null ? author.getFullName() : "Unknown")
+                .authorAvatar(author != null ? author.getAvatarUrl() : "")
+                .createdAt(comment.getCreatedAt())
+                .build();
+    }
 }
+    
