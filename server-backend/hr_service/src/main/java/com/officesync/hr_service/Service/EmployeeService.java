@@ -7,14 +7,15 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Autowired; // [1] IMPORT MỚI
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable; // [1] NHỚ IMPORT CÁI NÀY
-import org.springframework.cache.annotation.Caching;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching; // [1] NHỚ IMPORT CÁI NÀY
 import org.springframework.context.annotation.Lazy;
-import org.springframework.dao.DataIntegrityViolationException; // [THÊM]
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.messaging.simp.SimpMessagingTemplate; // [THÊM]
 import org.springframework.stereotype.Service; // [THÊM]
 import org.springframework.transaction.annotation.Transactional; // [THÊM]
 
@@ -33,10 +34,10 @@ import com.officesync.hr_service.Producer.EmployeeProducer;
 import com.officesync.hr_service.Repository.DepartmentRepository;
 import com.officesync.hr_service.Repository.EmployeeRepository;
 import com.officesync.hr_service.Repository.RequestAuditLogRepository;
-import com.officesync.hr_service.Repository.RequestRepository; // [THÊM]
+import com.officesync.hr_service.Repository.RequestRepository; // [1] IMPORT MỚI
 
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j; // [THÊM]
+import lombok.RequiredArgsConstructor; // [THÊM]
+import lombok.extern.slf4j.Slf4j;
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -50,7 +51,7 @@ public class EmployeeService {
    private final EmployeeProducer employeeProducer;
     private final CacheManager cacheManager;
     private EmployeeService self;
-
+private final SimpMessagingTemplate messagingTemplate; // [2] INJECT SOCKET
     @Autowired
     public void setSelf(@Lazy EmployeeService self) {
         this.self = self;
@@ -497,10 +498,11 @@ public class EmployeeService {
                 evictDepartmentCache(newDeptId); // Refresh phòng mới
             }
         }
+        
         // 7. [MỚI - GỬI THÔNG BÁO CHUYỂN PHÒNG]
         Long currentDeptId = (savedEmployee.getDepartment() != null) ? savedEmployee.getDepartment().getId() : null;
         String currentDeptName = (savedEmployee.getDepartment() != null) ? savedEmployee.getDepartment().getName() : "Unassigned";
-
+         
         // Kiểm tra xem phòng ban có thay đổi không
         if (!Objects.equals(oldDeptId, currentDeptId)) {
             String title = "Department Transfer";
@@ -513,6 +515,16 @@ public class EmployeeService {
             
             sendNotification(savedEmployee, title, body);
             log.info("--> Đã gửi thông báo chuyển phòng cho user {}", savedEmployee.getEmail());
+        }
+        // [3] THÊM ĐOẠN NÀY: BẮN SOCKET UPDATE PROFILE
+        try {
+            // Topic riêng cho từng user: /topic/user/{id}/profile
+            String dest = "/topic/user/" + savedEmployee.getId() + "/profile";
+            // Gửi tín hiệu để App tự load lại
+            messagingTemplate.convertAndSend(dest, "REFRESH_PROFILE");
+            log.info("--> WebSocket: Đã gửi lệnh REFRESH_PROFILE tới user {}", savedEmployee.getId());
+        } catch (Exception e) {
+            log.error("Lỗi gửi socket profile: {}", e.getMessage());
         }
         // 7. RabbitMQ (Giữ nguyên code cũ)
         try {

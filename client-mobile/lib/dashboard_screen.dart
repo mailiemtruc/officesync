@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'core/config/app_colors.dart';
 
@@ -11,12 +13,11 @@ import 'features/core_service/presentation/pages/admin_home_view.dart';
 // Import User Profile
 import 'features/hr_service/presentation/pages/user_profile_page.dart';
 
-// ✅ [THÊM DÒNG NÀY] Import service thông báo
+// Import Services
 import 'features/notification_service/notification_service.dart';
-
 import 'features/hr_service/data/datasources/employee_remote_data_source.dart';
-
 import 'features/ai_service/presentation/pages/ai_chat_screen.dart';
+import '../../../../core/services/websocket_service.dart'; // [QUAN TRỌNG] Socket Service
 
 class DashboardScreen extends StatefulWidget {
   final Map<String, dynamic> userInfo;
@@ -29,96 +30,198 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   int _currentIndex = 0;
+  final _storage = const FlutterSecureStorage();
 
-  // [SỬA LỖI] Dùng IndexedStack để giữ trạng thái trang, tránh reload khi chuyển tab
-  late List<Widget> _pages;
+  // Dùng IndexedStack để giữ trạng thái trang
+  late List<Widget> _pages = [];
   bool _canAccessHrAttendance = false;
+  bool _isLoading = true;
+
+  // Biến lưu thông tin chính thức của Dashboard (Source of Truth)
+  late Map<String, dynamic> _currentUserInfo;
+
+  // DataSource để gọi API lấy thông tin mới
+  final EmployeeRemoteDataSource _employeeDataSource =
+      EmployeeRemoteDataSource();
 
   @override
   void initState() {
     super.initState();
-    final String role = widget.userInfo['role'] ?? 'STAFF';
-
-    _pages = [
-      _buildHomeByRole(role),
-      _buildMenuPage(),
-      UserProfilePage(userInfo: widget.userInfo),
-    ];
-    // 2. Logic mới: Đăng ký nhận thông báo (THÊM VÀO ĐÂY)
-    try {
-      // Lấy ID user, nếu null thì mặc định là 0
-      int userId = int.tryParse(widget.userInfo['id'].toString()) ?? 0;
-
-      if (userId > 0) {
-        // Gọi hàm đăng ký token với Server
-        NotificationService().initNotifications(userId);
-        print("--> Đã gọi initNotifications cho user $userId");
-      } else {
-        print("--> User ID không hợp lệ, bỏ qua đăng ký thông báo");
-      }
-    } catch (e) {
-      print("--> Lỗi khi khởi tạo thông báo: $e");
-    }
-    _checkPermission();
+    _initDashboardData();
   }
 
-  // [MỚI] Hàm logic kiểm tra quyền từ Server
-  Future<void> _checkPermission() async {
-    final String role = widget.userInfo['role'] ?? 'STAFF';
+  // 1. KHỞI TẠO DỮ LIỆU & KHÔI PHỤC NẾU CẦN
+  Future<void> _initDashboardData() async {
+    Map<String, dynamic> info = widget.userInfo;
 
-    // Trường hợp 1: Nếu là Admin/Super Admin -> Luôn cho phép
+    // Nếu widget.userInfo bị thiếu Role hoặc ID (do điều hướng lỗi), đọc từ Storage
+    if (info.isEmpty || info['role'] == null || info['id'] == null) {
+      try {
+        String? storedJson = await _storage.read(key: 'user_info');
+        if (storedJson != null) {
+          info = jsonDecode(storedJson);
+          print("--> Dashboard: Recovered user info from Storage.");
+        }
+      } catch (e) {
+        print("--> Dashboard: Error reading storage: $e");
+      }
+    }
+
+    _currentUserInfo = info;
+    final String role = _currentUserInfo['role'] ?? 'STAFF';
+
+    // Init Notification Service
+    try {
+      int userId = int.tryParse(_currentUserInfo['id'].toString()) ?? 0;
+      if (userId > 0) {
+        NotificationService().initNotifications(userId);
+      }
+    } catch (_) {}
+
+    // Xây dựng giao diện ban đầu
+    if (mounted) {
+      setState(() {
+        _updatePages(role);
+        _isLoading = false;
+      });
+    }
+
+    // Check quyền HR & Kích hoạt lắng nghe Real-time
+    await _checkPermission();
+    _setupRealtimePermissionListener();
+  }
+
+  // 2. KIỂM TRA QUYỀN TRUY CẬP HR (Dựa trên API)
+  Future<void> _checkPermission() async {
+    final String role = _currentUserInfo['role'] ?? 'STAFF';
+    int userId = int.tryParse(_currentUserInfo['id'].toString()) ?? 0;
+
+    // Trường hợp 1: Admin -> Luôn cho phép
     if (role == 'COMPANY_ADMIN') {
       if (mounted) {
         setState(() {
           _canAccessHrAttendance = true;
-          _updatePages(role);
+          _updatePages(role); // Update lại menu để hiện nút HR Attendance
         });
       }
       return;
     }
 
-    // Trường hợp 2: Nếu là Manager -> Cần hỏi Server xem phòng ban có phải là HR không
-    if (role == 'MANAGER' || role == 'STAFF') {
-      int userId = int.tryParse(widget.userInfo['id'].toString()) ?? 0;
-
-      // Gọi API qua DataSource
-      final dataSource = EmployeeRemoteDataSource();
-      final canAccess = await dataSource.checkHrPermission(userId);
-
-      if (mounted) {
-        setState(() {
-          _canAccessHrAttendance = canAccess;
-          _updatePages(role); // Cập nhật lại giao diện
-        });
-      }
-    } else {
-      // Các role khác (nếu có) -> Chặn
-      if (mounted) {
-        setState(() {
-          _canAccessHrAttendance = false;
-          _updatePages(role);
-        });
+    // Trường hợp 2: Manager/Staff -> Check server xem có phải thuộc phòng HR không
+    if ((role == 'MANAGER' || role == 'STAFF') && userId > 0) {
+      try {
+        final canAccess = await _employeeDataSource.checkHrPermission(userId);
+        if (mounted) {
+          setState(() {
+            _canAccessHrAttendance = canAccess;
+            _updatePages(role);
+          });
+        }
+      } catch (e) {
+        print("Error checking permission: $e");
       }
     }
   }
 
-  // Hàm hỗ trợ cập nhật lại danh sách trang (để Menu nhận biến _canAccessHrAttendance mới)
+  // 3. LẮNG NGHE SOCKET ĐỂ CẬP NHẬT QUYỀN TỨC THÌ
+  void _setupRealtimePermissionListener() {
+    final userId = _currentUserInfo['id'];
+    if (userId == null) return;
+
+    final wsService = WebSocketService();
+
+    // Đảm bảo kết nối
+    if (!wsService.isConnected) {
+      // [SỬA LỖI TẠI ĐÂY] Xóa callback đi, chỉ gọi connect() trống
+      wsService.connect();
+      print("Socket Connected for Dashboard");
+    }
+
+    // Subscribe topic riêng tư: /topic/user/{id}/profile
+    wsService.subscribe('/topic/user/$userId/profile', (message) {
+      if (message == "REFRESH_PROFILE") {
+        print("--> TÍN HIỆU: Cập nhật Profile/Quyền hạn từ Server");
+        _refreshUserProfileFromApi();
+      }
+    });
+  }
+
+  // 4. GỌI API LẤY THÔNG TIN MỚI NHẤT & CẬP NHẬT UI
+  Future<void> _refreshUserProfileFromApi() async {
+    try {
+      final userId = _currentUserInfo['id'].toString();
+
+      // Gọi API lấy thông tin user
+      final employees = await _employeeDataSource.getEmployees(userId);
+      final myProfile = employees.firstWhere(
+        (e) => e.id == userId,
+        orElse: () => throw Exception("User not found"),
+      );
+
+      // Tạo map thông tin mới (Giữ token cũ)
+      final newInfo = {
+        'id': myProfile.id,
+        'email': myProfile.email,
+        'fullName': myProfile.fullName,
+        'role': myProfile.role, // Role mới (quan trọng nhất)
+        'mobileNumber': myProfile.phone,
+        'dateOfBirth': myProfile.dateOfBirth,
+        'avatarUrl': myProfile.avatarUrl,
+        'token': _currentUserInfo['token'],
+      };
+
+      // Lưu đè vào Storage
+      await _storage.write(key: 'user_info', value: jsonEncode(newInfo));
+
+      // Cập nhật UI
+      if (mounted) {
+        setState(() {
+          _currentUserInfo = newInfo;
+          // Vẽ lại các trang với Role mới
+          _updatePages(myProfile.role);
+        });
+
+        // Check lại quyền HR (vì có thể vừa bị chuyển khỏi phòng HR)
+        _checkPermission();
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Your permissions have been updated to ${myProfile.role}',
+            ),
+            backgroundColor: AppColors.primary,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      print("Error refreshing profile realtime: $e");
+    }
+  }
+
+  // 5. HÀM DỰNG DANH SÁCH TRANG
   void _updatePages(String role) {
     _pages = [
       _buildHomeByRole(role),
-      _buildMenuPage(),
-      UserProfilePage(userInfo: widget.userInfo),
+      _buildMenuPage(role),
+      UserProfilePage(
+        userInfo: _currentUserInfo,
+      ), // Profile luôn nhận data mới nhất
     ];
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        backgroundColor: Colors.white,
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFFF9F9F9),
-
-      // Sử dụng IndexedStack để giữ trạng thái các trang
       body: IndexedStack(index: _currentIndex, children: _pages),
-
       floatingActionButton: SmartAiFab(
         onPressed: () {
           Navigator.push(
@@ -127,7 +230,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
           );
         },
       ),
-
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           boxShadow: [
@@ -179,30 +281,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildHomeByRole(String role) {
-    // 1. Lấy ID an toàn
-    int myId = int.tryParse(widget.userInfo['id'].toString()) ?? 0;
-
+    int myId = int.tryParse(_currentUserInfo['id'].toString()) ?? 0;
     switch (role) {
       case 'SUPER_ADMIN':
-        return AdminHomeView(currentUserId: myId); // 👈 Truyền ID vào
+        return AdminHomeView(currentUserId: myId);
       case 'COMPANY_ADMIN':
-        return DirectorHomeView(currentUserId: myId); // (Cái này đã làm rồi)
+        return DirectorHomeView(currentUserId: myId);
       case 'MANAGER':
-        return ManagerHomeView(currentUserId: myId); // 👈 Truyền ID vào
+        return ManagerHomeView(currentUserId: myId);
       case 'STAFF':
       default:
-        // Nếu bạn có file StaffHomeView thì cũng làm tương tự nhé, tạm thời tôi để code cũ
         return StaffHomeView(currentUserId: myId);
     }
   }
 
-  // ===========================================================================
-  // 1. SỬA HÀM _buildMenuPage ĐỂ PHÂN LOẠI MENU
-  // ===========================================================================
-  Widget _buildMenuPage() {
-    // Lấy role từ userInfo được truyền vào Dashboard
-    final String role = widget.userInfo['role'] ?? 'STAFF';
-
+  Widget _buildMenuPage(String role) {
     return SafeArea(
       child: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
@@ -221,7 +314,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     fontFamily: 'Inter',
                   ),
                 ),
-                // Hiển thị Role hiện tại để dễ debug
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 10,
@@ -243,10 +335,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
             ),
             const SizedBox(height: 24),
-
             LayoutBuilder(
               builder: (context, constraints) {
-                // 👇 TÁCH LOGIC TẠI ĐÂY
                 if (role == 'SUPER_ADMIN') {
                   return _buildSuperAdminMenu(context, constraints);
                 } else {
@@ -260,47 +350,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // ===========================================================================
-  // 2. MENU DÀNH RIÊNG CHO SUPER ADMIN (QUẢN TRỊ TOÀN APP)
-  // ===========================================================================
   Widget _buildSuperAdminMenu(
     BuildContext context,
     BoxConstraints constraints,
   ) {
-    // Chia đôi chiều rộng màn hình để xếp 2 ô 1 hàng
     final double itemWidth = (constraints.maxWidth - 16) / 2;
-
     return Wrap(
       spacing: 16,
       runSpacing: 16,
       children: [
-        // 1. Quản lý danh sách công ty (Core Feature của Admin)
         _buildMenuItem(
           context,
           title: 'Manage Companies',
           icon: PhosphorIconsFill.buildings,
-          color: const Color(0xFF2563EB), // Xanh đậm chuyên nghiệp
-          route:
-              '/admin_companies', // Cần đảm bảo route này đã khai báo trong main.dart
+          color: const Color(0xFF2563EB),
+          route: '/admin_companies',
           width: itemWidth,
         ),
-
-        // 2. Create New Admin
         _buildMenuItem(
           context,
-          title: 'New Admin', // Tiêu đề ngắn gọn
-          icon: PhosphorIconsFill.userPlus, // Icon thêm người
-          color: const Color(0xFF9333EA), // Màu Tím quyền lực
-          route: '/create_admin', // Dẫn tới trang tạo Admin
+          title: 'New Admin',
+          icon: PhosphorIconsFill.userPlus,
+          color: const Color(0xFF9333EA),
+          route: '/create_admin',
           width: itemWidth,
         ),
       ],
     );
   }
 
-  // ===========================================================================
-  // 3. MENU DÀNH CHO CÔNG TY (LOGIC CŨ CỦA BẠN)
-  // ===========================================================================
+  // --- MENU CÔNG TY (PHÂN QUYỀN) ---
   Widget _buildCompanyMenu(
     BuildContext context,
     BoxConstraints constraints,
@@ -308,8 +387,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   ) {
     final double itemWidth = (constraints.maxWidth - 16) / 2;
 
-    // Logic kiểm tra quyền HR (Giữ nguyên logic cũ của bạn)
-    bool canAccessHrAttendance =
+    // Check quyền nhân viên phòng HR (Admin hoặc có cờ _canAccessHrAttendance)
+    bool isHrPersonnel =
         (role == 'COMPANY_ADMIN' ||
         role == 'HR_MANAGER' ||
         _canAccessHrAttendance);
@@ -328,25 +407,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
           width: itemWidth,
         ),
 
-        // 2. Request Management (Cho Manager/Admin)
-        _buildMenuItem(
-          context,
-          title: 'Request Management',
-          icon: PhosphorIconsFill.clipboardText,
-          color: const Color(0xFFF97316),
-          route: '/manager_requests',
-          width: itemWidth,
-        ),
+        // 2. Request Management (Admin, Manager, HR Staff)
+        if (role == 'COMPANY_ADMIN' ||
+            role == 'MANAGER' ||
+            _canAccessHrAttendance)
+          _buildMenuItem(
+            context,
+            title: 'Request Management',
+            icon: PhosphorIconsFill.clipboardText,
+            color: const Color(0xFFF97316),
+            route: '/manager_requests',
+            width: itemWidth,
+          ),
 
-        // 3. HR Management (Quản lý nhân sự)
-        _buildMenuItem(
-          context,
-          title: 'HR Management',
-          icon: PhosphorIconsFill.usersThree,
-          color: const Color(0xFF8B5CF6),
-          route: '/employees',
-          width: itemWidth,
-        ),
+        // 3. HR Management (Chỉ Admin và Manager)
+        if (role == 'COMPANY_ADMIN' || role == 'MANAGER')
+          _buildMenuItem(
+            context,
+            title: 'HR Management',
+            icon: PhosphorIconsFill.usersThree,
+            color: const Color(0xFF8B5CF6),
+            route: '/employees',
+            width: itemWidth,
+          ),
 
         // 4. Personal Notes
         _buildMenuItem(
@@ -358,7 +441,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           width: itemWidth,
         ),
 
-        // 5. Task Management (Truyền role vào để phân quyền bên trong màn hình Task)
+        // 5. Task Management
         _buildMenuItem(
           context,
           title: 'Task Management',
@@ -369,7 +452,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           width: itemWidth,
         ),
 
-        // 6. Attendance (Chấm công cá nhân)
+        // 6. Attendance
         _buildMenuItem(
           context,
           title: 'Attendance',
@@ -379,8 +462,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           width: itemWidth,
         ),
 
-        // 7. HR Attendance (Xem báo cáo chấm công)
-        if (canAccessHrAttendance)
+        // 7. HR Attendance (Báo cáo chấm công)
+        if (isHrPersonnel)
           _buildMenuItem(
             context,
             title: 'HR Attendance',
@@ -393,7 +476,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 : 'HR_MANAGER',
           ),
 
-        // 8. Company Profile (Chỉ Company Admin được sửa thông tin công ty)
+        // 8. Company Profile
         if (role == 'COMPANY_ADMIN')
           _buildMenuItem(
             context,
@@ -407,9 +490,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // ===========================================================================
-  // 4. CẬP NHẬT WIDGET Ô MENU (HỖ TRỢ ONTAP MỞ RỘNG)
-  // ===========================================================================
   Widget _buildMenuItem(
     BuildContext context, {
     required String title,
@@ -418,7 +498,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     required String route,
     required double width,
     Object? arguments,
-    VoidCallback? onTapOverride, // Thêm tham số này
+    VoidCallback? onTapOverride,
   }) {
     return Container(
       width: width,
@@ -438,7 +518,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         color: Colors.transparent,
         borderRadius: BorderRadius.circular(20),
         child: InkWell(
-          // Nếu có onTapOverride thì dùng, không thì pushNamed mặc định
           onTap:
               onTapOverride ??
               () {
@@ -477,11 +556,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 }
 
-// --- DÁN ĐÈ CÁI NÀY VÀO CUỐI FILE dashboard_screen.dart ---
-
+// Widget Floating Action Button AI
 class SmartAiFab extends StatefulWidget {
   final VoidCallback onPressed;
-
   const SmartAiFab({super.key, required this.onPressed});
 
   @override
@@ -493,7 +570,6 @@ class _SmartAiFabState extends State<SmartAiFab> with TickerProviderStateMixin {
   late Animation<double> _bubbleAnimation;
   late AnimationController _pulseController;
 
-  // [PRO] Danh sách câu thoại ngắn gọn, đúng trọng tâm công việc
   final List<String> _aiMessages = [
     "Ready to assist",
     "How can I help?",
@@ -507,39 +583,29 @@ class _SmartAiFabState extends State<SmartAiFab> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-
-    // 1. Animation Bong bóng: Mượt mà, dứt khoát (Không nảy tưng tưng)
     _bubbleController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 600), // Tốc độ vừa phải
+      duration: const Duration(milliseconds: 600),
     );
-
     _bubbleAnimation = CurvedAnimation(
       parent: _bubbleController,
-      curve:
-          Curves.easeOutBack, // Hiệu ứng trượt ra và khóa vị trí (Professional)
+      curve: Curves.easeOutBack,
       reverseCurve: Curves.easeInBack,
     );
-
-    // 2. Animation Nút: Nhịp thở nhẹ nhàng (Subtle Pulse)
     _pulseController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 3), // Chậm rãi hơn
+      duration: const Duration(seconds: 3),
     )..repeat();
-
     _scheduleMessageLoop();
   }
 
   void _scheduleMessageLoop() async {
     await Future.delayed(const Duration(seconds: 2));
     if (!mounted) return;
-
     setState(() {
       _currentMessage = _aiMessages[DateTime.now().second % _aiMessages.length];
     });
     _bubbleController.forward();
-
-    // Hiện lâu hơn một chút để người dùng kịp đọc
     await Future.delayed(const Duration(seconds: 6));
     if (!mounted) return;
     _bubbleController.reverse();
@@ -547,14 +613,11 @@ class _SmartAiFabState extends State<SmartAiFab> with TickerProviderStateMixin {
     while (mounted) {
       await Future.delayed(const Duration(seconds: 15));
       if (!mounted) return;
-
       setState(() {
         _currentMessage =
             _aiMessages[DateTime.now().second % _aiMessages.length];
       });
-
       _bubbleController.forward();
-
       await Future.delayed(const Duration(seconds: 6));
       if (!mounted) return;
       _bubbleController.reverse();
@@ -574,33 +637,25 @@ class _SmartAiFabState extends State<SmartAiFab> with TickerProviderStateMixin {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        // 1. MESSAGE BUBBLE (Premium Look)
         FadeTransition(
           opacity: _bubbleAnimation,
           child: SlideTransition(
             position: Tween<Offset>(
-              begin: const Offset(0, 0.2), // Trượt nhẹ từ dưới lên
+              begin: const Offset(0, 0.2),
               end: Offset.zero,
             ).animate(_bubbleAnimation),
-
             child: Container(
-              margin: const EdgeInsets.only(
-                bottom: 12,
-                right: 2,
-              ), // Căn chỉnh lề chuẩn
+              margin: const EdgeInsets.only(bottom: 12, right: 2),
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               decoration: BoxDecoration(
                 color: Colors.white,
-                // Bo tròn hoàn toàn (Pill Shape) nhìn hiện đại hơn
                 borderRadius: BorderRadius.circular(30),
                 boxShadow: [
-                  // Lớp bóng 1: Mờ, rộng (Ambient)
                   BoxShadow(
                     color: Colors.black.withOpacity(0.05),
                     blurRadius: 20,
                     offset: const Offset(0, 10),
                   ),
-                  // Lớp bóng 2: Đậm, hẹp (Direct)
                   BoxShadow(
                     color: const Color(0xFF2260FF).withOpacity(0.1),
                     blurRadius: 10,
@@ -611,37 +666,50 @@ class _SmartAiFabState extends State<SmartAiFab> with TickerProviderStateMixin {
               child: Text(
                 _currentMessage,
                 style: const TextStyle(
-                  color: Color(
-                    0xFF334155,
-                  ), // Màu xám xanh đậm (Slate 700) - Sang hơn đen tuyền
-                  fontWeight: FontWeight.w500, // Medium weight
+                  color: Color(0xFF334155),
+                  fontWeight: FontWeight.w500,
                   fontSize: 14,
                   fontFamily: 'Inter',
-                  letterSpacing: 0.3, // Giãn chữ nhẹ cho thoáng
+                  letterSpacing: 0.3,
                 ),
               ),
             ),
           ),
         ),
-
-        // 2. AI FAB BUTTON (Glow Effect)
         SizedBox(
           width: 64,
           height: 64,
           child: Stack(
             alignment: Alignment.center,
             children: [
-              // Vòng Glow lan tỏa mờ ảo
-              _buildSubtlePulse(),
-
-              // Nút chính
+              FadeTransition(
+                opacity: Tween(begin: 0.3, end: 0.0).animate(
+                  CurvedAnimation(
+                    parent: _pulseController,
+                    curve: Curves.easeInOut,
+                  ),
+                ),
+                child: ScaleTransition(
+                  scale: Tween(begin: 1.0, end: 1.5).animate(
+                    CurvedAnimation(
+                      parent: _pulseController,
+                      curve: Curves.easeInOut,
+                    ),
+                  ),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: const Color(0xFF3B82F6).withOpacity(0.2),
+                    ),
+                  ),
+                ),
+              ),
               GestureDetector(
                 onTap: widget.onPressed,
                 child: Container(
                   width: 56,
                   height: 56,
                   decoration: BoxDecoration(
-                    // Gradient chéo nhẹ nhàng
                     gradient: const LinearGradient(
                       colors: [Color(0xFF3B82F6), Color(0xFF2563EB)],
                       begin: Alignment.topLeft,
@@ -657,15 +725,12 @@ class _SmartAiFabState extends State<SmartAiFab> with TickerProviderStateMixin {
                     ],
                   ),
                   child: const Icon(
-                    Icons
-                        .smart_toy_outlined, // Dùng Outlined icon nhìn thanh thoát hơn
+                    Icons.smart_toy_outlined,
                     color: Colors.white,
                     size: 26,
                   ),
                 ),
               ),
-
-              // [Chi tiết nhỏ] Chấm xanh Online (Status Dot)
               Positioned(
                 right: 2,
                 top: 2,
@@ -673,7 +738,7 @@ class _SmartAiFabState extends State<SmartAiFab> with TickerProviderStateMixin {
                   width: 14,
                   height: 14,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF10B981), // Green Emerald
+                    color: const Color(0xFF10B981),
                     shape: BoxShape.circle,
                     border: Border.all(color: Colors.white, width: 2),
                   ),
@@ -683,28 +748,6 @@ class _SmartAiFabState extends State<SmartAiFab> with TickerProviderStateMixin {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildSubtlePulse() {
-    return FadeTransition(
-      opacity: Tween(begin: 0.3, end: 0.0).animate(
-        CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
-      ),
-      child: ScaleTransition(
-        scale: Tween(begin: 1.0, end: 1.5).animate(
-          // Lan tỏa vừa phải
-          CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
-        ),
-        child: Container(
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: const Color(
-              0xFF3B82F6,
-            ).withOpacity(0.2), // Màu nền mờ thay vì viền
-          ),
-        ),
-      ),
     );
   }
 }

@@ -458,11 +458,47 @@ class _UserProfilePageState extends State<UserProfilePage> {
                             color: AppColors.primary,
                             size: 24,
                           ),
-                          onPressed: () => Navigator.pushNamedAndRemoveUntil(
-                            context,
-                            '/dashboard',
-                            (route) => false,
-                          ),
+                          // [SỬA LOGIC BACK]
+                          onPressed: () async {
+                            // Ưu tiên 1: Pop nếu có thể (Giữ nguyên trạng thái cũ)
+                            if (Navigator.canPop(context)) {
+                              Navigator.pop(context);
+                              return;
+                            }
+
+                            // Ưu tiên 2: Nếu bắt buộc phải reset về Dashboard
+                            // Ta phải đảm bảo dữ liệu userInfo truyền về là ĐẦY ĐỦ nhất
+                            Map<String, dynamic> dataToPass = Map.of(
+                              widget.userInfo,
+                            );
+
+                            // Nếu dữ liệu hiện tại bị thiếu Role hoặc ID
+                            if (dataToPass.isEmpty ||
+                                dataToPass['role'] == null ||
+                                dataToPass['id'] == null) {
+                              try {
+                                // Đọc lại từ Storage
+                                String? storedInfo = await _storage.read(
+                                  key: 'user_info',
+                                );
+                                if (storedInfo != null) {
+                                  dataToPass = jsonDecode(storedInfo);
+                                }
+                              } catch (e) {
+                                print("Error reading storage for nav: $e");
+                              }
+                            }
+
+                            if (context.mounted) {
+                              Navigator.pushNamedAndRemoveUntil(
+                                context,
+                                '/dashboard',
+                                (route) => false,
+                                arguments:
+                                    dataToPass, // Truyền map đầy đủ quyền
+                              );
+                            }
+                          },
                         ),
                         const Expanded(
                           child: Center(

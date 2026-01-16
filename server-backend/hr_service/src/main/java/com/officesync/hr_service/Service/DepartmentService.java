@@ -5,7 +5,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
 import java.util.stream.Collectors;
-
+import org.springframework.messaging.simp.SimpMessagingTemplate; // [1] IMPORT
 import org.springframework.beans.factory.annotation.Autowired; 
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
@@ -38,6 +38,7 @@ public class DepartmentService {
     private final EmployeeProducer employeeProducer;
     private final RequestRepository requestRepository; 
     private DepartmentService self;
+    private final SimpMessagingTemplate messagingTemplate;
     @Autowired
     public void setSelf(@Lazy DepartmentService self) {
         this.self = self;
@@ -46,6 +47,16 @@ public class DepartmentService {
     private void requireAdminRole(Employee actor) {
         if (actor.getRole() != EmployeeRole.COMPANY_ADMIN) {
             throw new RuntimeException("Access Denied: Chỉ có COMPANY_ADMIN mới được thực hiện thao tác này.");
+        }
+    }
+    // [MỚI] Hàm helper để bắn Socket Refresh Profile
+    private void sendProfileRefreshSocket(Long userId) {
+        try {
+            String dest = "/topic/user/" + userId + "/profile";
+            messagingTemplate.convertAndSend(dest, "REFRESH_PROFILE");
+            log.info("--> WebSocket: Đã gửi lệnh REFRESH_PROFILE tới user {}", userId);
+        } catch (Exception e) {
+            log.error("Lỗi gửi socket profile: {}", e.getMessage());
         }
     }
 // [MỚI] Hàm logic đảm bảo chỉ có 1 phòng HR trong công ty
@@ -106,6 +117,7 @@ public class DepartmentService {
             newManager.setDepartment(savedDept);
             if (newManager.getRole() != EmployeeRole.MANAGER) {
                 newManager.setRole(EmployeeRole.MANAGER);
+                sendProfileRefreshSocket(newManager.getId());
             }
             
             employeeRepository.save(newManager);
@@ -130,10 +142,12 @@ public class DepartmentService {
                         departmentRepository.save(oldDept.get());
                     }
                     emp.setRole(EmployeeRole.STAFF);
+                    sendProfileRefreshSocket(emp.getId());
                     // [EN] Notification: Demotion/Role Change
                     sendNotification(emp, "Position Change", 
                         "You have been transferred to " + savedDept.getName() + " with the role of Staff.");
                 }else {
+                    sendProfileRefreshSocket(emp.getId());
                     // [EN] Notification: Transfer
                     sendNotification(emp, "Personnel Transfer", 
                         "You have been added to department: " + savedDept.getName());
@@ -185,7 +199,7 @@ public class DepartmentService {
                     // [QUAN TRỌNG] Dùng saveAndFlush để Database cập nhật ngay lập tức
                     employeeRepository.saveAndFlush(oldManager);
                     syncEmployeeToCore(oldManager);
-                    
+                    sendProfileRefreshSocket(oldManager.getId());
                     // [EN] Notification: Dismiss Old Manager
                     sendNotification(oldManager, "Manager Role Ended", 
                         "You are no longer the Manager of " + currentDept.getName() + ". Current role: Staff.");
@@ -217,7 +231,7 @@ public class DepartmentService {
                 // [QUAN TRỌNG] Flush ngay
                 employeeRepository.saveAndFlush(newManager);
                 syncEmployeeToCore(newManager);
-                
+                sendProfileRefreshSocket(newManager.getId());
                 currentDept.setManager(newManager);
                 // [EN] Notification: Appoint New Manager
                 sendNotification(newManager, "Manager Appointment", 
@@ -231,6 +245,7 @@ public class DepartmentService {
                 // [QUAN TRỌNG] Flush ngay
                 employeeRepository.saveAndFlush(oldManager);
                 syncEmployeeToCore(oldManager);
+                sendProfileRefreshSocket(oldManager.getId());
                 currentDept.setManager(null);
                 
                 // [EN] Notification: Dismiss Manager
@@ -282,6 +297,10 @@ public class DepartmentService {
             if (emp.getRole() == EmployeeRole.MANAGER) {
                 emp.setRole(EmployeeRole.STAFF);
                 syncEmployeeToCore(emp);
+                sendProfileRefreshSocket(emp.getId());
+            }else {
+                // --> [SOCKET] Báo mất phòng ban (về Unassigned)
+                sendProfileRefreshSocket(emp.getId());
             }
         }
         employeeRepository.saveAll(employees);
