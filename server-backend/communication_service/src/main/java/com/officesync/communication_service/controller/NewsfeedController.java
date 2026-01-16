@@ -25,10 +25,17 @@ public class NewsfeedController {
     }
 
     @GetMapping
-    public ResponseEntity<?> getPosts(@AuthenticationPrincipal User currentUser) {
-        Long companyId = 1L; 
-        return ResponseEntity.ok(newsfeedService.getPosts(companyId, currentUser.getId()));
-    }
+public ResponseEntity<?> getPosts(@AuthenticationPrincipal User currentUser) {
+    // 1. Lấy ID công ty từ User đang đăng nhập
+    Long companyId = currentUser.getCompanyId(); 
+    
+    // 2. Phòng hờ null (nếu data lỗi) thì fallback về 1
+    if (companyId == null) companyId = 1L; 
+    
+    System.out.println("--> Đang lấy bài viết cho Company ID: " + companyId); // Thêm log để debug
+    
+    return ResponseEntity.ok(newsfeedService.getPosts(companyId, currentUser.getId()));
+}
 
     @PostMapping("/{postId}/react")
     public ResponseEntity<?> react(@PathVariable Long postId, 

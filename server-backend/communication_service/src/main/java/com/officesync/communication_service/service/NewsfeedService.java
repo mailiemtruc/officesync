@@ -19,28 +19,55 @@ public class NewsfeedService {
     @Autowired private PostCommentRepository commentRepository;
     @Autowired private UserRepository userRepository;
     @Autowired private PostViewRepository viewRepository;
+    @Autowired private NotificationProducer notificationProducer;
+    // Danh sách các vai trò được phép bắn thông báo (VIP)
+    private static final List<String> VIP_ROLES = List.of("COMPANY_ADMIN", "MANAGER", "DIRECTOR");
+    
     // 1. Tạo bài viết
+    // 1. TẠO BÀI VIẾT (Đã tích hợp Notification cho VIP)
     public Post createPost(PostRequestDTO request, User currentUser) {
-        // 1. Logic Lazy Sync: Cập nhật User nếu Avatar thay đổi
+        // A. Logic Lazy Sync: Cập nhật User nếu Avatar thay đổi
         if (request.getUserAvatar() != null && !request.getUserAvatar().isEmpty()) {
             if (!request.getUserAvatar().equals(currentUser.getAvatarUrl())) {
                 currentUser.setAvatarUrl(request.getUserAvatar());
                 userRepository.save(currentUser); // Lưu avatar mới vào DB
             }
         }
+
+        // B. Tạo bài viết
         Post post = new Post();
         post.setContent(request.getContent());
         post.setImageUrl(request.getImageUrl());
         post.setAuthorId(currentUser.getId());
-        
-        // Fix cứng companyId=1 nếu user chưa có hàm get
-        // post.setCompanyId(currentUser.getCompanyId()); 
-        post.setCompanyId(1L); 
-        
-        post.setAuthorName(currentUser.getEmail()); 
+        post.setCompanyId(currentUser.getCompanyId() != null ? currentUser.getCompanyId() : 1L); // Lấy CompanyID chuẩn
+        post.setAuthorName(currentUser.getFullName());
         post.setAuthorAvatar(currentUser.getAvatarUrl());
         
-        return postRepository.save(post);
+        Post savedPost = postRepository.save(post);
+
+        // C. LOGIC THÔNG BÁO: Chỉ bắn thông báo nếu là Sếp (VIP)
+        if (VIP_ROLES.contains(currentUser.getRole())) {
+            // Lấy danh sách toàn bộ nhân viên công ty
+            List<User> allEmployees = userRepository.findAllByCompanyId(savedPost.getCompanyId());
+
+            for (User employee : allEmployees) {
+                // Không báo lại cho chính người đăng
+                if (!employee.getId().equals(currentUser.getId())) {
+                    NotificationEvent event = NotificationEvent.builder()
+                            .userId(employee.getId())
+                            .title("📢 THÔNG BÁO TỪ " + currentUser.getFullName().toUpperCase())
+                            .body(getShortContent(savedPost.getContent())) // Cắt ngắn nội dung
+                            .type("ANNOUNCEMENT") // Loại tin quan trọng
+                            .referenceId(savedPost.getId())
+                            .build();
+                    
+                    // Gửi RabbitMQ
+                    notificationProducer.sendNotification(event);
+                }
+            }
+        }
+
+        return savedPost;
     }
 
     // 2. Lấy danh sách bài viết (Đã sửa để luôn hiện Avatar mới nhất)
@@ -114,17 +141,19 @@ public class NewsfeedService {
         }).collect(Collectors.toList());
     }
 
-    // 2. CẬP NHẬT HÀM: THÊM BÌNH LUẬN (Trả về DTO)
+   // 2. THÊM BÌNH LUẬN (Đã tích hợp Notification cho chủ bài viết)
     public CommentResponseDTO addComment(Long postId, Long userId, CommentRequestDTO request) {
         User user = userRepository.findById(userId).orElse(null);
 
-        // 1. Logic Lazy Sync
+        // A. Logic Lazy Sync
         if (user != null && request.getUserAvatar() != null && !request.getUserAvatar().isEmpty()) {
             if (!request.getUserAvatar().equals(user.getAvatarUrl())) {
                 user.setAvatarUrl(request.getUserAvatar());
                 userRepository.save(user);
             }
         }
+
+        // B. Lưu Comment
         PostComment comment = new PostComment();
         comment.setPostId(postId);
         comment.setUserId(userId);
@@ -137,7 +166,26 @@ public class NewsfeedService {
         }
 
         PostComment savedComment = commentRepository.save(comment);
-      
+
+        // C. LOGIC THÔNG BÁO: Báo cho chủ bài viết
+        Post post = postRepository.findById(postId).orElse(null);
+        String commenterName = (user != null) ? user.getFullName() : "Ai đó";
+
+        // Chỉ báo nếu người comment KHÔNG PHẢI là chủ bài viết
+        if (post != null && !post.getAuthorId().equals(userId)) {
+            NotificationEvent event = NotificationEvent.builder()
+                    .userId(post.getAuthorId()) // Gửi cho chủ bài viết
+                    .title("Bình luận mới")
+                    .body(commenterName + " đã bình luận: " + getShortContent(savedComment.getContent()))
+                    .type("COMMENT")
+                    .referenceId(postId)
+                    .build();
+
+            notificationProducer.sendNotification(event);
+        }
+
+        // (Tùy chọn) Báo cho người được reply nếu đây là reply comment
+        // ... (Bạn có thể thêm logic báo cho comment cha ở đây nếu muốn)
 
         return CommentResponseDTO.builder()
                 .id(savedComment.getId())
@@ -148,6 +196,12 @@ public class NewsfeedService {
                 .authorAvatar(user != null ? user.getAvatarUrl() : "https://ui-avatars.com/api/?name=U")
                 .createdAt(savedComment.getCreatedAt())
                 .build();
+    }
+
+    // Hàm phụ trợ: Cắt ngắn nội dung để hiển thị trên thông báo cho đẹp
+    private String getShortContent(String content) {
+        if (content == null || content.isEmpty()) return "đã gửi một ảnh";
+        return content.length() > 50 ? content.substring(0, 47) + "..." : content;
     }
     // Hàm đếm lượt xem
     public void viewPost(Long postId, Long userId) {
