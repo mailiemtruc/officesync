@@ -1,8 +1,14 @@
 import 'dart:convert';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:http/http.dart' as http;
 import 'models/notification_model.dart';
+import '../../main.dart';
+// 👇 [THÊM 2] Import các màn hình bạn muốn nhảy tới
+import 'package:officesync/features/chat_service/presentation/pages/chat_detail_screen.dart';
+// import '../task/presentation/pages/task_detail_screen.dart'; // Sau này mở cái này
+// import '../hr/presentation/pages/request_detail_screen.dart'; // Sau này mở cái này
 
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
@@ -40,6 +46,18 @@ class NotificationService {
       // 3. Cấu hình Local Notification (để hiện thông báo khi App đang mở)
       await _initLocalNotifications();
 
+      // 👇 [THÊM 3] Xử lý khi App đang TẮT hẳn mà bấm thông báo
+      _firebaseMessaging.getInitialMessage().then((message) {
+        if (message != null) {
+          _handleMessageClick(message);
+        }
+      });
+
+      // 👇 [THÊM 4] Xử lý khi App đang CHẠY NGẦM mà bấm thông báo
+      FirebaseMessaging.onMessageOpenedApp.listen((message) {
+        _handleMessageClick(message);
+      });
+
       // 4. Lắng nghe khi App đang mở (Foreground)
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
         print("🔔 Nhận tin khi đang mở App: ${message.notification?.title}");
@@ -51,6 +69,51 @@ class NotificationService {
       });
     } else {
       print('❌ Người dùng từ chối quyền thông báo');
+    }
+  }
+
+  // 👇 [THÊM 5] HÀM ĐIỀU HƯỚNG THÔNG MINH (SWITCH CASE)
+  void _handleMessageClick(RemoteMessage message) {
+    final data = message.data;
+    // Backend gửi: .putData("type", "CHAT") .putData("referenceId", "123")
+    String? type = data['type'];
+    String? idStr = data['referenceId'];
+
+    // Tiêu đề thông báo (để làm tên màn hình nếu cần)
+    String title = message.notification?.title ?? "Chat";
+
+    print("👆 Người dùng bấm thông báo: Type=$type, ID=$idStr");
+
+    if (type == null || idStr == null) return;
+    int id = int.parse(idStr);
+
+    // Dùng switch case để chia luồng
+    switch (type) {
+      case 'CHAT':
+        // Dùng navigatorKey để đẩy màn hình mới vào
+        navigatorKey.currentState?.push(
+          MaterialPageRoute(
+            builder: (_) => ChatDetailScreen(
+              roomId: id,
+              chatName: title, // Lấy tạm title làm tên người chat
+              // Các tham số khác để mặc định hoặc null
+            ),
+          ),
+        );
+        break;
+
+      case 'TASK':
+        // Ví dụ cho tương lai
+        print("➡️ Đang mở Task ID: $id");
+        // navigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => TaskDetailScreen(taskId: id)));
+        break;
+
+      case 'LEAVE_REQUEST':
+        print("➡️ Đang mở Đơn nghỉ phép ID: $id");
+        break;
+
+      default:
+        print("⚠️ Loại thông báo chưa hỗ trợ: $type");
     }
   }
 
@@ -68,19 +131,19 @@ class NotificationService {
 
     await _localNotifications.initialize(initSettings);
     const AndroidNotificationChannel channel = AndroidNotificationChannel(
-      'high_importance_channel',      // id (Phải trùng với Backend)
+      'high_importance_channel', // id (Phải trùng với Backend)
       'High Importance Notifications', // name
       description: 'This channel is used for important notifications.',
-      importance: Importance.max,      // ✅ Mức độ cao nhất (Banner + Âm thanh)
+      importance: Importance.max, // ✅ Mức độ cao nhất (Banner + Âm thanh)
     );
 
     await _localNotifications
         .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
+          AndroidFlutterLocalNotificationsPlugin
+        >()
         ?.createNotificationChannel(channel);
-    
+
     print("✅ Đã tạo kênh thông báo: high_importance_channel");
-  
   }
 
   // Hàm hiển thị thông báo dạng Banner

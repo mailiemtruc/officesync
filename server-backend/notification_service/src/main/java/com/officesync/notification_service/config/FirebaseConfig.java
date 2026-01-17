@@ -23,6 +23,9 @@ public class FirebaseConfig {
                 // 1. Cố gắng đọc file
                 ClassPathResource resource = new ClassPathResource("service-account.json");
                 
+                System.out.println("📂 Đang đọc file key tại: " + resource.getFile().getAbsolutePath());
+                System.out.println("🔑 Kích thước file: " + resource.contentLength() + " bytes");
+                
                 // Kiểm tra xem file có tồn tại thật không
                 if (!resource.exists()) {
                     throw new RuntimeException("❌ TÌM KHÔNG THẤY FILE 'service-account.json' TRONG RESOURCES!");

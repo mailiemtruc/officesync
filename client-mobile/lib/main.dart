@@ -33,6 +33,8 @@ import 'features/task_service/presentation/pages/company_admin_page.dart';
 import 'features/task_service/presentation/pages/manager_page.dart';
 import 'features/task_service/presentation/pages/staff_page.dart';
 
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
 // 👇 1. THÊM HÀM NÀY Ở NGOÀI CÙNG (Trước hàm main)
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -60,6 +62,7 @@ class OfficeSyncApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'OfficeSync',
+      navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
