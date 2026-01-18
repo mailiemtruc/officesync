@@ -17,12 +17,12 @@ class WebSocketService {
 
   bool get isConnected => _client?.connected ?? false;
 
-  // 1. Hàm kết nối
+  // 1. Hàm kết nối (Được tối ưu để tránh tạo nhiều kết nối thừa)
   void connect() {
-    // Nếu đã kết nối rồi thì thôi
+    // Nếu client đang tồn tại và đã kết nối -> Không làm gì cả
     if (_client != null && _client!.connected) return;
 
-    // [QUAN TRỌNG] Hủy instance cũ nếu nó đang tồn tại nhưng bị lỗi kết nối
+    // [QUAN TRỌNG] Hủy client cũ nếu nó đang bị treo hoặc lỗi
     if (_client != null) {
       _client!.deactivate();
     }
@@ -35,6 +35,7 @@ class WebSocketService {
         },
         onWebSocketError: (dynamic error) => debugPrint("❌ [WS] Error: $error"),
         onDisconnect: (f) => debugPrint("🔌 [WS] Disconnected"),
+        // [QUAN TRỌNG] Tăng thời gian chờ và delay kết nối lại
         connectionTimeout: const Duration(seconds: 10),
         reconnectDelay: const Duration(seconds: 5),
       ),
@@ -43,7 +44,7 @@ class WebSocketService {
     _client?.activate();
   }
 
-  // 2. Ngắt kết nối
+  // 2. Ngắt kết nối (Gọi khi Logout)
   void disconnect() {
     _client?.deactivate();
     _client = null;
@@ -51,13 +52,16 @@ class WebSocketService {
   }
 
   // 3. Hàm đăng ký nhận tin (ĐÃ SỬA LỖI CRASH)
-  dynamic subscribe(String destination, Function(dynamic) callback) {
+  // Chuyển thành async để có thể chờ kết nối nếu cần
+  dynamic subscribe(String destination, Function(dynamic) callback) async {
     // Bước 1: Đảm bảo đã gọi kết nối
     if (_client == null || !_client!.isActive) {
       connect();
+      // [FIX LỖI] Chờ nhẹ 500ms để StompClient kịp khởi tạo Handler
+      await Future.delayed(const Duration(milliseconds: 500));
     }
 
-    // Bước 2: Thử subscribe với Try-Catch
+    // Bước 2: Thử subscribe và bắt lỗi nếu client chưa sẵn sàng
     try {
       return _client?.subscribe(
         destination: destination,
@@ -73,15 +77,18 @@ class WebSocketService {
         },
       );
     } catch (e) {
-      // [FIX LỖI] Nếu gặp lỗi StompHandler was null -> Reset client và thử lại ngay lập tức
+      // [FIX LỖI HÌNH ẢNH] Bắt lỗi "StompHandler was null"
       debugPrint(
         "⚠️ [WS] Subscribe error: $e. Attempting to force reconnect...",
       );
 
       _client = null; // Xóa client lỗi
-      connect(); // Tạo client mới và activate ngay
+      connect(); // Kết nối lại từ đầu
 
-      // Thử subscribe lại lần nữa
+      // Chờ 1 giây cho chắc chắn kết nối xong
+      await Future.delayed(const Duration(seconds: 1));
+
+      // Thử subscribe lại lần 2
       try {
         return _client?.subscribe(
           destination: destination,
@@ -98,7 +105,7 @@ class WebSocketService {
         );
       } catch (e2) {
         debugPrint("❌ [WS] Retry failed: $e2");
-        return null; // Trả về null để UI không bị crash app
+        return null; // Trả về null để App không bị Crash
       }
     }
   }
