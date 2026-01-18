@@ -51,23 +51,24 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
     List<Employee> findByCompanyIdAndRole(@Param("companyId") Long companyId, @Param("role") EmployeeRole role);
 
 
-    // --- CÁC HÀM SEARCH (CẦN TỐI ƯU NHẤT) ---
 
-    // [TỐI ƯU] Search Employees: Thêm LEFT JOIN FETCH e.department
     @Query("SELECT e FROM Employee e LEFT JOIN FETCH e.department WHERE e.companyId = :companyId " +
            "AND (LOWER(e.fullName) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
-           "OR LOWER(e.employeeCode) LIKE LOWER(CONCAT('%', :keyword, '%')))")
+           "OR LOWER(e.employeeCode) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
+           "OR LOWER(e.department.name) LIKE LOWER(CONCAT('%', :keyword, '%')) " +           // [SỬA] Dùng e.department
+           "OR LOWER(e.department.departmentCode) LIKE LOWER(CONCAT('%', :keyword, '%')))")  // [SỬA] Dùng e.department
     List<Employee> searchEmployees(@Param("companyId") Long companyId, @Param("keyword") String keyword);
 
-    // [TỐI ƯU] Search Staff For Selection (Manager/Member)
-    // Logic phức tạp + Hiệu năng cao
+ 
     @Query("SELECT e FROM Employee e LEFT JOIN FETCH e.department WHERE " +
            "e.companyId = :companyId " +
            "AND e.id <> :requesterId " + 
            "AND e.status = 'ACTIVE' " + 
            "AND e.role <> 'COMPANY_ADMIN' " + 
            "AND (LOWER(e.fullName) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
-           "OR LOWER(e.employeeCode) LIKE LOWER(CONCAT('%', :keyword, '%')))")
+           "OR LOWER(e.employeeCode) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
+           "OR LOWER(e.department.name) LIKE LOWER(CONCAT('%', :keyword, '%')) " +           // [SỬA] Dùng e.department
+           "OR LOWER(e.department.departmentCode) LIKE LOWER(CONCAT('%', :keyword, '%')))")  // [SỬA] Dùng e.department
     List<Employee> searchStaffForSelection(
         @Param("companyId") Long companyId, 
         @Param("requesterId") Long requesterId, 

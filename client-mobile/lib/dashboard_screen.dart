@@ -130,17 +130,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     final wsService = WebSocketService();
 
-    // Đảm bảo kết nối
+    // Đảm bảo kết nối nếu chưa kết nối
     if (!wsService.isConnected) {
-      // [SỬA LỖI TẠI ĐÂY] Xóa callback đi, chỉ gọi connect() trống
       wsService.connect();
       print("Socket Connected for Dashboard");
     }
 
     // Subscribe topic riêng tư: /topic/user/{id}/profile
-    wsService.subscribe('/topic/user/$userId/profile', (message) {
+    wsService.subscribe('/topic/user/$userId/profile', (message) async {
       if (message == "REFRESH_PROFILE") {
         print("--> TÍN HIỆU: Cập nhật Profile/Quyền hạn từ Server");
+
+        // [QUAN TRỌNG] Thêm Delay 500ms để chờ Backend commit Transaction xong
+        // Tránh trường hợp Mobile gọi API quá nhanh khi Server chưa lưu kịp dữ liệu mới
+        await Future.delayed(const Duration(milliseconds: 500));
+
+        // Tiến hành gọi API lấy dữ liệu mới
         _refreshUserProfileFromApi();
       }
     });
@@ -151,48 +156,43 @@ class _DashboardScreenState extends State<DashboardScreen> {
     try {
       final userId = _currentUserInfo['id'].toString();
 
-      // Gọi API lấy thông tin user
+      // Gọi API lấy danh sách nhân viên (hoặc chi tiết nhân viên) mới nhất
       final employees = await _employeeDataSource.getEmployees(userId);
+
+      // Tìm thông tin của chính mình trong danh sách trả về
       final myProfile = employees.firstWhere(
         (e) => e.id == userId,
-        orElse: () => throw Exception("User not found"),
+        orElse: () => throw Exception("User not found in response"),
       );
 
-      // Tạo map thông tin mới (Giữ token cũ)
+      // Tạo map thông tin mới (Lưu ý: Phải giữ lại Token cũ để không bị logout)
       final newInfo = {
         'id': myProfile.id,
         'email': myProfile.email,
         'fullName': myProfile.fullName,
-        'role': myProfile.role, // Role mới (quan trọng nhất)
+        'role': myProfile.role, // Role mới cập nhật (quan trọng)
         'mobileNumber': myProfile.phone,
         'dateOfBirth': myProfile.dateOfBirth,
         'avatarUrl': myProfile.avatarUrl,
-        'token': _currentUserInfo['token'],
+        'token': _currentUserInfo['token'], // [QUAN TRỌNG] Giữ nguyên token
       };
 
-      // Lưu đè vào Storage
+      // Lưu đè thông tin mới vào Storage (để lần sau mở app cập nhật đúng)
       await _storage.write(key: 'user_info', value: jsonEncode(newInfo));
 
       // Cập nhật UI
       if (mounted) {
         setState(() {
+          // Cập nhật biến State
           _currentUserInfo = newInfo;
-          // Vẽ lại các trang với Role mới
+
+          // Vẽ lại các trang (Menu, Home) dựa trên Role mới
+          // Đồng thời UserProfilePage sẽ nhận được _currentUserInfo mới -> Trigger didUpdateWidget
           _updatePages(myProfile.role);
         });
 
-        // Check lại quyền HR (vì có thể vừa bị chuyển khỏi phòng HR)
+        // Kiểm tra lại quyền HR/Attendance (trong trường hợp vừa bị remove khỏi phòng HR)
         _checkPermission();
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Your permissions have been updated to ${myProfile.role}',
-            ),
-            backgroundColor: AppColors.primary,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
       }
     } catch (e) {
       print("Error refreshing profile realtime: $e");

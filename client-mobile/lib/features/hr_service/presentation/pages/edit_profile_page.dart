@@ -30,7 +30,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
   bool _isLoading = false;
   bool _isUploadingAvatar = false;
   String? _currentAvatarUrl; // Lưu URL avatar hiện tại
-  // [MỚI] Biến theo dõi xem có thay đổi dữ liệu (đặc biệt là avatar) chưa
+  File? _localAvatarFile;
   bool _hasUpdates = false;
   late final EmployeeRepository _repository;
   final ImagePicker _picker = ImagePicker();
@@ -86,8 +86,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
     super.dispose();
   }
 
-  // --- LOGIC 1: AVATAR TỰ ĐỘNG CẬP NHẬT ---
-
   Future<void> _pickImage(ImageSource source) async {
     Navigator.pop(context);
     try {
@@ -96,30 +94,32 @@ class _EditProfilePageState extends State<EditProfilePage> {
         imageQuality: 80,
       );
       if (image != null) {
-        // Upload và TỰ ĐỘNG UPDATE Profile ngay
-        _uploadAndAutoSaveAvatar(File(image.path));
+        final file = File(image.path);
+
+        // [MỚI] Hiển thị ảnh ngay lập tức (Optimistic UI)
+        setState(() {
+          _localAvatarFile = file;
+          _isUploadingAvatar = true;
+        });
+
+        // Tiến hành upload ngầm
+        _uploadAndAutoSaveAvatar(file);
       }
     } catch (e) {
       print("Error picking image: $e");
     }
   }
 
-  // [ĐÃ SỬA] Hàm upload và cập nhật biến _hasUpdates
   Future<void> _uploadAndAutoSaveAvatar(File file) async {
-    setState(() => _isUploadingAvatar = true);
+    // Lưu ý: _isUploadingAvatar đã được set = true ở _pickImage rồi
     try {
-      // 1. Upload ảnh qua Repository
+      // 1. Upload ảnh lên Server chứa ảnh (MinIO/S3...)
       String newAvatarUrl = await _repository.uploadFile(file);
       print("--> Upload Repository success: $newAvatarUrl");
 
-      // 2. Cập nhật UI tạm thời
-      setState(() {
-        _currentAvatarUrl = newAvatarUrl;
-        _hasUpdates = true; // [QUAN TRỌNG] Đánh dấu là đã có thay đổi
-      });
-
-      // 3. Gọi API cập nhật thông tin nhân viên
-      await _repository.updateEmployee(
+      // 2. Gọi API cập nhật thông tin nhân viên (Backend)
+      // CHỜ cập nhật xong mới đổi UI để đảm bảo đồng bộ
+      final success = await _repository.updateEmployee(
         widget.user.id ?? "",
         widget.user.id ?? "",
         widget.user.fullName,
@@ -128,8 +128,15 @@ class _EditProfilePageState extends State<EditProfilePage> {
         avatarUrl: newAvatarUrl,
       );
 
-      if (mounted) {
-        // [ĐÃ SỬA]
+      // 3. Nếu thành công -> Cập nhật UI
+      if (success && mounted) {
+        setState(() {
+          _currentAvatarUrl = newAvatarUrl;
+          _localAvatarFile = null; // Xóa ảnh local để hiển thị ảnh mạng
+          _hasUpdates = true; // Đánh dấu để reload khi back về
+          _isUploadingAvatar = false; // Tắt loading
+        });
+
         CustomSnackBar.show(
           context,
           title: 'Success',
@@ -139,9 +146,14 @@ class _EditProfilePageState extends State<EditProfilePage> {
       }
     } catch (e) {
       print("Auto-save avatar error: $e");
+      // Nếu lỗi -> Hủy ảnh local, quay về ảnh cũ
       if (mounted) {
+        setState(() {
+          _localAvatarFile = null;
+          _isUploadingAvatar = false;
+        });
+
         String msg = e.toString().replaceAll("Exception: ", "");
-        // [ĐÃ SỬA]
         CustomSnackBar.show(
           context,
           title: 'Upload Failed',
@@ -149,8 +161,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
           isError: true,
         );
       }
-    } finally {
-      if (mounted) setState(() => _isUploadingAvatar = false);
     }
   }
 
@@ -333,6 +343,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
     );
   }
 
+  // [CẬP NHẬT] Đồng bộ màu sắc DatePicker
   Future<void> _selectDate(BuildContext context) async {
     DateTime initialDate = DateTime(2000);
     if (_dobController.text.isNotEmpty) {
@@ -346,6 +357,24 @@ class _EditProfilePageState extends State<EditProfilePage> {
       initialDate: initialDate,
       firstDate: DateTime(1900),
       lastDate: DateTime.now(),
+      // [THÊM] Builder chỉnh màu
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppColors.primary, // Màu header & nút chọn
+              onPrimary: Colors.white,
+              onSurface: Colors.black,
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.primary, // Màu nút Cancel/OK
+              ),
+            ),
+          ),
+          child: child!,
+        );
+      },
     );
     if (picked != null) {
       setState(() {
@@ -396,9 +425,9 @@ class _EditProfilePageState extends State<EditProfilePage> {
                   ),
                   const SizedBox(height: 32),
 
-                  // Avatar Section (Giữ nguyên)
                   _AvatarEditSection(
                     avatarUrl: _currentAvatarUrl,
+                    localImage: _localAvatarFile, // Tham số mới
                     isUploading: _isUploadingAvatar,
                     onCameraTap: () => _showImagePickerOptions(context),
                   ),
@@ -512,26 +541,32 @@ class _EditProfilePageState extends State<EditProfilePage> {
 class _AvatarEditSection extends StatelessWidget {
   final VoidCallback? onCameraTap;
   final String? avatarUrl;
+  final File? localImage; // [THÊM]
   final bool isUploading;
 
   const _AvatarEditSection({
     super.key,
     this.onCameraTap,
     this.avatarUrl,
+    this.localImage,
     this.isUploading = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    // [ĐỒNG BỘ MÀU SẮC] Giống trang User Profile
+    final placeholderBgColor = Colors.grey[200];
+    final placeholderIconColor = Colors.grey[400];
+
     return Stack(
       children: [
         // 1. Phần Ảnh Avatar
         Container(
           width: 110,
-          height: 110, // [Đồng bộ] Kích thước 110 (cũ là 120)
+          height: 110,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: const Color(0xFFE2E8F0),
+            color: placeholderBgColor, // [SỬA] Đổi từ màu xanh sang xám
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withOpacity(0.1),
@@ -541,29 +576,30 @@ class _AvatarEditSection extends StatelessWidget {
             ],
           ),
           child: ClipOval(
-            child: isUploading
-                // [Đồng bộ] Padding 35 khi loading (cũ là 40)
-                ? const Padding(
-                    padding: EdgeInsets.all(35.0),
-                    child: CircularProgressIndicator(strokeWidth: 3),
+            // [LOGIC MỚI] Ưu tiên: Local Image -> Network Image -> Icon
+            child: localImage != null
+                ? Image.file(
+                    localImage!,
+                    fit: BoxFit.cover,
+                    width: 110,
+                    height: 110,
                   )
                 : (avatarUrl != null && avatarUrl!.isNotEmpty)
                 ? Image.network(
                     avatarUrl!,
                     fit: BoxFit.cover,
                     width: 110,
-                    height: 110, // [Đồng bộ] Kích thước 110
+                    height: 110,
                     errorBuilder: (ctx, err, stack) => Icon(
                       PhosphorIcons.user(PhosphorIconsStyle.fill),
                       size: 60,
-                      color: Colors.grey,
+                      color: placeholderIconColor, // [SỬA]
                     ),
                   )
-                // [SỬA 2]
                 : Icon(
                     PhosphorIcons.user(PhosphorIconsStyle.fill),
                     size: 60,
-                    color: Colors.grey,
+                    color: placeholderIconColor, // [SỬA]
                   ),
           ),
         ),
@@ -572,23 +608,31 @@ class _AvatarEditSection extends StatelessWidget {
         Positioned(
           bottom: 0,
           right: 0,
-          // [Đồng bộ] Sử dụng cấu trúc Material > InkWell > Container như trang Profile
           child: Material(
-            color: AppColors.primary,
+            // Đổi màu xám khi đang loading
+            color: isUploading ? Colors.grey : AppColors.primary,
             shape: const CircleBorder(),
             child: InkWell(
               customBorder: const CircleBorder(),
-              onTap: onCameraTap,
+              onTap: isUploading ? null : onCameraTap,
               child: Container(
                 padding: const EdgeInsets.all(7),
                 width: 32,
                 height: 32,
-                // [Đồng bộ] Sử dụng PhosphorIcons và bỏ viền trắng
-                child: Icon(
-                  PhosphorIcons.camera(PhosphorIconsStyle.fill),
-                  color: Colors.white,
-                  size: 18,
-                ),
+                // Hiển thị loading nhỏ ngay tại nút camera
+                child: isUploading
+                    ? const Padding(
+                        padding: EdgeInsets.all(2.0),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Icon(
+                        PhosphorIcons.camera(PhosphorIconsStyle.fill),
+                        color: Colors.white,
+                        size: 18,
+                      ),
               ),
             ),
           ),

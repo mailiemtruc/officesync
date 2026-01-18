@@ -63,6 +63,11 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
       remoteDataSource: DepartmentRemoteDataSource(),
     );
 
+    // [CẬP NHẬT] Mặc định chọn ngày hiện tại (Hôm nay)
+    final now = DateTime.now();
+    _fromDate = now;
+    _toDate = now; // Set luôn ngày kết thúc mặc định để tránh lỗi logic
+
     // Lấy tên phòng HR
     _fetchHrDepartmentName();
   }
@@ -247,7 +252,6 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
     );
   }
 
-  // [HÀM MỚI] Widget con để vẽ từng dòng lựa chọn đẹp hơn
   Widget _buildOptionItem({
     required IconData icon,
     required String title,
@@ -258,29 +262,32 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        splashColor: color.withOpacity(0.1), // Hiệu ứng lan màu theo icon
-        highlightColor: color.withOpacity(0.05),
+        // [CẬP NHẬT] Đổi hiệu ứng nhấn sang màu xám
+        splashColor: Colors.grey.withOpacity(0.2),
+        highlightColor: Colors.grey.withOpacity(0.1),
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
           child: Row(
             children: [
-              // Icon nền tròn
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.1), // Nền nhạt theo màu icon
+                  color: color.withOpacity(0.1), // Nền icon vẫn giữ màu gốc
                   shape: BoxShape.circle,
                 ),
-                child: Icon(icon, color: color, size: 24),
+                child: Icon(
+                  icon,
+                  color: color,
+                  size: 24,
+                ), // Icon vẫn giữ màu gốc
               ),
               const SizedBox(width: 16),
-              // Text
               Text(
                 title,
                 style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
-                  color: Color(0xFF374151), // Màu chữ xám đậm
+                  color: Color(0xFF374151),
                   fontFamily: 'Inter',
                 ),
               ),
@@ -493,18 +500,38 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
     }
   }
 
-  // --- Helper UI ---
+  // [CẬP NHẬT] Hàm chọn ngày với giao diện đồng bộ màu & Logic Initial Date
   Future<void> _selectDate(BuildContext context, bool isFrom) async {
+    // Xác định ngày đang chọn để focus lịch vào đó
+    final DateTime initial = (isFrom ? _fromDate : _toDate) ?? DateTime.now();
+
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: DateTime.now(),
+      initialDate: initial, // [SỬA] Focus vào ngày hiện tại của ô nhập
       firstDate: DateTime(2020),
       lastDate: DateTime(2030),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppColors.primary,
+              onPrimary: Colors.white,
+              onSurface: Colors.black,
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(foregroundColor: AppColors.primary),
+            ),
+          ),
+          child: child!,
+        );
+      },
     );
+
     if (picked != null) {
       setState(() {
         if (isFrom) {
           _fromDate = picked;
+          // Nếu không phải là nghỉ phép (Leave) thì ngày kết thúc tự động bằng ngày bắt đầu
           if (_selectedTypeIndex != 0) _toDate = picked;
         } else {
           _toDate = picked;
@@ -513,10 +540,27 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
     }
   }
 
+  // [CẬP NHẬT] Hàm chọn giờ với giao diện đồng bộ màu
   Future<void> _selectTime(BuildContext context, bool isStart) async {
     final TimeOfDay? picked = await showTimePicker(
       context: context,
       initialTime: TimeOfDay.now(),
+      // [QUAN TRỌNG] Thêm Theme builder cho TimePicker
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppColors.primary,
+              onPrimary: Colors.white,
+              onSurface: Colors.black,
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(foregroundColor: AppColors.primary),
+            ),
+          ),
+          child: child!,
+        );
+      },
     );
     if (picked != null) {
       setState(() {

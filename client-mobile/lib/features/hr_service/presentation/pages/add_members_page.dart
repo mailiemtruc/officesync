@@ -228,6 +228,7 @@ class _AddMembersPageState extends State<AddMembersPage> {
                 ),
                 const SizedBox(height: 24),
                 // Select All
+                // Select All
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: Row(
@@ -241,14 +242,28 @@ class _AddMembersPageState extends State<AddMembersPage> {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      GestureDetector(
-                        onTap: _toggleSelectAll,
-                        child: Text(
-                          isAllSelected ? 'UNSELECT ALL' : 'SELECT ALL',
-                          style: const TextStyle(
-                            color: AppColors.primary,
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
+                      // [ĐÃ SỬA] Thay GestureDetector bằng Material + InkWell để có hiệu ứng
+                      Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: _toggleSelectAll,
+                          borderRadius: BorderRadius.circular(4),
+                          // Thêm hiệu ứng splash màu xanh nhạt cho đồng bộ
+                          splashColor: AppColors.primary.withOpacity(0.1),
+                          highlightColor: AppColors.primary.withOpacity(0.05),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            child: Text(
+                              isAllSelected ? 'UNSELECT ALL' : 'SELECT ALL',
+                              style: const TextStyle(
+                                color: AppColors.primary,
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ),
                         ),
                       ),

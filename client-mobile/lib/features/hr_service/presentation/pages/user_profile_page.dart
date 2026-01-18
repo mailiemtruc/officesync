@@ -50,6 +50,23 @@ class _UserProfilePageState extends State<UserProfilePage> {
     _fetchEmployeeDetail();
   }
 
+  // [SỬA LỖI 1] Thêm hàm này để lắng nghe thay đổi từ Dashboard (Cha) truyền xuống
+  @override
+  void didUpdateWidget(covariant UserProfilePage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Nếu userInfo từ cha truyền vào khác với cái cũ -> Reload lại dữ liệu
+    if (widget.userInfo != oldWidget.userInfo) {
+      print(
+        "--> UserProfilePage: Detected update from Dashboard. Reloading...",
+      );
+      setState(() {
+        // Reset lại loading để UI cập nhật
+        _isLoadingProfile = true;
+      });
+      _fetchEmployeeDetail();
+    }
+  }
+
   // --- HÀM HỖ TRỢ ---
   String _formatDate(String? dateStr) {
     if (dateStr == null || dateStr.isEmpty || dateStr == 'N/A') return 'N/A';

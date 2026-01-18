@@ -1,4 +1,5 @@
 package com.officesync.hr_service.Service;
+
 import java.time.LocalDate;
 import java.util.Collections;
 import java.util.List;
@@ -7,21 +8,19 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-import org.springframework.beans.factory.annotation.Autowired; // [1] IMPORT MỚI
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
-import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
-import org.springframework.cache.annotation.Caching; // [1] NHỚ IMPORT CÁI NÀY
 import org.springframework.context.annotation.Lazy;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.messaging.simp.SimpMessagingTemplate; // [THÊM]
-import org.springframework.stereotype.Service; // [THÊM]
-import org.springframework.transaction.annotation.Transactional; // [THÊM]
+import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.officesync.hr_service.Config.SnowflakeIdGenerator;
 import com.officesync.hr_service.DTO.EmployeeSyncEvent;
-import com.officesync.hr_service.DTO.NotificationEvent; // [1] Import cái này
+import com.officesync.hr_service.DTO.NotificationEvent;
 import com.officesync.hr_service.DTO.UserCreatedEvent;
 import com.officesync.hr_service.DTO.UserStatusChangedEvent;
 import com.officesync.hr_service.Model.Department;
@@ -34,10 +33,11 @@ import com.officesync.hr_service.Producer.EmployeeProducer;
 import com.officesync.hr_service.Repository.DepartmentRepository;
 import com.officesync.hr_service.Repository.EmployeeRepository;
 import com.officesync.hr_service.Repository.RequestAuditLogRepository;
-import com.officesync.hr_service.Repository.RequestRepository; // [1] IMPORT MỚI
+import com.officesync.hr_service.Repository.RequestRepository;
 
-import lombok.RequiredArgsConstructor; // [THÊM]
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -47,75 +47,100 @@ public class EmployeeService {
     private final DepartmentRepository departmentRepository;
     private final RequestRepository requestRepository;
     private final RequestAuditLogRepository auditLogRepository;
-   private final SnowflakeIdGenerator idGenerator; 
-   private final EmployeeProducer employeeProducer;
+    private final SnowflakeIdGenerator idGenerator;
+    private final EmployeeProducer employeeProducer;
+    
+    // [FIX] Inject CacheManager để xóa cache thủ công
     private final CacheManager cacheManager;
+    
+    private final SimpMessagingTemplate messagingTemplate;
+    
     private EmployeeService self;
-private final SimpMessagingTemplate messagingTemplate; // [2] INJECT SOCKET
+
     @Autowired
     public void setSelf(@Lazy EmployeeService self) {
         this.self = self;
     }
-   // [MỚI] Hàm gửi thông báo (Copy từ DepartmentService sang)
-    private void sendNotification(Employee receiver, String title, String body) {
-        try {
-            NotificationEvent event = new NotificationEvent(
-                receiver.getId(),
-                title,
-                body,
-                "SYSTEM", // Loại thông báo
-                null      // ID tham chiếu
-            );
-            employeeProducer.sendNotification(event);
-        } catch (Exception e) {
-            log.error("Lỗi gửi thông báo cho user {}: {}", receiver.getId(), e.getMessage());
-        }
-    }
-    
-  private void evictDepartmentCache(Long deptId) {
+
+    // =================================================================
+    // CÁC HÀM QUẢN LÝ CACHE (MANUAL EVICTION)
+    // =================================================================
+
+    // 1. Xóa cache danh sách nhân viên của một phòng ban cụ thể
+    private void evictDepartmentCache(Long deptId) {
         if (deptId != null) {
             try {
-                // [FIX] Kiểm tra null trước khi gọi evict
                 var cache = cacheManager.getCache("employees_by_department");
                 if (cache != null) {
                     cache.evict(deptId);
                     log.info("--> [Cache] Đã xóa cache danh sách nhân viên phòng ban ID: {}", deptId);
-                } else {
-                    log.warn("--> [Cache] Không tìm thấy cache tên 'employees_by_department'");
                 }
             } catch (Exception e) {
                 log.warn("--> [Cache] Lỗi xóa cache deptId {}: {}", deptId, e.getMessage());
             }
         }
     }
-    // [3] Viết thêm hàm hỗ trợ xóa cache SaaS
+
+    // 2. [QUAN TRỌNG] Xóa cache danh sách nhân viên toàn công ty
+    // Hàm này giải quyết lỗi: Tạo nhân viên xong nhưng không hiện lên list của Admin
+    private void evictCompanyCache(Long companyId) {
+        if (companyId != null) {
+            try {
+                // Xóa list ID nhân viên của công ty
+                var empCache = cacheManager.getCache("employees_by_company");
+                if (empCache != null) {
+                    empCache.evict(companyId);
+                    log.info("--> [Cache] Đã xóa cache employees_by_company ID: {}", companyId);
+                }
+                
+                // Xóa cache thống kê phòng ban (để cập nhật số lượng member)
+                var statsCache = cacheManager.getCache("departments_stats");
+                if (statsCache != null) {
+                    statsCache.evict(companyId);
+                }
+                
+                // Xóa cache metadata phòng ban (nếu có)
+                var metaCache = cacheManager.getCache("departments_metadata");
+                if (metaCache != null) {
+                    metaCache.evict(companyId);
+                }
+            } catch (Exception e) {
+                log.warn("--> [Cache] Lỗi xóa cache companyId {}: {}", companyId, e.getMessage());
+            }
+        }
+    }
+
+    // 3. Xóa cache danh sách đơn từ của Manager (SaaS Cache)
     private void evictSaaSCaches(Long companyId) {
         try {
-            // Lấy vùng cache "request_list_manager"
             Cache managerCache = cacheManager.getCache("request_list_manager");
-            
             if (managerCache != null) {
-                // A. Tìm tất cả người có quyền duyệt trong công ty
+                // Tìm tất cả người duyệt trong công ty để clear cache của họ
                 List<Long> approverIds = employeeRepository.findApproverIdsByCompany(companyId);
-                
-                // B. Xóa cache của từng người này
                 for (Long approverId : approverIds) {
-                    // Key format phải trùng với @Cacheable bên RequestService: "mgr_" + ID
                     managerCache.evict("mgr_" + approverId);
                 }
-                log.info("--> [SaaS Cache] Đã xóa cache danh sách đơn của {} người duyệt trong công ty {}", approverIds.size(), companyId);
             }
         } catch (Exception e) {
             log.error("Lỗi xóa cache SaaS: {}", e.getMessage());
         }
     }
 
-  // --- HÀM 1: SỬA CREATE (Sửa lỗi tên biến trong annotation & Logic Manager) ---
-     @Transactional
-  @Caching(evict = {
-    @CacheEvict(value = "departments_stats", key = "#creator.companyId"),
-    @CacheEvict(value = "employees_by_company", key = "#creator.companyId")
-})
+    private void sendNotification(Employee receiver, String title, String body) {
+        try {
+            NotificationEvent event = new NotificationEvent(
+                receiver.getId(), title, body, "SYSTEM", null
+            );
+            employeeProducer.sendNotification(event);
+        } catch (Exception e) {
+            log.error("Lỗi gửi thông báo: {}", e.getMessage());
+        }
+    }
+
+    // =================================================================
+    // 1. CREATE EMPLOYEE
+    // =================================================================
+    @Transactional
     public Employee createEmployee(Employee newEmployee, Employee creator, Long departmentId, String password) {
         
         // 1. Check Quyền
@@ -129,18 +154,15 @@ private final SimpMessagingTemplate messagingTemplate; // [2] INJECT SOCKET
             // Logic: Manager tạo nhân viên -> Tự động thêm vào phòng của Manager
             if (creator.getDepartment() != null) {
                 Long managerDeptId = creator.getDepartment().getId();
-                
-                // [FIX] Vì annotation ở trên không bắt được việc departmentId bị thay đổi ở đây,
-                // ta phải xóa cache thủ công cho phòng của Manager.
+                // Clear cache phòng của Manager trước khi thêm
                 evictDepartmentCache(managerDeptId);
-                
                 departmentId = managerDeptId; 
             } else {
                 throw new RuntimeException("Lỗi: Bạn là Manager nhưng chưa thuộc phòng ban nào.");
             }
         }
         
-        // 2. Các logic check trùng, gán ID giữ nguyên code cũ của bạn
+        // 2. Validate
         if (employeeRepository.existsByEmail(newEmployee.getEmail())) {
             throw new RuntimeException("Email " + newEmployee.getEmail() + " already exists!");
         }
@@ -148,6 +170,7 @@ private final SimpMessagingTemplate messagingTemplate; // [2] INJECT SOCKET
             throw new RuntimeException("Phone " + newEmployee.getPhone() + " already exists!");
         }
 
+        // 3. Setup Data
         newEmployee.setCompanyId(creator.getCompanyId());
         if (newEmployee.getRole() == null) newEmployee.setRole(EmployeeRole.STAFF);
         if (newEmployee.getStatus() == null) newEmployee.setStatus(EmployeeStatus.ACTIVE);
@@ -159,10 +182,17 @@ private final SimpMessagingTemplate messagingTemplate; // [2] INJECT SOCKET
             newEmployee.setDepartment(dept);
         }
 
-        // 3. Lưu & Gửi MQ (Giữ nguyên code cũ)
+        // 4. Save
         Employee savedEmployee = saveEmployeeWithRetry(newEmployee);
         
+        // [FIX - QUAN TRỌNG] Xóa cache thủ công ngay sau khi lưu
         if (savedEmployee != null) {
+            evictCompanyCache(savedEmployee.getCompanyId());
+            if (savedEmployee.getDepartment() != null) {
+                evictDepartmentCache(savedEmployee.getDepartment().getId());
+            }
+            
+            // 5. Send Event
             try {
                 String passwordToSend = (password != null && !password.isEmpty()) ? password : "123456";
                 String deptName = (savedEmployee.getDepartment() != null) ? savedEmployee.getDepartment().getName() : "N/A";
@@ -182,218 +212,10 @@ private final SimpMessagingTemplate messagingTemplate; // [2] INJECT SOCKET
         return savedEmployee;
     }
 
-    // [MỚI] Hàm xử lý cập nhật trạng thái
-    @Transactional
-    public void updateEmployeeStatusFromEvent(UserStatusChangedEvent event) {
-        log.info("--> [Core -> HR] Nhận yêu cầu đổi status. UserID: {}, Status: {}", event.getUserId(), event.getStatus());
-
-        // 1. Tìm nhân viên theo ID
-        java.util.Optional<Employee> empOpt = employeeRepository.findById(event.getUserId());
-
-        if (empOpt.isPresent()) {
-            Employee emp = empOpt.get();
-            try {
-                // 2. Chuyển String sang Enum và Lưu
-                emp.setStatus(EmployeeStatus.valueOf(event.getStatus()));
-                Employee saved = employeeRepository.save(emp);
-
-                syncToAttendanceService(saved);
-                
-                log.info("--> Đã cập nhật trạng thái user {} thành {}", emp.getEmail(), event.getStatus());
-            } catch (Exception e) {
-                log.error("Trạng thái không hợp lệ: {}", event.getStatus());
-            }
-        } else {
-            log.warn("Không tìm thấy nhân viên ID {} để cập nhật.", event.getUserId());
-        }
-    }
-    // =================================================================
-    // 2. LOGIC CHO RABBITMQ (Consumer gọi hàm này)
+  // =================================================================
+    // 2. UPDATE EMPLOYEE
     // =================================================================
     @Transactional
-    public void createEmployeeFromEvent(UserCreatedEvent event) {
-        log.info("--> [Core -> HR] Nhận phản hồi đồng bộ ID. CoreID: {}, Email: {}", event.getId(), event.getEmail());
-
-        Employee finalEmployee = null;
-
-        // Bước 1: Tìm nhân viên hiện tại (đang giữ ID Snowflake tạm)
-        Optional<Employee> existingOpt = employeeRepository.findByEmail(event.getEmail());
-
-        if (existingOpt.isPresent()) {
-            Employee existingEmp = existingOpt.get();
-
-            // Nếu ID đã khớp nhau rồi -> Bỏ qua
-            if (existingEmp.getId().equals(event.getId())) {
-                return;
-            }
-
-            // --- XỬ LÝ XUNG ĐỘT (ID SWAPPING) ---
-            log.info("--> PHÁT HIỆN ID TẠM ({}). TIẾN HÀNH TRÁO ĐỔI SANG ID CORE ({})", existingEmp.getId(), event.getId());
-
-            // 1. Backup dữ liệu cũ
-            Department memberOfDept = existingEmp.getDepartment(); // Phòng ban đang thuộc về (Member)
-            String savedCode = existingEmp.getEmployeeCode();
-            Long companyId = existingEmp.getCompanyId();
-
-            // [QUAN TRỌNG - SỬA LỖI CONSTRAINT]
-            // Kiểm tra xem nhân viên này có đang làm QUẢN LÝ (Manager) phòng nào không?
-            Department managedDept = null;
-            Optional<Department> deptManagedOpt = departmentRepository.findByManagerId(existingEmp.getId());
-            
-            if (deptManagedOpt.isPresent()) {
-                managedDept = deptManagedOpt.get();
-                log.info("--> Tạm thời gỡ quyền Manager khỏi phòng: {}", managedDept.getName());
-                // Gỡ manager tạm thời để không bị lỗi Foreign Key khi xóa Employee
-                managedDept.setManager(null);
-                departmentRepository.saveAndFlush(managedDept);
-            }
-
-            // 2. Xóa bản ghi cũ (Lúc này đã an toàn để xóa)
-            employeeRepository.delete(existingEmp);
-            employeeRepository.flush(); // Bắt buộc flush để DB xóa ngay lập tức
-
-            // 3. Tạo bản ghi mới với ID chuẩn từ Core
-            Employee newSyncEmp = new Employee();
-            newSyncEmp.setId(event.getId()); // ID Core
-            
-            // Restore dữ liệu
-            newSyncEmp.setDepartment(memberOfDept);
-            newSyncEmp.setEmployeeCode(savedCode);
-            newSyncEmp.setCompanyId(companyId);
-
-            // Map data mới nhất từ Event
-            newSyncEmp.setFullName(event.getFullName());
-            newSyncEmp.setEmail(event.getEmail());
-            newSyncEmp.setPhone(event.getMobileNumber());
-            newSyncEmp.setDateOfBirth(event.getDateOfBirth());
-
-            try { newSyncEmp.setRole(EmployeeRole.valueOf(event.getRole())); } 
-            catch (Exception e) { newSyncEmp.setRole(EmployeeRole.STAFF); }
-
-            try { newSyncEmp.setStatus(EmployeeStatus.valueOf(event.getStatus())); } 
-            catch (Exception e) { newSyncEmp.setStatus(EmployeeStatus.ACTIVE); }
-
-            // [QUAN TRỌNG] Lưu nhân viên mới TRƯỚC
-            finalEmployee = employeeRepository.saveAndFlush(newSyncEmp);
-
-            // 4. Khôi phục chức Manager (Nếu lúc nãy có gỡ)
-            if (managedDept != null) {
-                log.info("--> Khôi phục quyền Manager cho phòng: {} với ID mới: {}", managedDept.getName(), newSyncEmp.getId());
-                // Gán lại Manager là object nhân viên mới (đã có ID chuẩn)
-                managedDept.setManager(finalEmployee);
-                departmentRepository.save(managedDept);
-            }
-
-            log.info("--> ĐỒNG BỘ THÀNH CÔNG. ID cũ {} đã đổi thành {}", existingEmp.getId(), newSyncEmp.getId());
-
-        } else {
-            // Trường hợp: Tạo mới hoàn toàn (như cũ)
-            finalEmployee = createFreshEmployeeFromEvent(event);
-        }
-        if (finalEmployee != null) {
-        syncToAttendanceService(finalEmployee);
-        }
-    }
-
- 
-    private Employee createFreshEmployeeFromEvent(UserCreatedEvent event) {
-        log.info("--> Không tìm thấy nhân viên cũ. Tạo mới hoàn toàn từ Core Event.");
-        Employee newEmployee = new Employee();
-        newEmployee.setId(event.getId());
-        newEmployee.setCompanyId(event.getCompanyId());
-        newEmployee.setFullName(event.getFullName());
-        newEmployee.setEmail(event.getEmail());
-        newEmployee.setDateOfBirth(event.getDateOfBirth());
-        newEmployee.setPhone(event.getMobileNumber());
-
-        try { newEmployee.setRole(EmployeeRole.valueOf(event.getRole())); } 
-        catch (Exception e) { newEmployee.setRole(EmployeeRole.STAFF); }
-
-        try { newEmployee.setStatus(EmployeeStatus.valueOf(event.getStatus())); } 
-        catch (Exception e) { newEmployee.setStatus(EmployeeStatus.ACTIVE); }
-
-        // [SỬA 2] Thêm 'return' để trả về đối tượng đã lưu
-        return saveEmployeeWithRetry(newEmployee);
-    }
-    // =================================================================
-    // 3. HÀM DÙNG CHUNG (Sinh mã & Retry)
-    // =================================================================
-    private Employee saveEmployeeWithRetry(Employee employee) {
-        int maxRetries = 3; 
-        for (int i = 0; i < maxRetries; i++) {
-            try {
-                // Chỉ sinh mã nếu chưa có (đề phòng trường hợp update sau này)
-                if (employee.getEmployeeCode() == null) {
-                    employee.setEmployeeCode(generateRandomCode());
-                }
-                return employeeRepository.save(employee);
-            } catch (DataIntegrityViolationException e) {
-                log.warn("Đụng độ mã nhân viên: {}. Thử lại lần {}...", employee.getEmployeeCode(), i + 1);
-                // Reset mã để vòng lặp sau sinh mã mới
-                employee.setEmployeeCode(null); 
-                
-                if (i == maxRetries - 1) {
-                    throw new RuntimeException("Lỗi hệ thống: Không thể sinh mã nhân viên.");
-                }
-            }
-        }
-        return null;
-    }
-
-    private String generateRandomCode() {
-        int randomNum = (int) (Math.random() * 1000000);
-        return String.format("NV%06d", randomNum);
-    }
-
-    // --- 3. GET LIST (TỐI ƯU CACHE ID) ---
-    @Cacheable(value = "employees_by_company", key = "#companyId", sync = true)
-    public List<Long> getEmployeeIdsByCompanyCached(Long companyId) {
-        return employeeRepository.findIdsByCompanyId(companyId);
-    }
-
-    @Cacheable(value = "employees_by_department", key = "#deptId", sync = true)
-    public List<Long> getEmployeeIdsByDepartmentCached(Long deptId) {
-        return employeeRepository.findIdsByDepartmentId(deptId);
-    }
-
-    // [TỐI ƯU] Pattern: Get IDs from Cache -> Fetch Entities from DB
-    public List<Employee> getAllEmployeesByRequester(Employee requester) {
-        List<Long> ids = Collections.emptyList();
-
-        if (requester.getRole() == EmployeeRole.COMPANY_ADMIN) {
-            // Gọi qua 'self' để kích hoạt Cache Proxy
-            ids = self.getEmployeeIdsByCompanyCached(requester.getCompanyId());
-        } else if (requester.getRole() == EmployeeRole.MANAGER) {
-            if (requester.getDepartment() != null) {
-                ids = self.getEmployeeIdsByDepartmentCached(requester.getDepartment().getId());
-            }
-        } else {
-            return List.of(requester);
-        }
-
-        if (ids == null || ids.isEmpty()) return Collections.emptyList();
-
-        // [SAFE] Fetch Entities (DB call tối ưu bằng WHERE IN)
-        List<Employee> fetched = employeeRepository.findByIdInFetchDepartment(ids);
-        
-        // [SAFE] Re-order đúng thứ tự ID và lọc null (đề phòng data rác trong cache)
-        Map<Long, Employee> map = fetched.stream()
-            .collect(Collectors.toMap(Employee::getId, e -> e));
-            
-        return ids.stream()
-            .map(map::get)
-            .filter(Objects::nonNull) // Loại bỏ ID có trong cache nhưng không còn trong DB
-            .collect(Collectors.toList());
-    }
-
-  // --- HÀM 2: SỬA UPDATE (Xóa annotation gây lỗi & dùng code thủ công) ---
-    @Transactional
-   @Caching(evict = {
-    @CacheEvict(value = "departments_metadata", key = "#updater.companyId"),
-    @CacheEvict(value = "departments_stats", key = "#updater.companyId"),
-    @CacheEvict(value = "employee_detail", key = "#id"),
-    @CacheEvict(value = "employees_by_company", key = "#updater.companyId")
-})
     public Employee updateEmployee(
             Employee updater, Long id, String fullName, String phone, String dob, 
             String avatarUrl, String statusStr, String roleStr, Long departmentId, String email
@@ -402,28 +224,38 @@ private final SimpMessagingTemplate messagingTemplate; // [2] INJECT SOCKET
         Employee targetEmployee = employeeRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Employee not found"));
 
-        // [QUAN TRỌNG] Lấy ID phòng ban cũ để xóa cache sau khi update
+        // Lấy thông tin cũ để xử lý cache
         Long oldDeptId = (targetEmployee.getDepartment() != null) ? targetEmployee.getDepartment().getId() : null;
-        String oldDeptName = (targetEmployee.getDepartment() != null) ? targetEmployee.getDepartment().getName() : "Unassigned";
-        // 2. Logic Permission Check (Giữ nguyên code cũ)
-        if (updater.getRole() == EmployeeRole.STAFF) throw new RuntimeException("Truy cập bị từ chối.");
+        
+        // [FIX] Xác định xem có phải tự sửa chính mình không
+        boolean isSelfUpdate = updater.getId().equals(targetEmployee.getId());
+
+        // 2. Permission Check
+        // [SỬA LẠI LOGIC CHẶN STAFF]
+        if (updater.getRole() == EmployeeRole.STAFF && !isSelfUpdate) {
+            throw new RuntimeException("Truy cập bị từ chối: Nhân viên không được phép sửa thông tin người khác.");
+        }
+
         if (updater.getRole() == EmployeeRole.MANAGER) {
-            if (updater.getDepartment() == null || targetEmployee.getDepartment() == null || 
-                !updater.getDepartment().getId().equals(targetEmployee.getDepartment().getId())) {
-                throw new RuntimeException("Truy cập bị từ chối: Sai phòng ban.");
-            }
-            if (roleStr != null && !roleStr.isEmpty() && !roleStr.equalsIgnoreCase(targetEmployee.getRole().name())) {
-                throw new RuntimeException("Truy cập bị từ chối: Manager không được đổi Role.");
-            }
-            if (departmentId != null && !departmentId.equals(targetEmployee.getDepartment().getId())) {
-                throw new RuntimeException("Truy cập bị từ chối: Manager không được đổi Phòng.");
+            // Manager được sửa chính mình, hoặc sửa nhân viên phòng mình
+            if (!isSelfUpdate) {
+                if (updater.getDepartment() == null || targetEmployee.getDepartment() == null || 
+                    !updater.getDepartment().getId().equals(targetEmployee.getDepartment().getId())) {
+                    throw new RuntimeException("Truy cập bị từ chối: Sai phòng ban.");
+                }
+                if (roleStr != null && !roleStr.isEmpty() && !roleStr.equalsIgnoreCase(targetEmployee.getRole().name())) {
+                    throw new RuntimeException("Truy cập bị từ chối: Manager không được đổi Role.");
+                }
+                if (departmentId != null && !departmentId.equals(targetEmployee.getDepartment().getId())) {
+                    throw new RuntimeException("Truy cập bị từ chối: Manager không được đổi Phòng.");
+                }
             }
         }
 
         EmployeeRole oldRole = targetEmployee.getRole();
         Department oldDepartment = targetEmployee.getDepartment();
 
-        // 3. Update Fields (Giữ nguyên code cũ)
+        // 3. Update Fields
         if (fullName != null && !fullName.isEmpty()) targetEmployee.setFullName(fullName);
         if (email != null && !email.isEmpty()) {
             if (!email.equals(targetEmployee.getEmail()) && employeeRepository.existsByEmail(email)) {
@@ -462,7 +294,7 @@ private final SimpMessagingTemplate messagingTemplate; // [2] INJECT SOCKET
             }
         }
 
-        // 5. Logic Sync Manager (Giữ nguyên code cũ)
+        // 5. Logic Sync Manager
         EmployeeRole newRole = targetEmployee.getRole();
         Department newDepartment = targetEmployee.getDepartment();
 
@@ -490,43 +322,45 @@ private final SimpMessagingTemplate messagingTemplate; // [2] INJECT SOCKET
         // 6. Save
         Employee savedEmployee = employeeRepository.save(targetEmployee);
 
-        // [FIX] Xử lý Cache: Xóa cả phòng cũ và phòng mới (nếu có thay đổi)
-        evictDepartmentCache(oldDeptId); // Refresh phòng cũ
+        // [FIX] Xử lý xóa Cache Thủ Công
+        // Xóa cache chi tiết nhân viên
+        try {
+            var detailCache = cacheManager.getCache("employee_detail");
+            if (detailCache != null) detailCache.evict(id);
+        } catch (Exception e) {}
+
+        // Xóa cache phòng cũ và mới
+        evictDepartmentCache(oldDeptId);
         if (savedEmployee.getDepartment() != null) {
             Long newDeptId = savedEmployee.getDepartment().getId();
             if (!newDeptId.equals(oldDeptId)) {
-                evictDepartmentCache(newDeptId); // Refresh phòng mới
+                evictDepartmentCache(newDeptId);
             }
         }
         
-        // 7. [MỚI - GỬI THÔNG BÁO CHUYỂN PHÒNG]
+        // [QUAN TRỌNG] Xóa cache list công ty (nếu đổi status/tên/role...)
+        evictCompanyCache(savedEmployee.getCompanyId());
+
+        // 7. Thông báo & Event
         Long currentDeptId = (savedEmployee.getDepartment() != null) ? savedEmployee.getDepartment().getId() : null;
         String currentDeptName = (savedEmployee.getDepartment() != null) ? savedEmployee.getDepartment().getName() : "Unassigned";
          
-        // Kiểm tra xem phòng ban có thay đổi không
         if (!Objects.equals(oldDeptId, currentDeptId)) {
             String title = "Department Transfer";
             String body = "You have been transferred to department: " + currentDeptName;
-            
-            // Nếu bị xóa khỏi phòng (về Unassigned)
             if (currentDeptId == null) {
-                body = "You have been removed from department " + oldDeptName + ". Status: Unassigned.";
+                body = "You have been removed from department " + ((oldDepartment != null) ? oldDepartment.getName() : "Unassigned");
             }
-            
             sendNotification(savedEmployee, title, body);
-            log.info("--> Đã gửi thông báo chuyển phòng cho user {}", savedEmployee.getEmail());
         }
-        // [3] THÊM ĐOẠN NÀY: BẮN SOCKET UPDATE PROFILE
+        
+        // Socket Refresh Profile
         try {
-            // Topic riêng cho từng user: /topic/user/{id}/profile
             String dest = "/topic/user/" + savedEmployee.getId() + "/profile";
-            // Gửi tín hiệu để App tự load lại
             messagingTemplate.convertAndSend(dest, "REFRESH_PROFILE");
-            log.info("--> WebSocket: Đã gửi lệnh REFRESH_PROFILE tới user {}", savedEmployee.getId());
-        } catch (Exception e) {
-            log.error("Lỗi gửi socket profile: {}", e.getMessage());
-        }
-        // 7. RabbitMQ (Giữ nguyên code cũ)
+        } catch (Exception e) {}
+
+        // RabbitMQ Update
         try {
             String deptName = (savedEmployee.getDepartment() != null) ? savedEmployee.getDepartment().getName() : "N/A";
             EmployeeSyncEvent event = new EmployeeSyncEvent(
@@ -535,7 +369,6 @@ private final SimpMessagingTemplate messagingTemplate; // [2] INJECT SOCKET
                 savedEmployee.getRole().name(), savedEmployee.getStatus().name(), null, deptName
             );
             employeeProducer.sendEmployeeUpdatedEvent(event);
-
             employeeProducer.sendToAttendance(event);
         } catch (Exception e) {
             log.error("Lỗi gửi RabbitMQ: {}", e.getMessage());
@@ -544,22 +377,18 @@ private final SimpMessagingTemplate messagingTemplate; // [2] INJECT SOCKET
         return savedEmployee;
     }
 
-  @Transactional
-   @Caching(evict = {
-    @CacheEvict(value = "departments_stats", key = "#deleter.companyId"),
-    @CacheEvict(value = "employee_detail", key = "#targetId"),
-    @CacheEvict(value = "employees_by_company", key = "#deleter.companyId"),
-    @CacheEvict(value = "request_list_user", key = "#targetId"),
-    @CacheEvict(value = "departments_metadata", key = "#deleter.companyId"),
-})
+    // =================================================================
+    // 3. DELETE EMPLOYEE
+    // =================================================================
+    @Transactional
     public void deleteEmployee(Employee deleter, Long targetId) { 
         Employee targetEmployee = employeeRepository.findById(targetId)
                 .orElseThrow(() -> new RuntimeException("Employee not found"));
 
-        // [FIX] Lấy ID phòng ban trước khi xóa để clear cache
         Long deptId = (targetEmployee.getDepartment() != null) ? targetEmployee.getDepartment().getId() : null;
+        Long companyId = targetEmployee.getCompanyId();
 
-        // 1. Permission Check (Giữ nguyên code cũ)
+        // 1. Permission Check
         if (deleter.getId().equals(targetId)) throw new RuntimeException("Không thể tự xóa chính mình.");
         if (!deleter.getCompanyId().equals(targetEmployee.getCompanyId())) throw new RuntimeException("Lỗi bảo mật: Khác công ty.");
 
@@ -578,9 +407,7 @@ private final SimpMessagingTemplate messagingTemplate; // [2] INJECT SOCKET
             }
         }
 
-        log.info("--> Bắt đầu xóa nhân viên ID: {}", targetId);
-
-        // 2. Logic dọn dẹp data (Giữ nguyên code cũ)
+        // 2. Logic dọn dẹp data
         Optional<Department> managedDept = departmentRepository.findByManagerId(targetId);
         if (managedDept.isPresent()) {
             Department dept = managedDept.get();
@@ -612,54 +439,270 @@ private final SimpMessagingTemplate messagingTemplate; // [2] INJECT SOCKET
         employeeRepository.delete(targetEmployee);
 
         // [FIX] Xóa cache thủ công
+        try {
+            var detailCache = cacheManager.getCache("employee_detail");
+            if (detailCache != null) detailCache.evict(targetId);
+            
+            var reqCache = cacheManager.getCache("request_list_user");
+            if (reqCache != null) reqCache.evict(targetId);
+        } catch (Exception e) {}
+
         evictDepartmentCache(deptId);
+        evictCompanyCache(companyId); // [QUAN TRỌNG] Xóa cache list công ty
         evictSaaSCaches(targetEmployee.getCompanyId());
+        
         log.info("--> XÓA THÀNH CÔNG NHÂN VIÊN ID: {}", targetId);
     }
 
+    // =================================================================
+    // CÁC HÀM GET LIST (ĐÃ TỐI ƯU CACHE)
+    // =================================================================
+    
+    @Cacheable(value = "employees_by_company", key = "#companyId", sync = true)
+    public List<Long> getEmployeeIdsByCompanyCached(Long companyId) {
+        // Nếu cache bị xóa (do create/update/delete gọi evictCompanyCache), hàm này sẽ chạy lại DB
+        return employeeRepository.findIdsByCompanyId(companyId);
+    }
 
+    @Cacheable(value = "employees_by_department", key = "#deptId", sync = true)
+    public List<Long> getEmployeeIdsByDepartmentCached(Long deptId) {
+        return employeeRepository.findIdsByDepartmentId(deptId);
+    }
+
+    public List<Employee> getAllEmployeesByRequester(Employee requester) {
+        List<Long> ids = Collections.emptyList();
+
+        if (requester.getRole() == EmployeeRole.COMPANY_ADMIN) {
+            // Gọi qua 'self' để kích hoạt Cache Proxy
+            ids = self.getEmployeeIdsByCompanyCached(requester.getCompanyId());
+        } else if (requester.getRole() == EmployeeRole.MANAGER) {
+            if (requester.getDepartment() != null) {
+                ids = self.getEmployeeIdsByDepartmentCached(requester.getDepartment().getId());
+            }
+        } else {
+            return List.of(requester);
+        }
+
+        if (ids == null || ids.isEmpty()) return Collections.emptyList();
+
+        List<Employee> fetched = employeeRepository.findByIdInFetchDepartment(ids);
+        
+        Map<Long, Employee> map = fetched.stream()
+            .collect(Collectors.toMap(Employee::getId, e -> e));
+            
+        return ids.stream()
+            .map(map::get)
+            .filter(Objects::nonNull)
+            .collect(Collectors.toList());
+    }
+
+    // =================================================================
+    // RABBITMQ CONSUMER (SYNC TỪ CORE)
+    // =================================================================
+    @Transactional
+    public void createEmployeeFromEvent(UserCreatedEvent event) {
+        log.info("--> [Core -> HR] Nhận phản hồi đồng bộ ID. CoreID: {}, Email: {}", event.getId(), event.getEmail());
+
+        Employee finalEmployee = null;
+
+        // Bước 1: Tìm nhân viên hiện tại
+        Optional<Employee> existingOpt = employeeRepository.findByEmail(event.getEmail());
+
+        if (existingOpt.isPresent()) {
+            Employee existingEmp = existingOpt.get();
+
+            if (existingEmp.getId().equals(event.getId())) {
+                return;
+            }
+
+            // --- ID SWAPPING ---
+            log.info("--> SWAPPING ID tạm ({}) sang ID Core ({})", existingEmp.getId(), event.getId());
+
+            // 1. Backup
+            Department memberOfDept = existingEmp.getDepartment(); 
+            String savedCode = existingEmp.getEmployeeCode();
+            Long companyId = existingEmp.getCompanyId();
+
+            Department managedDept = null;
+            Optional<Department> deptManagedOpt = departmentRepository.findByManagerId(existingEmp.getId());
+            if (deptManagedOpt.isPresent()) {
+                managedDept = deptManagedOpt.get();
+                managedDept.setManager(null);
+                departmentRepository.saveAndFlush(managedDept);
+            }
+
+            // 2. Delete old
+            employeeRepository.delete(existingEmp);
+            employeeRepository.flush();
+
+            // 3. Create new with correct ID
+            Employee newSyncEmp = new Employee();
+            newSyncEmp.setId(event.getId()); 
+            newSyncEmp.setDepartment(memberOfDept);
+            newSyncEmp.setEmployeeCode(savedCode);
+            newSyncEmp.setCompanyId(companyId);
+
+            newSyncEmp.setFullName(event.getFullName());
+            newSyncEmp.setEmail(event.getEmail());
+            newSyncEmp.setPhone(event.getMobileNumber());
+            newSyncEmp.setDateOfBirth(event.getDateOfBirth());
+
+            try { newSyncEmp.setRole(EmployeeRole.valueOf(event.getRole())); } 
+            catch (Exception e) { newSyncEmp.setRole(EmployeeRole.STAFF); }
+
+            try { newSyncEmp.setStatus(EmployeeStatus.valueOf(event.getStatus())); } 
+            catch (Exception e) { newSyncEmp.setStatus(EmployeeStatus.ACTIVE); }
+
+            finalEmployee = employeeRepository.saveAndFlush(newSyncEmp);
+
+            // 4. Restore Manager
+            if (managedDept != null) {
+                managedDept.setManager(finalEmployee);
+                departmentRepository.save(managedDept);
+            }
+
+        } else {
+            // Trường hợp: Tạo mới hoàn toàn
+            finalEmployee = createFreshEmployeeFromEvent(event);
+        }
+
+        if (finalEmployee != null) {
+            syncToAttendanceService(finalEmployee);
+            // [FIX] Xóa cache công ty để list cập nhật ID mới
+            evictCompanyCache(finalEmployee.getCompanyId());
+            if (finalEmployee.getDepartment() != null) {
+                evictDepartmentCache(finalEmployee.getDepartment().getId());
+            }
+        }
+    }
+
+ 
+    private Employee createFreshEmployeeFromEvent(UserCreatedEvent event) {
+        Employee newEmployee = new Employee();
+        newEmployee.setId(event.getId());
+        
+        
+        if (event.getCompanyId() == null && "SUPER_ADMIN".equals(event.getRole())) {
+            newEmployee.setCompanyId(0L); // Gán ID = 0 để đại diện cho System/Admin
+        } else {
+            newEmployee.setCompanyId(event.getCompanyId());
+        }
+
+        newEmployee.setFullName(event.getFullName());
+        newEmployee.setEmail(event.getEmail());
+        newEmployee.setDateOfBirth(event.getDateOfBirth());
+        newEmployee.setPhone(event.getMobileNumber());
+
+        try { 
+            newEmployee.setRole(EmployeeRole.valueOf(event.getRole())); 
+        } catch (Exception e) { 
+            // Fallback nếu role không hợp lệ
+            log.error("Role không hợp lệ từ Core: {}", event.getRole());
+            newEmployee.setRole(EmployeeRole.STAFF); 
+        }
+
+        try { 
+            newEmployee.setStatus(EmployeeStatus.valueOf(event.getStatus())); 
+        } catch (Exception e) { 
+            newEmployee.setStatus(EmployeeStatus.ACTIVE); 
+        }
+
+        // Gọi hàm save có cơ chế retry (nhưng giờ sẽ không bị lỗi companyId nữa)
+        Employee saved = saveEmployeeWithRetry(newEmployee);
+        
+        if (saved != null) {
+            log.info("--> ĐÃ LƯU THÀNH CÔNG USER TỪ CORE: {} (ID: {}, Role: {})", 
+                saved.getEmail(), saved.getId(), saved.getRole());
+        }
+        
+        return saved;
+    }
+    
+    @Transactional
+    public void updateEmployeeStatusFromEvent(UserStatusChangedEvent event) {
+        log.info("--> [Core -> HR] Update Status UserID: {}, Status: {}", event.getUserId(), event.getStatus());
+
+        java.util.Optional<Employee> empOpt = employeeRepository.findById(event.getUserId());
+
+        if (empOpt.isPresent()) {
+            Employee emp = empOpt.get();
+            try {
+                emp.setStatus(EmployeeStatus.valueOf(event.getStatus()));
+                Employee saved = employeeRepository.save(emp);
+
+                syncToAttendanceService(saved);
+                
+                // [FIX] Status thay đổi (Active/Locked) có thể ảnh hưởng đến list hiển thị -> Clear cache
+                evictCompanyCache(emp.getCompanyId());
+                
+            } catch (Exception e) {
+                log.error("Trạng thái không hợp lệ: {}", event.getStatus());
+            }
+        }
+    }
+
+    // =================================================================
+    // HÀM DÙNG CHUNG
+    // =================================================================
+    private Employee saveEmployeeWithRetry(Employee employee) {
+        int maxRetries = 3; 
+        for (int i = 0; i < maxRetries; i++) {
+            try {
+                if (employee.getEmployeeCode() == null) {
+                    employee.setEmployeeCode(generateRandomCode());
+                }
+                return employeeRepository.save(employee);
+            } catch (DataIntegrityViolationException e) {
+                log.warn("Đụng độ mã nhân viên: {}. Thử lại lần {}...", employee.getEmployeeCode(), i + 1);
+                employee.setEmployeeCode(null); 
+                if (i == maxRetries - 1) {
+                    throw new RuntimeException("Lỗi hệ thống: Không thể sinh mã nhân viên.");
+                }
+            }
+        }
+        return null;
+    }
+
+    private String generateRandomCode() {
+        int randomNum = (int) (Math.random() * 1000000);
+        return String.format("NV%06d", randomNum);
+    }
+    
     private void deleteOldAvatarFromStorage(String fileUrl) {
         if (fileUrl == null || fileUrl.isEmpty()) return;
-
         try {
-            // Lấy tên file: http://.../abc.jpg -> abc.jpg
             String fileName = fileUrl.substring(fileUrl.lastIndexOf("/") + 1);
-
-            // Gửi RabbitMQ thay vì gọi trực tiếp
             employeeProducer.sendDeleteFileEvent(fileName);
-            
         } catch (Exception e) {
             log.error("Lỗi khi gửi sự kiện xóa file: {}", e.getMessage());
         }
     }
-@Transactional(readOnly = true)
+
+    @Transactional(readOnly = true)
     public List<Employee> searchStaff(Long requesterId, String keyword) {
-        // 1. Lấy thông tin người tìm
         Employee requester = employeeRepository.findById(requesterId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
         
-        // 2. Gọi Repository với logic "Chọn lọc" (Active, not me, not admin)
         return employeeRepository.searchStaffForSelection(
                 requester.getCompanyId(),
-                requesterId, // Truyền vào để loại trừ chính mình
-                keyword == null ? "" : keyword // Handle null safety
+                requesterId,
+                keyword == null ? "" : keyword 
         );
     }
 
-
-@Transactional(readOnly = true)
+    @Transactional(readOnly = true)
     public List<Employee> searchEmployees(Long requesterId, String keyword) {
         Employee requester = employeeRepository.findById(requesterId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
         EmployeeRole role = requester.getRole();
 
-        // CẤP 1: ADMIN - Tìm toàn công ty
+        // ADMIN
         if (role == EmployeeRole.COMPANY_ADMIN) {
              return employeeRepository.searchEmployees(requester.getCompanyId(), keyword);
         }
 
-        // CẤP 2: MANAGER - Tìm trong phòng ban
+        // MANAGER
         if (role == EmployeeRole.MANAGER) {
             if (requester.getDepartment() != null) {
                 return employeeRepository.searchEmployeesInDepartment(
@@ -671,8 +714,7 @@ private final SimpMessagingTemplate messagingTemplate; // [2] INJECT SOCKET
             }
         }
 
-        // CẤP 3: STAFF - Chỉ tìm thấy chính mình (nếu từ khóa khớp tên mình)
-        // Logic: Kiểm tra keyword có nằm trong tên/mã của mình không
+        // STAFF
         String k = keyword.toLowerCase();
         String name = requester.getFullName().toLowerCase();
         String code = (requester.getEmployeeCode() != null) ? requester.getEmployeeCode().toLowerCase() : "";
@@ -689,19 +731,12 @@ private final SimpMessagingTemplate messagingTemplate; // [2] INJECT SOCKET
             String deptName = (emp.getDepartment() != null) ? emp.getDepartment().getName() : "N/A";
             
             EmployeeSyncEvent syncEvent = new EmployeeSyncEvent(
-                emp.getId(), // ID NÀY ĐÃ LÀ ID CHUẨN TỪ CORE
-                emp.getEmail(),
-                emp.getFullName(),
-                emp.getPhone(),
-                emp.getDateOfBirth(),
-                emp.getCompanyId(),
-                emp.getRole().name(),
-                emp.getStatus().name(),
-                null,
-                deptName
+                emp.getId(), emp.getEmail(), emp.getFullName(),
+                emp.getPhone(), emp.getDateOfBirth(),
+                emp.getCompanyId(), emp.getRole().name(),
+                emp.getStatus().name(), null, deptName
             );
             
-            // Gọi hàm mới trong Producer để bắn vào Exchange nội bộ
             employeeProducer.sendToAttendance(syncEvent);
             log.info("--> [HR -> Attendance] Đã gửi thông tin User ID {} sang Attendance Service.", emp.getId());
         } catch (Exception e) {

@@ -382,7 +382,7 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
     );
   }
 
-  // 3. Các hàm Picker
+  // [CẬP NHẬT] 1. Chọn Ngày (Đồng bộ Theme)
   Future<void> _pickDate() async {
     final now = DateTime.now();
     final picked = await showDatePicker(
@@ -391,12 +391,23 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
       firstDate: DateTime(2020),
       lastDate: DateTime(now.year + 1),
       helpText: 'SELECT DATE',
-      builder: (context, child) => Theme(
-        data: Theme.of(context).copyWith(
-          colorScheme: const ColorScheme.light(primary: Color(0xFF2260FF)),
-        ),
-        child: child!,
-      ),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppColors.primary, // Màu header & nút chọn
+              onPrimary: Colors.white,
+              onSurface: Colors.black,
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.primary, // Màu nút Cancel/OK
+              ),
+            ),
+          ),
+          child: child!,
+        );
+      },
     );
     if (picked != null) {
       setState(() {
@@ -407,30 +418,42 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
     }
   }
 
+  // [CẬP NHẬT] 2. Chọn Năm (Đồng bộ Theme cho YearPicker)
   Future<void> _pickYear() async {
     showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: const Text(
-            "Select Year",
-            style: TextStyle(fontFamily: 'Inter'),
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppColors.primary, // Màu năm được chọn
+              onSurface: Colors.black,
+            ),
           ),
-          content: SizedBox(
-            width: 300,
-            height: 300,
-            child: YearPicker(
-              firstDate: DateTime(2020),
-              lastDate: DateTime(DateTime.now().year + 1),
-              selectedDate: _selectedDate ?? DateTime.now(),
-              onChanged: (DateTime val) {
-                setState(() {
-                  _filterType = FilterType.year;
-                  _selectedDate = val;
-                });
-                _fetchRequests();
-                Navigator.pop(context);
-              },
+          child: AlertDialog(
+            title: const Text(
+              "Select Year",
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            content: SizedBox(
+              width: 300,
+              height: 300,
+              child: YearPicker(
+                firstDate: DateTime(2020),
+                lastDate: DateTime(DateTime.now().year + 1),
+                selectedDate: _selectedDate ?? DateTime.now(),
+                onChanged: (DateTime val) {
+                  setState(() {
+                    _filterType = FilterType.year;
+                    _selectedDate = val;
+                  });
+                  _fetchRequests();
+                  Navigator.pop(context);
+                },
+              ),
             ),
           ),
         );
@@ -438,27 +461,39 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
     );
   }
 
+  // [CẬP NHẬT] 3. Chọn Tháng - Bước 1: Chọn Năm (Đồng bộ Theme)
   Future<void> _pickMonth() async {
     int tempYear = _selectedDate?.year ?? DateTime.now().year;
     await showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: const Text(
-            "Select Year",
-            style: TextStyle(fontFamily: 'Inter'),
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppColors.primary, // Màu năm được chọn
+              onSurface: Colors.black,
+            ),
           ),
-          content: SizedBox(
-            width: 300,
-            height: 300,
-            child: YearPicker(
-              firstDate: DateTime(2020),
-              lastDate: DateTime(DateTime.now().year + 1),
-              selectedDate: DateTime(tempYear),
-              onChanged: (val) {
-                Navigator.pop(context);
-                _pickMonthStep2(val.year);
-              },
+          child: AlertDialog(
+            title: const Text(
+              "Select Year",
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            content: SizedBox(
+              width: 300,
+              height: 300,
+              child: YearPicker(
+                firstDate: DateTime(2020),
+                lastDate: DateTime(DateTime.now().year + 1),
+                selectedDate: DateTime(tempYear),
+                onChanged: (val) {
+                  Navigator.pop(context);
+                  _pickMonthStep2(val.year);
+                },
+              ),
             ),
           ),
         );
@@ -466,55 +501,67 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
     );
   }
 
+  // [CẬP NHẬT] 4. Chọn Tháng - Bước 2: Chọn Tháng cụ thể (Đồng bộ Theme)
   Future<void> _pickMonthStep2(int year) async {
     await showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: Text(
-            "Select Month ($year)",
-            style: const TextStyle(
-              fontFamily: 'Inter',
-              fontWeight: FontWeight.bold,
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppColors.primary, // Màu chủ đạo
+              onSurface: Colors.black,
             ),
           ),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              alignment: WrapAlignment.center,
-              children: List.generate(12, (index) {
-                return InkWell(
-                  onTap: () {
-                    setState(() {
-                      _filterType = FilterType.month;
-                      _selectedDate = DateTime(year, index + 1, 1);
-                    });
-                    _fetchRequests();
-                    Navigator.pop(context);
-                  },
-                  borderRadius: BorderRadius.circular(8),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey[300]!),
-                      borderRadius: BorderRadius.circular(8),
-                      color: Colors.white,
-                    ),
-                    child: Text(
-                      DateFormat('MMM').format(DateTime(2023, index + 1)),
-                      style: const TextStyle(
-                        fontFamily: 'Inter',
-                        fontWeight: FontWeight.w500,
+          child: AlertDialog(
+            title: Text(
+              "Select Month ($year)",
+              style: const TextStyle(
+                fontFamily: 'Inter',
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                alignment: WrapAlignment.center,
+                children: List.generate(12, (index) {
+                  return InkWell(
+                    onTap: () {
+                      setState(() {
+                        _filterType = FilterType.month;
+                        _selectedDate = DateTime(year, index + 1, 1);
+                      });
+                      _fetchRequests();
+                      Navigator.pop(context);
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    // Thêm hiệu ứng splash màu xanh nhạt khi nhấn
+                    splashColor: AppColors.primary.withOpacity(0.1),
+                    highlightColor: AppColors.primary.withOpacity(0.05),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey[300]!),
+                        borderRadius: BorderRadius.circular(8),
+                        color: Colors.white,
+                      ),
+                      child: Text(
+                        DateFormat('MMM').format(DateTime(2023, index + 1)),
+                        style: const TextStyle(
+                          fontFamily: 'Inter',
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ),
-                  ),
-                );
-              }),
+                  );
+                }),
+              ),
             ),
           ),
         );
