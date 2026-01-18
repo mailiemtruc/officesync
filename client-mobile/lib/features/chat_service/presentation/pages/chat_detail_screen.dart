@@ -73,6 +73,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
       setState(() => myId = id);
       _connectSocket();
       _loadHistory();
+      _fetchInitialRoomStatus();
     }
   }
 
@@ -471,6 +472,40 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
       return DateFormat('HH:mm').format(dt);
     } catch (e) {
       return "";
+    }
+  }
+
+  void _fetchInitialRoomStatus() async {
+    // Nếu là chat nhóm hoặc không có partnerId thì bỏ qua
+    if (widget.partnerId == null) return;
+
+    try {
+      // Gọi API getRoomDetails mà bạn vừa sửa ở Backend
+      final data = await _chatApi.getRoomDetails(widget.roomId);
+      print("📦 DATA API TRẢ VỀ: $data");
+
+      // Data trả về cấu trúc: { ..., "members": [ { "id": 1, "isOnline": true }, ... ] }
+      List<dynamic> members = data['members'];
+
+      // Tìm người mình đang chat (Partner)
+      var partner = members.firstWhere((m) {
+        // Ép kiểu về String hết để so sánh cho chuẩn
+        return m['id'].toString() == widget.partnerId.toString();
+      }, orElse: () => null);
+      if (partner != null) {
+        bool onlineStatus = partner['online'] ?? partner['isOnline'] ?? false;
+        // Cập nhật UI
+        if (mounted) {
+          setState(() {
+            isPartnerOnline = onlineStatus;
+          });
+          print(
+            "✅ Đã cập nhật trạng thái Partner: ${onlineStatus ? 'Online' : 'Offline'}",
+          );
+        }
+      }
+    } catch (e) {
+      print("⚠️ Không lấy được trạng thái Online: $e");
     }
   }
 }

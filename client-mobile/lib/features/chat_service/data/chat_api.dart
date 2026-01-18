@@ -207,6 +207,28 @@ class ChatApi {
     }
     return null;
   }
+
+  Future<Map<String, dynamic>> getRoomDetails(int roomId) async {
+    final url = Uri.parse(
+      '$baseUrl/rooms/$roomId',
+    ); // Đảm bảo đường dẫn đúng với Backend
+    String? token = await _storage.read(key: 'auth_token');
+
+    final response = await http.get(
+      url,
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      // Trả về Map JSON để bên kia xử lý
+      return jsonDecode(utf8.decode(response.bodyBytes));
+    } else {
+      throw Exception('Failed to load room details');
+    }
+  }
 }
 
 // Model đơn giản dùng cho Danh bạ (Paste luôn xuống cuối file chat_api.dart cũng được)

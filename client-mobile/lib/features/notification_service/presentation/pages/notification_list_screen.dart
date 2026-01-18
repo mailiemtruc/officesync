@@ -3,6 +3,7 @@ import 'package:intl/intl.dart'; // Nếu báo lỗi, chạy lệnh: flutter pub
 import 'package:officesync/features/notification_service/notification_service.dart';
 import '../../models/notification_model.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:officesync/features/chat_service/presentation/pages/chat_detail_screen.dart';
 
 class NotificationListScreen extends StatefulWidget {
   final int userId;
@@ -52,6 +53,40 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
     }
   }
 
+  // 👇 [THÊM HÀM NÀY] Xử lý bấm vào thông báo
+  void _handleNotificationTap(NotificationModel noti) {
+    // Lấy thông tin từ model
+    String type = noti.type;
+    int id = noti.referenceId;
+    String title = noti.title;
+
+    switch (type) {
+      case 'CHAT':
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ChatDetailScreen(
+              roomId: id,
+              chatName: title, // Lấy tên người gửi làm tên Chat
+            ),
+          ),
+        );
+        break;
+
+      case 'TASK':
+        // Sau này mở cái này
+        print("➡️ Đang mở Task ID: $id");
+        break;
+
+      case 'LEAVE_REQUEST':
+        print("➡️ Đang mở Đơn nghỉ phép ID: $id");
+        break;
+
+      default:
+        print("⚠️ Loại thông báo chưa hỗ trợ: $type");
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -96,6 +131,7 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
     NotificationModel noti = notiItem as NotificationModel;
     bool isRead = noti.isRead;
 
+    // Xử lý thời gian hiển thị gọn gàng
     String timeStr = "";
     if (noti.createdAt.isNotEmpty) {
       try {
@@ -105,33 +141,31 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
       } catch (_) {}
     }
 
-    // 👇 BỌC CARD TRONG DISMISSIBLE ĐỂ VUỐT
     return Dismissible(
-      key: Key(noti.id.toString()), // Key duy nhất để phân biệt
-      direction: DismissDirection.endToStart, // Chỉ cho vuốt từ phải sang trái
-      // 1. Tạo nền màu đỏ khi vuốt (Giao diện đẹp ở chỗ này)
+      key: Key(noti.id.toString()),
+      direction: DismissDirection.endToStart,
+
+      // Nền đỏ khi vuốt xóa (có icon thùng rác)
       background: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: Colors.red.shade400,
-          borderRadius: BorderRadius.circular(8),
+          color: const Color(0xFFFF5252),
+          borderRadius: BorderRadius.circular(16),
         ),
         alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 20),
-        child: const Icon(Icons.delete_outline, color: Colors.white, size: 30),
+        padding: const EdgeInsets.only(right: 24),
+        child: const Icon(
+          Icons.delete_sweep_outlined,
+          color: Colors.white,
+          size: 32,
+        ),
       ),
 
-      // 2. Xử lý khi vuốt xong (Xóa thật)
       onDismissed: (direction) {
-        // A. Gọi API xóa ngầm
         NotificationService().deleteNotification(noti.id);
-
-        // B. Xóa khỏi danh sách hiển thị
         setState(() {
           _notifications.removeWhere((item) => item.id == noti.id);
         });
-
-        // C. Hiện thông báo nhỏ bên dưới
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text("Đã xóa thông báo"),
@@ -140,72 +174,148 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
         );
       },
 
-      // 3. Phần giao diện Card cũ nằm ở đây
-      child: Card(
-        margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        elevation: 0,
-        color: isRead ? Colors.white : Colors.blue.withOpacity(0.05),
-        shape: RoundedRectangleBorder(
-          side: BorderSide(color: Colors.grey.shade200),
-          borderRadius: BorderRadius.circular(8),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16), // Bo góc mềm mại hơn
+          // Hiệu ứng đổ bóng (Shadow) tạo chiều sâu
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.08),
+              spreadRadius: 2,
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+          // Nếu chưa đọc thì có viền xanh mờ bao quanh
+          border: !isRead
+              ? Border.all(
+                  color: const Color(0xFF2260FF).withOpacity(0.3),
+                  width: 1,
+                )
+              : null,
         ),
-        child: ListTile(
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 8,
-          ), // Căn chỉnh lại cho đẹp
-          leading: CircleAvatar(
-            backgroundColor: isRead
-                ? Colors.grey.shade100
-                : Colors.blue.withOpacity(0.1),
-            child: Icon(
-              Icons.notifications,
-              color: isRead ? Colors.grey : Colors.blue,
-            ),
-          ),
-          title: Text(
-            noti.title,
-            style: TextStyle(
-              fontWeight: isRead ? FontWeight.normal : FontWeight.bold,
-              fontSize: 15,
-            ),
-          ),
-          subtitle: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 6),
-              Text(
-                noti.body,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: Colors.grey.shade700, height: 1.3),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                timeStr,
-                style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
-              ),
-            ],
-          ),
-          onTap: () async {
-            if (!isRead) {
-              NotificationService().markAsRead(noti.id);
-              setState(() {
-                final index = _notifications.indexWhere((e) => e.id == noti.id);
-                if (index != -1) {
-                  _notifications[index] = NotificationModel(
-                    id: noti.id,
-                    title: noti.title,
-                    body: noti.body,
-                    type: noti.type,
-                    referenceId: noti.referenceId,
-                    isRead: true,
-                    createdAt: noti.createdAt,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: () {
+              // Logic khi bấm vào: Đánh dấu đã đọc + Chuyển trang
+              if (!isRead) {
+                NotificationService().markAsRead(noti.id);
+                setState(() {
+                  final index = _notifications.indexWhere(
+                    (e) => e.id == noti.id,
                   );
-                }
-              });
-            }
-          },
+                 if (index != -1) {
+  // ✅ Tạo cái mới đè lên cái cũ
+  _notifications[index] = NotificationModel(
+    id: noti.id,
+    title: noti.title,
+    body: noti.body,
+    type: noti.type,
+    referenceId: noti.referenceId,
+    isRead: true, // <--- Chỉ thay đổi đúng chỗ này thành true
+    createdAt: noti.createdAt,
+  );
+}
+                });
+              }
+              _handleNotificationTap(noti); // Gọi hàm chuyển trang
+            },
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // --- CỘT 1: ICON TRÒN (Thay đổi theo loại thông báo) ---
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: _getColorByType(noti.type), // Màu nền nhạt
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      _getIconByType(noti.type), // Icon tương ứng
+                      color: _getIconColorByType(noti.type), // Màu icon đậm
+                      size: 22,
+                    ),
+                  ),
+
+                  const SizedBox(width: 16),
+
+                  // --- CỘT 2: NỘI DUNG CHÍNH ---
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Hàng tiêu đề + Thời gian
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                noti.title,
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  // Chưa đọc thì chữ đậm, Đã đọc thì chữ thường
+                                  fontWeight: isRead
+                                      ? FontWeight.w600
+                                      : FontWeight.w800,
+                                  color: Colors.black87,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              timeStr,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade500,
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 6),
+
+                        // Nội dung tin nhắn
+                        Text(
+                          noti.body,
+                          style: TextStyle(
+                            fontSize: 14,
+                            // Chưa đọc thì màu đen rõ, Đã đọc thì màu xám
+                            color: isRead
+                                ? Colors.grey.shade600
+                                : Colors.black87,
+                            height: 1.4,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // --- CỘT 3: CHẤM XANH (Chỉ hiện khi chưa đọc) ---
+                  if (!isRead)
+                    Container(
+                      margin: const EdgeInsets.only(left: 10, top: 15),
+                      width: 10,
+                      height: 10,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF2260FF),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -225,5 +335,47 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
         ],
       ),
     );
+  }
+
+  // 1. Lấy màu nền nhạt cho icon (VD: Tin nhắn -> Xanh nhạt)
+  Color _getColorByType(String type) {
+    switch (type) {
+      case 'CHAT':
+        return const Color(0xFFE3F2FD);
+      case 'TASK':
+        return const Color(0xFFFFF3E0);
+      case 'LEAVE_REQUEST':
+        return const Color(0xFFF3E5F5);
+      default:
+        return const Color(0xFFFFEBEE);
+    }
+  }
+
+  // 2. Lấy hình Icon tương ứng
+  IconData _getIconByType(String type) {
+    switch (type) {
+      case 'CHAT':
+        return Icons.chat_bubble_outline;
+      case 'TASK':
+        return Icons.assignment_outlined;
+      case 'LEAVE_REQUEST':
+        return Icons.flight_takeoff;
+      default:
+        return Icons.notifications_none;
+    }
+  }
+
+  // 3. Lấy màu đậm cho Icon chính
+  Color _getIconColorByType(String type) {
+    switch (type) {
+      case 'CHAT':
+        return Colors.blue;
+      case 'TASK':
+        return Colors.orange;
+      case 'LEAVE_REQUEST':
+        return Colors.purple;
+      default:
+        return Colors.red;
+    }
   }
 }

@@ -322,7 +322,8 @@ public class ChatService {
                     u.getFullName(),
                     u.getEmail(),
                     u.getAvatarUrl(),
-                    m.getRole().toString()
+                    m.getRole().toString(),
+                    u.isOnline()
                 ));
             });
         }

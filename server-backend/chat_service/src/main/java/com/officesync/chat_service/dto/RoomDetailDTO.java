@@ -26,5 +26,6 @@ public class RoomDetailDTO {
         private String email;
         private String avatarUrl;
         private String role; // "ADMIN" or "MEMBER"
+        private boolean isOnline;
     }
 }
