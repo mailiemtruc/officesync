@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:fl_chart/fl_chart.dart'; // 1. Import thư viện biểu đồ
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'dart:async';
 import '../../../../core/config/app_colors.dart';
@@ -11,7 +12,7 @@ import 'all_companies_screen.dart';
 import 'package:officesync/features/notification_service/presentation/pages/notification_list_screen.dart';
 
 class AdminHomeView extends StatefulWidget {
-  final int currentUserId; // 👈 Thêm dòng này
+  final int currentUserId;
   const AdminHomeView({super.key, required this.currentUserId});
 
   @override
@@ -24,6 +25,9 @@ class _AdminHomeViewState extends State<AdminHomeView> {
   bool _isLoading = true;
   Map<String, dynamic>? _stats;
   List<CompanyModel> _companies = [];
+
+  // 2. Biến chứa dữ liệu biểu đồ
+  List<FlSpot> _chartSpots = [];
 
   @override
   void initState() {
@@ -46,9 +50,32 @@ class _AdminHomeViewState extends State<AdminHomeView> {
       ]);
 
       if (mounted) {
-        setState(() {
-          _stats = results[0].data;
+        final statsData = results[0].data;
 
+        // 3. Xử lý dữ liệu biểu đồ từ API (Giống hệt AnalyticsScreen)
+        List<FlSpot> tempSpots = [];
+        if (statsData != null &&
+            statsData['history'] != null &&
+            statsData['history'] is List) {
+          final List<dynamic> historyList = statsData['history'];
+          for (int i = 0; i < historyList.length; i++) {
+            tempSpots.add(
+              FlSpot(i.toDouble(), (historyList[i] as num).toDouble()),
+            );
+          }
+          // Xử lý trường hợp chỉ có 1 điểm dữ liệu
+          if (tempSpots.length == 1) {
+            tempSpots.insert(0, const FlSpot(0, 0));
+            tempSpots[1] = FlSpot(1, tempSpots[1].y);
+          }
+        }
+        // Nếu không có dữ liệu thì mặc định
+        if (tempSpots.isEmpty)
+          tempSpots = [const FlSpot(0, 0), const FlSpot(1, 0)];
+
+        setState(() {
+          _stats = statsData;
+          _chartSpots = tempSpots; // Lưu vào biến state
           _companies = (results[1].data as List)
               .map((e) => CompanyModel.fromJson(e))
               .toList();
@@ -61,21 +88,18 @@ class _AdminHomeViewState extends State<AdminHomeView> {
     }
   }
 
+  // ... (Giữ nguyên hàm _toggleCompanyStatus)
   Future<void> _toggleCompanyStatus(int id, String currentStatus) async {
     try {
       final newStatus = currentStatus == 'ACTIVE' ? 'LOCKED' : 'ACTIVE';
       final client = ApiClient();
-
       await client.put(
         '/admin/companies/$id/status',
         data: {"status": newStatus},
       );
-
       _fetchData();
-
       if (mounted) {
         Navigator.pop(context);
-
         CustomSnackBar.show(
           context,
           title: "Success",
@@ -84,8 +108,6 @@ class _AdminHomeViewState extends State<AdminHomeView> {
         );
       }
     } catch (e) {
-      print("Error update status: $e");
-
       CustomSnackBar.show(
         context,
         title: "Action Failed",
@@ -117,7 +139,10 @@ class _AdminHomeViewState extends State<AdminHomeView> {
         children: [
           _buildAnimatedItem(0, _buildHeader()),
           const SizedBox(height: 30),
-          _buildAnimatedItem(1, _buildBlueCard()),
+
+          // 4. Thay _buildBlueCard() bằng _buildChartCard()
+          _buildAnimatedItem(1, _buildChartCard()),
+
           const SizedBox(height: 30),
           _buildAnimatedItem(2, _buildQuickActions()),
           const SizedBox(height: 35),
@@ -144,7 +169,7 @@ class _AdminHomeViewState extends State<AdminHomeView> {
               children: [
                 _buildAnimatedItem(0, _buildHeader()),
                 const SizedBox(height: 40),
-                _buildAnimatedItem(1, _buildBlueCard()),
+                _buildAnimatedItem(1, _buildChartCard()), // Thay thế ở đây
                 const SizedBox(height: 40),
                 _buildAnimatedItem(2, _buildQuickActions()),
               ],
@@ -180,6 +205,150 @@ class _AdminHomeViewState extends State<AdminHomeView> {
       ),
     );
   }
+
+  // --- WIDGET BIỂU ĐỒ MỚI ---
+  Widget _buildChartCard() {
+    return Container(
+      height: 320, // Chiều cao cố định cho card biểu đồ
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(30),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "User Growth",
+                    style: TextStyle(
+                      color: Color(0xFF64748B),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    "${_stats?['users'] ?? 0} Users",
+                    style: const TextStyle(
+                      color: Color(0xFF1E293B),
+                      fontSize: 24,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  PhosphorIconsBold.chartLineUp,
+                  color: AppColors.primary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Expanded(
+            child: LineChart(
+              LineChartData(
+                lineTouchData: LineTouchData(
+                  touchTooltipData: LineTouchTooltipData(
+                    tooltipBgColor: Colors.blueGrey,
+                    getTooltipItems: (List<LineBarSpot> touchedBarSpots) {
+                      return touchedBarSpots.map((barSpot) {
+                        return LineTooltipItem(
+                          barSpot.y.toInt().toString(),
+                          const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        );
+                      }).toList();
+                    },
+                  ),
+                ),
+                gridData: const FlGridData(show: false),
+                titlesData: FlTitlesData(
+                  show: true,
+                  rightTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                  topTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      interval: 5,
+                      reservedSize: 30,
+                      getTitlesWidget: (value, meta) => Text(
+                        value.toInt().toString(),
+                        style: const TextStyle(
+                          color: Color(0xFF94A3B8),
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      interval: 1,
+                      getTitlesWidget: (value, meta) => Padding(
+                        padding: const EdgeInsets.only(top: 8.0),
+                        child: Text(
+                          "D${value.toInt() + 1}",
+                          style: const TextStyle(
+                            color: Color(0xFF94A3B8),
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                borderData: FlBorderData(show: false),
+                lineBarsData: [
+                  LineChartBarData(
+                    spots: _chartSpots,
+                    isCurved: true,
+                    color: AppColors.primary,
+                    barWidth: 4,
+                    isStrokeCapRound: true,
+                    dotData: const FlDotData(show: false),
+                    belowBarData: BarAreaData(
+                      show: true,
+                      color: AppColors.primary.withOpacity(0.15),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- CÁC WIDGET CŨ (Header, QuickAction, List) ---
 
   Widget _buildHeader() {
     return Row(
@@ -253,81 +422,7 @@ class _AdminHomeViewState extends State<AdminHomeView> {
     );
   }
 
-  Widget _buildBlueCard() {
-    final countComp = _stats?['companies'] ?? 0;
-    final countUser = _stats?['users'] ?? 0;
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: const Color(0xFFCAD6FF),
-        borderRadius: BorderRadius.circular(30),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF2260FF).withOpacity(0.15),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppColors.primary,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: const Text(
-              'System Health',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          Text(
-            'All systems operational.\n$countComp Companies, $countUser Users.',
-            style: const TextStyle(
-              color: Color(0xFF1E293B),
-              fontSize: 20,
-              fontFamily: 'Inter',
-              fontWeight: FontWeight.w700,
-              height: 1.3,
-            ),
-          ),
-          const SizedBox(height: 12),
-          GestureDetector(
-            onTap: () {},
-            child: Row(
-              children: [
-                const Text(
-                  'View detailed logs',
-                  style: TextStyle(
-                    color: Color(0xFF1E293B),
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    decoration: TextDecoration.underline,
-                  ),
-                ),
-                const SizedBox(width: 4),
-                Icon(
-                  PhosphorIconsBold.arrowRight,
-                  size: 16,
-                  color: const Color(0xFF1E293B),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  // (Đã xóa hàm _buildBlueCard vì không dùng nữa)
 
   Widget _buildQuickActions() {
     return Row(
@@ -385,7 +480,6 @@ class _AdminHomeViewState extends State<AdminHomeView> {
         child: Center(child: Text("No companies found.")),
       );
     }
-
     return Column(
       children: _companies.map((company) {
         final isLocked = company.status == 'LOCKED';
@@ -401,7 +495,6 @@ class _AdminHomeViewState extends State<AdminHomeView> {
               status: company.status,
               statusColor: statusColor,
               domain: displayDomain,
-
               onTap: () {
                 Navigator.push(
                   context,
@@ -420,56 +513,6 @@ class _AdminHomeViewState extends State<AdminHomeView> {
           ],
         );
       }).toList(),
-    );
-  }
-
-  void _showActionSheet(CompanyModel company) {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        final isLocked = company.status == 'LOCKED';
-        return Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                "Action for ${company.name}",
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton.icon(
-                  onPressed: () =>
-                      _toggleCompanyStatus(company.id, company.status),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: isLocked ? Colors.green : Colors.red,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  icon: Icon(isLocked ? Icons.lock_open : Icons.lock_outline),
-                  label: Text(isLocked ? "Unlock Company" : "Lock Company"),
-                ),
-              ),
-              const SizedBox(height: 10),
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text("Cancel"),
-              ),
-            ],
-          ),
-        );
-      },
     );
   }
 

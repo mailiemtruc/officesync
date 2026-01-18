@@ -90,4 +90,7 @@ public class UserService {
 
         return savedUser;
     }
+    public List<User> getRecentUsers() {
+        return userRepository.findTop5ByOrderByIdDesc();
+    }
 }

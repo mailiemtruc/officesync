@@ -324,7 +324,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
-                    role,
+                    _getDisplayRole(role),
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
@@ -561,6 +561,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
       ),
     );
+  }
+
+  // Hàm chuyển đổi tên Role sang tên hiển thị đẹp hơn
+  String _getDisplayRole(String rawRole) {
+    switch (rawRole) {
+      case 'SUPER_ADMIN':
+        return 'ADMIN';
+      case 'COMPANY_ADMIN':
+        return 'DIRECTOR';
+      case 'MANAGER':
+        return 'MANAGER';
+      case 'STAFF':
+        return 'STAFF';
+      default:
+        return rawRole; // Trường hợp khác giữ nguyên
+    }
   }
 }
 

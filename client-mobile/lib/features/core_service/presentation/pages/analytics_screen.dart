@@ -14,49 +14,54 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   bool _isLoading = true;
   int _totalUsers = 0;
   int _totalCompanies = 0;
-
-  // Danh sách điểm biểu đồ
   List<FlSpot> _chartSpots = [];
+
+  // Danh sách user mới
+  List<dynamic> _recentUsers = [];
 
   @override
   void initState() {
     super.initState();
-    _fetchRealStats();
+    _fetchData();
   }
 
-  Future<void> _fetchRealStats() async {
+  Future<void> _fetchData() async {
     try {
       final client = ApiClient();
-      final response = await client.get('/admin/stats');
 
-      if (response.statusCode == 200 && response.data != null) {
-        final data = response.data;
+      // Gọi 2 API song song
+      final results = await Future.wait([
+        client.get('/admin/stats'),
+        client.get('/admin/users/recent'),
+      ]);
 
-        // 1. Parse dữ liệu lịch sử từ Server
+      final statsResponse = results[0];
+      final usersResponse = results[1];
+
+      if (statsResponse.statusCode == 200 && statsResponse.data != null) {
+        final data = statsResponse.data;
+
+        // Xử lý biểu đồ
         List<FlSpot> tempSpots = [];
-
         if (data['history'] != null && data['history'] is List) {
           final List<dynamic> historyList = data['history'];
-
-          if (historyList.isNotEmpty) {
-            for (int i = 0; i < historyList.length; i++) {
-              final double yVal = (historyList[i] as num).toDouble();
-              tempSpots.add(FlSpot(i.toDouble(), yVal));
-            }
-
-            // Nếu chỉ có 1 điểm, thêm điểm 0 vào trước
-            if (tempSpots.length == 1) {
-              FlSpot current = tempSpots[0];
-              tempSpots.clear();
-              tempSpots.add(const FlSpot(0, 0));
-              tempSpots.add(FlSpot(1, current.y));
-            }
+          for (int i = 0; i < historyList.length; i++) {
+            tempSpots.add(
+              FlSpot(i.toDouble(), (historyList[i] as num).toDouble()),
+            );
+          }
+          if (tempSpots.length == 1) {
+            tempSpots.insert(0, const FlSpot(0, 0));
+            tempSpots[1] = FlSpot(1, tempSpots[1].y);
           }
         }
+        if (tempSpots.isEmpty)
+          tempSpots = [const FlSpot(0, 0), const FlSpot(1, 0)];
 
-        if (tempSpots.isEmpty) {
-          tempSpots.add(const FlSpot(0, 0));
-          tempSpots.add(const FlSpot(1, 0));
+        // Xử lý danh sách User mới
+        List<dynamic> tempUsers = [];
+        if (usersResponse.statusCode == 200 && usersResponse.data != null) {
+          tempUsers = usersResponse.data;
         }
 
         if (mounted) {
@@ -64,15 +69,14 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             _totalUsers = data['users'] ?? 0;
             _totalCompanies = data['companies'] ?? 0;
             _chartSpots = tempSpots;
+            _recentUsers = tempUsers;
             _isLoading = false;
           });
         }
       }
     } catch (e) {
       print("Error fetching analytics: $e");
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -81,8 +85,11 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF3F5F9),
       appBar: AppBar(
+        // 👇 [ĐÃ SỬA] Thêm dòng này để căn giữa tiêu đề
+        centerTitle: true,
+
         title: const Text(
-          "System Analytics",
+          "SYSTEM ANALYTICS",
           style: TextStyle(
             fontWeight: FontWeight.bold,
             color: AppColors.primary,
@@ -99,7 +106,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             icon: const Icon(Icons.refresh, color: AppColors.primary),
             onPressed: () {
               setState(() => _isLoading = true);
-              _fetchRealStats();
+              _fetchData();
             },
           ),
         ],
@@ -129,122 +136,229 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                   ),
                   const SizedBox(height: 30),
 
-                  // 2. Tiêu đề biểu đồ
+                  // 2. Biểu đồ
                   const Text(
-                    "User Growth History (Last 7 Days)",
+                    "User Growth History",
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 15),
+                  _buildChartSection(),
+                  const SizedBox(height: 30),
 
-                  // 3. Khung Biểu đồ
-                  Container(
-                    height: 300,
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
-                          blurRadius: 10,
-                        ),
-                      ],
-                    ),
-                    child: LineChart(
-                      LineChartData(
-                        // 👇 [ĐÃ SỬA] Dùng tooltipBgColor cho phiên bản cũ
-                        lineTouchData: LineTouchData(
-                          touchTooltipData: LineTouchTooltipData(
-                            tooltipBgColor:
-                                Colors.blueGrey, // <--- SỬA DÒNG NÀY
-                            getTooltipItems:
-                                (List<LineBarSpot> touchedBarSpots) {
-                                  return touchedBarSpots.map((barSpot) {
-                                    return LineTooltipItem(
-                                      barSpot.y.toInt().toString(),
-                                      const TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    );
-                                  }).toList();
-                                },
-                          ),
-                        ),
-
-                        gridData: const FlGridData(show: false),
-                        // Cấu hình trục X, Y
-                        titlesData: FlTitlesData(
-                          show: true,
-                          rightTitles: const AxisTitles(
-                            sideTitles: SideTitles(showTitles: false),
-                          ),
-                          topTitles: const AxisTitles(
-                            sideTitles: SideTitles(showTitles: false),
-                          ),
-
-                          // Trục trái (Số lượng)
-                          leftTitles: AxisTitles(
-                            sideTitles: SideTitles(
-                              showTitles: true,
-                              interval: 5,
-                              reservedSize: 35,
-                              getTitlesWidget: (value, meta) {
-                                return Text(
-                                  value.toInt().toString(),
-                                  style: const TextStyle(
-                                    color: Colors.black87,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-
-                          // Trục dưới (Ngày)
-                          bottomTitles: AxisTitles(
-                            sideTitles: SideTitles(
-                              showTitles: true,
-                              interval: 1,
-                              reservedSize: 30,
-                              getTitlesWidget: (value, meta) {
-                                return Padding(
-                                  padding: const EdgeInsets.only(top: 8.0),
-                                  child: Text(
-                                    "D${value.toInt() + 1}",
-                                    style: const TextStyle(
-                                      color: Colors.black87,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                        ),
-                        borderData: FlBorderData(show: false),
-                        lineBarsData: [
-                          LineChartBarData(
-                            spots: _chartSpots,
-                            isCurved: true,
-                            color: AppColors.primary,
-                            barWidth: 4,
-                            isStrokeCapRound: true,
-                            dotData: const FlDotData(show: false),
-                            belowBarData: BarAreaData(
-                              show: true,
-                              color: AppColors.primary.withOpacity(0.2),
-                            ),
-                          ),
-                        ],
+                  // 3. Danh sách User mới đăng ký
+                  if (_recentUsers.isNotEmpty) ...[
+                    const Text(
+                      "Recent Registrations",
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                  ),
+                    const SizedBox(height: 15),
+                    _buildRecentUsersList(),
+                    const SizedBox(height: 50),
+                  ],
                 ],
               ),
             ),
+    );
+  }
+
+  // --- CÁC WIDGET CON (Giữ nguyên không đổi) ---
+
+  Widget _buildRecentUsersList() {
+    return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: _recentUsers.length,
+      separatorBuilder: (context, index) => const SizedBox(height: 12),
+      itemBuilder: (context, index) {
+        final user = _recentUsers[index];
+        final String name = user['fullName'] ?? 'Unknown';
+        final String email = user['email'] ?? '';
+        final String role = user['role'] ?? 'USER';
+        final String status = user['status'] ?? 'ACTIVE';
+
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.03),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 45,
+                height: 45,
+                decoration: BoxDecoration(
+                  color: _getRoleColor(role).withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Text(
+                    name.isNotEmpty ? name[0].toUpperCase() : 'U',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: _getRoleColor(role),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1E293B),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      email,
+                      style: TextStyle(fontSize: 13, color: Colors.grey[500]),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: status == 'ACTIVE' ? Colors.green[50] : Colors.red[50],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  status,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: status == 'ACTIVE' ? Colors.green : Colors.red,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Color _getRoleColor(String role) {
+    switch (role) {
+      case 'SUPER_ADMIN':
+        return Colors.red;
+      case 'COMPANY_ADMIN':
+        return Colors.blue;
+      case 'MANAGER':
+        return Colors.purple;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  Widget _buildChartSection() {
+    return Container(
+      height: 300,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10),
+        ],
+      ),
+      child: LineChart(
+        LineChartData(
+          lineTouchData: LineTouchData(
+            touchTooltipData: LineTouchTooltipData(
+              tooltipBgColor: Colors.blueGrey,
+              getTooltipItems: (List<LineBarSpot> touchedBarSpots) {
+                return touchedBarSpots.map((barSpot) {
+                  return LineTooltipItem(
+                    barSpot.y.toInt().toString(),
+                    const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  );
+                }).toList();
+              },
+            ),
+          ),
+          gridData: const FlGridData(show: false),
+          titlesData: FlTitlesData(
+            show: true,
+            rightTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false),
+            ),
+            topTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false),
+            ),
+            leftTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                interval: 5,
+                reservedSize: 35,
+                getTitlesWidget: (v, m) => Text(
+                  v.toInt().toString(),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+              ),
+            ),
+            bottomTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                interval: 1,
+                reservedSize: 30,
+                getTitlesWidget: (v, m) => Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    "D${v.toInt() + 1}",
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          borderData: FlBorderData(show: false),
+          lineBarsData: [
+            LineChartBarData(
+              spots: _chartSpots,
+              isCurved: true,
+              color: AppColors.primary,
+              barWidth: 4,
+              dotData: const FlDotData(show: false),
+              belowBarData: BarAreaData(
+                show: true,
+                color: AppColors.primary.withOpacity(0.2),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

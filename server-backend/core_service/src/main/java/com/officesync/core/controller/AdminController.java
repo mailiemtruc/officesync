@@ -100,4 +100,9 @@ public class AdminController {
         private String password;
         private String mobileNumber;
     }
+
+    @GetMapping("/users/recent")
+    public ResponseEntity<?> getRecentUsers() {
+        return ResponseEntity.ok(userService.getRecentUsers());
+    }
 }
