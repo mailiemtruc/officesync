@@ -11,7 +11,9 @@ import org.springframework.stereotype.Service;
 
 import com.officesync.core.dto.CompanyConfigEvent;
 import com.officesync.core.model.Company;
+import com.officesync.core.model.SystemDailyStat;
 import com.officesync.core.repository.CompanyRepository;
+import com.officesync.core.repository.SystemDailyStatRepository;
 import com.officesync.core.repository.UserRepository;
 
 @Service
@@ -20,12 +22,36 @@ public class CompanyService {
     @Autowired private CompanyRepository companyRepository;
     @Autowired private UserRepository userRepository;
     @Autowired private RabbitMQProducer rabbitProducer;
+    @Autowired private SystemDailyStatRepository statRepository;
 
     // --- Cho Admin ---
-    public Map<String, Long> getSystemStats() {
-        Map<String, Long> stats = new HashMap<>();
-        stats.put("companies", companyRepository.count());
-        stats.put("users", userRepository.count());
+    public Map<String, Object> getSystemStats() {
+        Map<String, Object> stats = new HashMap<>();
+        
+        // Lấy số liệu hiện tại (Realtime)
+        long currentUsers = userRepository.count();
+        long currentCompanies = companyRepository.count();
+
+        stats.put("companies", currentCompanies);
+        stats.put("users", currentUsers);
+
+        // 2. Lấy lịch sử từ DB (Real History)
+        List<SystemDailyStat> historyStats = statRepository.findTop7ByOrderByDateDesc();
+        
+        // Chuyển đổi List<Entity> thành List<Long> (chỉ lấy số lượng user để vẽ chart)
+        // Đảo ngược list để sắp xếp từ cũ đến mới (Ngày 1 -> Ngày 7)
+        List<Long> chartData = historyStats.stream()
+            .map(SystemDailyStat::getTotalUsers)
+            .sorted() // Sắp xếp lại nếu cần, hoặc dùng Collections.reverse
+            .collect(Collectors.toList());
+
+        // Nếu hệ thống mới tinh chưa có lịch sử, thêm số hiện tại vào để chart không bị trống
+        if (chartData.isEmpty()) {
+            chartData.add(currentUsers);
+        }
+
+        stats.put("history", chartData); // Trả về mảng thật
+
         return stats;
     }
 

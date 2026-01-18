@@ -10,6 +10,7 @@ import '../../../../dashboard_screen.dart';
 import '../../../../core/utils/custom_snackbar.dart';
 // [MỚI] Import WebSocketService
 import '../../../../../core/services/websocket_service.dart';
+import '../../../../../core/services/analytics_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -484,8 +485,23 @@ class _LoginScreenState extends State<LoginScreen> {
         await storage.write(key: 'user_info', value: jsonEncode(user));
 
         if (user['id'] != null) {
+          // 1. Lưu UserID vào Storage (Code cũ của bạn)
           await storage.write(key: 'userId', value: user['id'].toString());
           print("✅ Đã lưu UserID: ${user['id']} vào Storage");
+
+          // 👇 [MỚI] THÊM ĐOẠN NÀY ĐỂ LOG ANALYTICS
+          try {
+            // Định danh user này trên hệ thống Firebase để theo dõi hành trình
+            await AnalyticsService.setUserId(user['id'].toString());
+
+            // Ghi nhận sự kiện "User đã đăng nhập thành công"
+            await AnalyticsService.logLogin('email_password');
+          } catch (e) {
+            print(
+              "⚠️ Lỗi log analytics: $e",
+            ); // Không để lỗi analytics làm chặn app
+          }
+          // 👆 [HẾT ĐOẠN THÊM]
         }
 
         // [QUAN TRỌNG] KẾT NỐI SOCKET TẠI ĐÂY

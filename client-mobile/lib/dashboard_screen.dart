@@ -375,6 +375,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
           route: '/create_admin',
           width: itemWidth,
         ),
+        _buildMenuItem(
+          context,
+          title: 'System Analytics',
+          icon: PhosphorIconsFill.chartLineUp, // Icon biểu đồ
+          color: const Color(0xFFE11D48), // Màu đỏ hồng nổi bật
+          route: '/analytics', // Dẫn tới route bạn đã khai báo ở main.dart
+          width: itemWidth,
+        ),
       ],
     );
   }

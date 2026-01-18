@@ -5,6 +5,7 @@ import '../../../../core/config/app_colors.dart';
 import '../../../../core/widgets/custom_text_field.dart';
 import '../../../../core/api/api_client.dart';
 import '../../../../core/utils/custom_snackbar.dart';
+import '../../../../../core/services/analytics_service.dart';
 
 class SetPasswordScreen extends StatefulWidget {
   const SetPasswordScreen({super.key});
@@ -74,6 +75,7 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
       );
 
       if (response.statusCode == 200) {
+        await AnalyticsService.logSignUp('email');
         if (mounted) {
           _showSuccessDialog(
             "Your account has been created.\nPlease log in to continue.",
