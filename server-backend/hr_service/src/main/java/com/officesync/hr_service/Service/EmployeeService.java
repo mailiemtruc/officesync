@@ -34,6 +34,7 @@ import com.officesync.hr_service.Repository.DepartmentRepository;
 import com.officesync.hr_service.Repository.EmployeeRepository;
 import com.officesync.hr_service.Repository.RequestAuditLogRepository;
 import com.officesync.hr_service.Repository.RequestRepository;
+import com.officesync.hr_service.DTO.DepartmentSyncEvent;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -61,6 +62,7 @@ public class EmployeeService {
     public void setSelf(@Lazy EmployeeService self) {
         this.self = self;
     }
+   
 
     // =================================================================
     // CÁC HÀM QUẢN LÝ CACHE (MANUAL EVICTION)
@@ -223,6 +225,7 @@ public class EmployeeService {
         // 1. Tìm nhân viên
         Employee targetEmployee = employeeRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Employee not found"));
+        
 
         // Lấy thông tin cũ để xử lý cache
         Long oldDeptId = (targetEmployee.getDepartment() != null) ? targetEmployee.getDepartment().getId() : null;
@@ -352,6 +355,32 @@ public class EmployeeService {
                 body = "You have been removed from department " + ((oldDepartment != null) ? oldDepartment.getName() : "Unassigned");
             }
             sendNotification(savedEmployee, title, body);
+            // --- [BẮT ĐẦU ĐOẠN CẦN THÊM] ---
+            // Đồng bộ sang Chat Service (Rời nhóm cũ -> Vào nhóm mới)
+            try {
+                // A. Nếu trước đó CÓ phòng -> Bắn lệnh RỜI nhóm cũ
+                if (oldDeptId != null) {
+                    DepartmentSyncEvent removeEvent = new DepartmentSyncEvent();
+                    removeEvent.setEvent(DepartmentSyncEvent.ACTION_REMOVE_MEMBER);
+                    removeEvent.setDeptId(oldDeptId);
+                    removeEvent.setCompanyId(savedEmployee.getCompanyId());
+                    removeEvent.setMemberIds(List.of(savedEmployee.getId()));
+                    employeeProducer.sendDepartmentEvent(removeEvent);
+                }
+
+                // B. Nếu bây giờ CÓ phòng -> Bắn lệnh VÀO nhóm mới
+                if (currentDeptId != null) {
+                    DepartmentSyncEvent addEvent = new DepartmentSyncEvent();
+                    addEvent.setEvent(DepartmentSyncEvent.ACTION_ADD_MEMBER);
+                    addEvent.setDeptId(currentDeptId);
+                    addEvent.setCompanyId(savedEmployee.getCompanyId());
+                    addEvent.setMemberIds(List.of(savedEmployee.getId()));
+                    employeeProducer.sendDepartmentEvent(addEvent);
+                }
+            } catch (Exception e) {
+                log.error("⚠️ Lỗi đồng bộ Chat: {}", e.getMessage());
+            }
+            // --- [KẾT THÚC ĐOẠN CẦN THÊM] ---
         }
         
         // Socket Refresh Profile

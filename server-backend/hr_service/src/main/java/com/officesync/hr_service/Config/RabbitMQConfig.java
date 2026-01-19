@@ -70,6 +70,13 @@ public class RabbitMQConfig {
     // [MỚI] Cấu hình cho Notification
     public static final String NOTIFICATION_EXCHANGE = "notification.exchange";
     public static final String NOTIFICATION_ROUTING_KEY = "notification.send";
+    // cau hinh chat
+    public static final String HR_EXCHANGE = "hr_exchange";
+    public static final String HR_ROUTING_KEY = "hr_routing_key";
+    
+
+
+
 
     @Bean
     public TopicExchange notificationExchange() {
@@ -137,5 +144,11 @@ public class RabbitMQConfig {
                 .bind(companyQueue)
                 .to(internalExchange)
                 .with(ROUTING_KEY_COMPANY_CREATE); // "company.create"
+    }
+
+//chat
+    @Bean
+    public TopicExchange hrExchange() {
+        return new TopicExchange(HR_EXCHANGE);
     }
 }

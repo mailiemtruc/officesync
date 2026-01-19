@@ -7,9 +7,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.officesync.hr_service.Config.RabbitMQConfig;
 import com.officesync.hr_service.DTO.EmployeeSyncEvent;
 import com.officesync.hr_service.DTO.NotificationEvent;
-
+import com.officesync.hr_service.DTO.DepartmentSyncEvent; // Import mới
+//import com.officesync.hr_service.Producer.EmployeeProducer; // Import mới
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.core.Message;
+import org.springframework.amqp.core.MessageBuilder;
+import org.springframework.amqp.core.MessageProperties;
 
 @Service
 @RequiredArgsConstructor
@@ -21,7 +25,7 @@ public class EmployeeProducer {
 
     private static final String INTERNAL_EXCHANGE = "internal.exchange";
     private static final String ATTENDANCE_ROUTING_KEY = "user.sync";
-
+  //  private final EmployeeProducer employeeProducer;
     // 1. Gửi TẠO MỚI
     public void sendEmployeeCreatedEvent(EmployeeSyncEvent event) {
         try {
@@ -114,5 +118,32 @@ public class EmployeeProducer {
         }
     }
 
+// [CHAT] Gửi sự kiện sang Chat Service--------------------------------------------------
+ public void sendDepartmentEvent(DepartmentSyncEvent event) {
+        try {
+            log.info("--> [RabbitMQ] Gửi event Department sang Chat (Raw JSON): {}", event.getEvent());
 
+            // 1. Chuyển Object -> JSON String
+            String json = objectMapper.writeValueAsString(event);
+
+            // 2. Đóng gói thành Message chuẩn RabbitMQ (Byte Array)
+            // Việc này bỏ qua mọi Config Converter của HR Service
+            Message message = MessageBuilder
+                    .withBody(json.getBytes()) // Chuyển String thành Bytes
+                    .setContentType(MessageProperties.CONTENT_TYPE_JSON) // Gắn nhãn "Đây là JSON"
+                    .build();
+
+            // 3. Gửi gói tin đi
+            rabbitTemplate.send(
+                RabbitMQConfig.HR_EXCHANGE,
+                RabbitMQConfig.HR_ROUTING_KEY,
+                message
+            );
+            
+            log.info("✅ Đã gửi thành công gói tin JSON sang Chat!");
+        } catch (Exception e) {
+            log.error("❌ Lỗi gửi event Department: {}", e.getMessage());
+            e.printStackTrace();
+        }
+    }
 }

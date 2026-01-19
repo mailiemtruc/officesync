@@ -86,4 +86,9 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
            "WHERE e.companyId = :companyId " +
            "AND (e.role = 'COMPANY_ADMIN' OR e.role = 'MANAGER' OR d.isHr = true)")
     List<Long> findApproverIdsByCompany(@Param("companyId") Long companyId);
+
+    // [CHAT] Gỡ nhân viên khỏi phòng ban nhanh--------------------------------------------------
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.data.jpa.repository.Query("UPDATE Employee e SET e.department = NULL WHERE e.department.id = :deptId")
+    void unlinkEmployeesFromDepartment(@org.springframework.data.repository.query.Param("deptId") Long deptId);
 }

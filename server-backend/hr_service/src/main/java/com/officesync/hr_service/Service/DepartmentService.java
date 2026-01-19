@@ -26,7 +26,7 @@ import com.officesync.hr_service.Producer.EmployeeProducer;
 import com.officesync.hr_service.Repository.DepartmentRepository;
 import com.officesync.hr_service.Repository.EmployeeRepository;
 import com.officesync.hr_service.Repository.RequestRepository;
-
+import com.officesync.hr_service.DTO.DepartmentSyncEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -184,7 +184,22 @@ public class DepartmentService {
         // [FIX] Xóa cache thủ công
         evictCompanyStructureCache(companyId);
         evictDepartmentMembersCache(finalDept.getId());
+//CHat ---------------------------------------------------
+        try {
+        DepartmentSyncEvent event = new DepartmentSyncEvent();
+        event.setEvent(DepartmentSyncEvent.ACTION_CREATE);
+        event.setDeptId(savedDept.getId());
+        event.setDeptName(savedDept.getName());
+        event.setManagerId(managerId);
+        event.setCompanyId(creator.getCompanyId());
+        event.setMemberIds(memberIds); // Gửi danh sách member ban đầu
 
+        // Gọi Producer bắn sự kiện
+        employeeProducer.sendDepartmentEvent(event);
+    } catch (Exception e) {
+        log.error("⚠️ Lỗi gửi sang Chat: {}", e.getMessage());
+    }
+    // ---------------------------------------------------
         return finalDept;
     }
 
@@ -283,6 +298,7 @@ public class DepartmentService {
     @Transactional
     public void deleteDepartment(Employee deleter, Long deptId) {
         requireAdminRole(deleter);
+       
 
         Department dept = departmentRepository.findById(deptId)
                 .orElseThrow(() -> new RuntimeException("Department not found"));
@@ -290,7 +306,18 @@ public class DepartmentService {
         if (!dept.getCompanyId().equals(deleter.getCompanyId())) {
              throw new RuntimeException("Access Denied.");
         }
-
+// [MỚI] Bắn sự kiện XÓA
+             try {
+                DepartmentSyncEvent event = new DepartmentSyncEvent();
+                event.setEvent(DepartmentSyncEvent.ACTION_DELETE);
+                event.setDeptId(deptId);
+                event.setCompanyId(deleter.getCompanyId());
+                employeeProducer.sendDepartmentEvent(event);
+             } catch (Exception e) {
+                log.error("⚠️ Lỗi gửi lệnh xóa sang Chat: {}", e.getMessage());
+             }
+        
+    
         // --- [TỐI ƯU HIỆU NĂNG] Batch Update ---
         // 1. Gỡ Request (Dùng saveAll để Hibernate batch update)
         List<Request> requests = requestRepository.findByDepartmentIdOrderByCreatedAtDesc(deptId);
@@ -313,6 +340,18 @@ public class DepartmentService {
             }
             employeeRepository.saveAll(employees);
         }
+        // chat- ---------------------------------------------------
+        try {
+            DepartmentSyncEvent event = new DepartmentSyncEvent();
+            event.setEvent(DepartmentSyncEvent.ACTION_DELETE);
+            event.setDeptId(deptId);
+            event.setCompanyId(dept.getCompanyId());
+            employeeProducer.sendDepartmentEvent(event);
+
+            // Gỡ nhân viên ra trước khi xóa để tránh lỗi DB
+            employeeRepository.unlinkEmployeesFromDepartment(deptId);
+        } catch (Exception e) { e.printStackTrace(); }
+        // [HẾT ĐOẠN THÊM]
         
         // 3. Xóa phòng ban
         departmentRepository.delete(dept);
