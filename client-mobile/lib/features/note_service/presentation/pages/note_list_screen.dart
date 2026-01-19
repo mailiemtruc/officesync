@@ -341,7 +341,7 @@ class _NoteListScreenState extends State<NoteListScreen> {
                 "NOTE",
                 style: TextStyle(
                   fontSize: 24,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.bold,
                   color: Color(0xFF2260FF),
                   fontFamily: 'Inter',
                 ),
