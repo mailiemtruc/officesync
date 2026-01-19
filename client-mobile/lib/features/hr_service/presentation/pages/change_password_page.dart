@@ -1,3 +1,5 @@
+import 'dart:convert'; // Để dùng jsonDecode
+import 'package:flutter_secure_storage/flutter_secure_storage.dart'; // Để đọc dữ liệu
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
@@ -7,6 +9,7 @@ import '../../../../core/widgets/custom_button.dart';
 import '../../../../core/widgets/custom_text_field.dart';
 import '../../../../core/api/api_client.dart';
 import '../../../../core/utils/custom_snackbar.dart';
+import '../../../core_service/presentation/pages/forgot_password_screen.dart';
 
 class ChangePasswordPage extends StatefulWidget {
   const ChangePasswordPage({super.key});
@@ -210,7 +213,45 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
                         Align(
                           alignment: Alignment.centerRight,
                           child: TextButton(
-                            onPressed: () {},
+                            // Chuyển thành hàm async để đọc dữ liệu từ máy
+                            onPressed: () async {
+                              // 1. Khởi tạo storage
+                              const storage = FlutterSecureStorage();
+
+                              // 2. Đọc thông tin user đã lưu khi đăng nhập
+                              String? userInfoStr = await storage.read(
+                                key: 'user_info',
+                              );
+                              String currentEmail = "";
+
+                              if (userInfoStr != null) {
+                                try {
+                                  // 3. Giải mã chuỗi JSON thành Map (Object)
+                                  Map<String, dynamic> userMap = jsonDecode(
+                                    userInfoStr,
+                                  );
+
+                                  // 4. Lấy trường email ra (key thường là 'email')
+                                  currentEmail = userMap['email'] ?? "";
+                                } catch (e) {
+                                  print("Lỗi đọc email: $e");
+                                }
+                              }
+
+                              // Kiểm tra xem widget còn tồn tại không trước khi chuyển trang
+                              if (!context.mounted) return;
+
+                              // 5. Chuyển trang và truyền biến currentEmail vừa lấy được
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => ForgotPasswordScreen(
+                                    email:
+                                        currentEmail, // <-- Đây là biến chứa email thật
+                                  ),
+                                ),
+                              );
+                            },
                             child: const Text(
                               'Forgot password?',
                               style: TextStyle(

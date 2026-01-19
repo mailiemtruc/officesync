@@ -7,7 +7,11 @@ import '../../../../core/api/api_client.dart';
 import '../../../../core/utils/custom_snackbar.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
-  const ForgotPasswordScreen({super.key});
+  final String? email;
+  const ForgotPasswordScreen({
+    super.key,
+    this.email, // Nhận tham số
+  });
 
   @override
   State<ForgotPasswordScreen> createState() => _ForgotPasswordScreenState();
@@ -36,6 +40,10 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   @override
   void initState() {
     super.initState();
+
+    if (widget.email != null && widget.email!.isNotEmpty) {
+      _emailController.text = widget.email!;
+    }
 
     Future.delayed(const Duration(milliseconds: 100), () {
       if (mounted) setState(() => _isTitleVisible = true);
