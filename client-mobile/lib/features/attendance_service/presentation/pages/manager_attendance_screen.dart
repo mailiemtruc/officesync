@@ -6,8 +6,11 @@ import 'dart:convert';
 // --- IMPORTS TỪ SOURCE CỦA BẠN ---
 import '../../data/attendance_api.dart';
 import '../../data/models/attendance_model.dart';
-import '../../data/models/timesheet_model.dart'; // [NEW] Import TimesheetModel
-import '../widgets/daily_timesheet_card.dart'; // [NEW] Import Widget hiển thị thẻ
+import '../../data/models/timesheet_model.dart';
+import '../widgets/daily_timesheet_card.dart';
+// [MỚI] Import WebSocket Service
+import '../../../../core/services/websocket_service.dart';
+import '../../../../core/utils/custom_snackbar.dart';
 
 class ManagerAttendanceScreen extends StatefulWidget {
   final String userRole;
@@ -41,17 +44,119 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
 
   // --- FILTERS ---
   DateTime? _filterSpecificDate;
-  // Lưu ý: Filter Type (IN/OUT) không còn phù hợp khi chuyển sang view Timesheet tổng hợp
-  // nên ta sẽ lược bỏ hoặc chỉ giữ lại filter theo ngày.
+
+  // [MỚI] Biến quản lý WebSocket
+  int? _companyId;
+  dynamic _subscription; // Lưu callback hủy đăng ký (nếu thư viện hỗ trợ)
 
   @override
   void initState() {
     super.initState();
     _fetchData();
+    // [MỚI] Kích hoạt lắng nghe Realtime
+    _setupRealtimeListener();
+  }
+
+  @override
+  void dispose() {
+    // [MỚI] Hủy lắng nghe khi thoát màn hình (Clean up)
+    if (_subscription != null) {
+      // Tùy vào cách viết WebSocketService của bạn, nếu có hàm unsubscribe thì gọi ở đây
+      // WebSocketService().unsubscribe(...);
+      WebSocketService().disconnect();
+      super.dispose();
+    }
+    super.dispose();
+  }
+
+  // --- [MỚI] HÀM LẮNG NGHE REAL-TIME ---
+  Future<void> _setupRealtimeListener() async {
+    // 1. Lấy CompanyID từ Storage
+    String? userInfoStr = await _storage.read(key: 'user_info');
+    if (userInfoStr != null) {
+      final userJson = jsonDecode(userInfoStr);
+      _companyId = userJson['companyId'];
+      // [THÊM LOG] Kiểm tra xem ID có lấy được không
+      print("--> [DEBUG] UserInfo JSON: $userJson");
+      print("--> [DEBUG] Company ID tìm được: $_companyId");
+    }
+
+    if (_companyId == null) {
+      // [THÊM] Thử fallback lấy ID từ userRole hoặc api call khác nếu cần
+      print("❌ LỖI: CompanyID bị null, không thể subscribe!");
+      return;
+    }
+
+    final wsService = WebSocketService();
+    // Đảm bảo kết nối
+    wsService.connect('ws://10.0.2.2:8083/ws');
+
+    // 2. Subscribe đúng kênh công ty
+    // Topic này phải khớp với Backend: /topic/company/{id}/attendance
+    String topic = '/topic/company/$_companyId/attendance';
+
+    print("--> [Manager] Đang lắng nghe tại: $topic");
+
+    // Gọi hàm subscribe
+    wsService.subscribe(topic, (payload) {
+      print("--> [SOCKET] Nhận tin nhắn chấm công mới!");
+      try {
+        // Parse dữ liệu
+        Map<String, dynamic> dataMap;
+        if (payload is String) {
+          dataMap = jsonDecode(payload);
+        } else {
+          dataMap = payload;
+        }
+
+        // Convert sang Model
+        AttendanceModel newRecord = AttendanceModel.fromJson(dataMap);
+
+        // Cập nhật UI
+        _handleNewRealtimeRecord(newRecord);
+      } catch (e) {
+        print("Lỗi xử lý tin nhắn socket: $e");
+      }
+    });
+  }
+
+  // --- [MỚI] HÀM XỬ LÝ KHI CÓ RECORD MỚI ---
+  void _handleNewRealtimeRecord(AttendanceModel newRecord) {
+    if (!mounted) return;
+
+    // Chỉ cập nhật nếu record mới thuộc tháng đang xem
+    DateTime recordDate = DateTime.parse(newRecord.checkInTime);
+    if (recordDate.month != _selectedMonth.month ||
+        recordDate.year != _selectedMonth.year) {
+      return;
+    }
+
+    setState(() {
+      // 1. Thêm vào danh sách Raw
+      // (Thêm vào đầu để khi sort lại nó sẽ được xử lý đúng)
+      _rawRecords.add(newRecord);
+
+      // 2. Chạy lại logic xử lý dữ liệu (_processData)
+      // Hàm này cực kỳ quan trọng: Nó sẽ tự động ghép record mới này
+      // với record cũ (nếu có) để tạo thành cặp Check-in/Check-out hoàn chỉnh.
+      _processedList = _processData(_rawRecords);
+    });
+
+    // 3. Hiện thông báo nhỏ góc dưới
+    CustomSnackBar.show(
+      context,
+      title: "New Attendance",
+      message: "${newRecord.fullName} just checked in (${newRecord.type})",
+      backgroundColor: const Color(
+        0xFF10B981,
+      ), // Green color matching your old code
+    );
   }
 
   Future<void> _fetchData() async {
-    setState(() => _isLoading = true);
+    // Chỉ setState khi màn hình còn hiển thị
+    if (mounted) setState(() => _isLoading = true);
+
     try {
       // 1. Lấy User ID từ Storage
       String? userIdStr = await _storage.read(key: 'userId');
@@ -64,7 +169,7 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
       }
 
       if (userIdStr == null) {
-        setState(() => _isLoading = false);
+        if (mounted) setState(() => _isLoading = false);
         return;
       }
 
@@ -79,16 +184,24 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
       );
 
       // 3. Xử lý dữ liệu Raw -> Timesheet Model
+      // (Hàm này xử lý logic thuần túy nên không cần await/mounted)
       final processed = _processData(data);
 
-      setState(() {
-        _rawRecords = data;
-        _processedList = processed;
-      });
+      // [QUAN TRỌNG] Kiểm tra mounted trước khi cập nhật dữ liệu
+      if (mounted) {
+        setState(() {
+          _rawRecords = data;
+          _processedList = processed;
+        });
+      }
     } catch (e) {
       print("Error loading manager data: $e");
     } finally {
-      setState(() => _isLoading = false);
+      // [SỬA LỖI CRASH TẠI ĐÂY]
+      // Nếu màn hình đã bị hủy (dispose), dòng này sẽ bị bỏ qua
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -99,10 +212,11 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
   ) {
     Map<String, List<AttendanceModel>> groupedLogs = {};
 
-    // 1. Gom nhóm (Giữ nguyên)
+    // 1. Gom nhóm
     for (var record in rawList) {
       DateTime date = DateTime.parse(record.checkInTime);
       String dateKey = DateFormat('yyyyMMdd').format(date);
+      // Gom theo Email + Ngày để phân biệt các nhân viên khác nhau trong cùng 1 ngày
       String key = "${record.email}_$dateKey";
 
       if (!groupedLogs.containsKey(key)) {
@@ -115,6 +229,7 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
 
     // 2. Xử lý logic
     groupedLogs.forEach((key, logs) {
+      // Sort tăng dần để duyệt từ sáng -> tối
       logs.sort((a, b) => a.checkInTime.compareTo(b.checkInTime));
       AttendanceModel userInfo = logs.first;
 
@@ -126,13 +241,11 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
         var current = logs[i];
 
         if (current.type == "CHECK_IN") {
-          // [SỬA 1] Khai báo biến lưu số phút trễ
           int lateMinutes = 0;
 
-          // [LOGIC MỚI] Nếu Status là LATE thì lấy số phút trễ từ Model
           if (current.status == "LATE") {
             status = "LATE";
-            lateMinutes = current.lateMinutes ?? 0; // <--- LẤY DỮ LIỆU TẠI ĐÂY
+            lateMinutes = current.lateMinutes ?? 0;
           }
 
           String inTimeStr = DateFormat(
@@ -141,7 +254,7 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
           String? outTimeStr;
           double duration = 0.0;
 
-          // Tìm cặp OUT (Giữ nguyên logic cũ)
+          // Tìm cặp OUT
           if (i + 1 < logs.length && logs[i + 1].type == "CHECK_OUT") {
             var next = logs[i + 1];
             outTimeStr = DateFormat(
@@ -151,9 +264,9 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
             DateTime inDt = DateTime.parse(current.checkInTime);
             DateTime outDt = DateTime.parse(next.checkInTime);
             duration = outDt.difference(inDt).inMinutes / 60.0;
-            i++;
+            i++; // Bỏ qua record OUT tiếp theo vì đã ghép cặp rồi
           } else {
-            // Logic xử lý quên checkout (Giữ nguyên)
+            // Logic xử lý quên checkout
             DateTime recordDate = DateTime.parse(current.checkInTime);
             DateTime now = DateTime.now();
             bool isToday =
@@ -168,13 +281,12 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
             }
           }
 
-          // [SỬA 2] Truyền lateMinutes vào SessionModel
           sessions.add(
             SessionModel(
               checkIn: inTimeStr,
               checkOut: outTimeStr,
               duration: double.parse(duration.toStringAsFixed(1)),
-              lateMinutes: lateMinutes, // <--- TRUYỀN VÀO ĐÂY
+              lateMinutes: lateMinutes,
             ),
           );
           totalHours += duration;
@@ -193,6 +305,7 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
       );
     });
 
+    // Sort kết quả hiển thị: Ngày mới nhất lên đầu
     result.sort((a, b) => b.timesheet.date.compareTo(a.timesheet.date));
     return result;
   }
@@ -313,14 +426,11 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
 
   // --- WIDGETS ---
 
-  /// Wrapper hiển thị thông tin nhân viên + DailyTimesheetCard bên trong
   Widget _buildEmployeeTimesheetWrapper(ManagerTimesheetDisplayItem item) {
     return Column(
       children: [
-        // --- [SỬA ĐỔI] Thêm InkWell để bắt sự kiện click ---
         InkWell(
           onTap: () {
-            // Gọi hàm hiển thị thông tin chi tiết
             _showEmployeeDetails(item.userInfo);
           },
           borderRadius: BorderRadius.circular(12),
@@ -370,21 +480,16 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
                   ),
                 ),
 
-                // Icon chỉ dẫn (nhấn để xem thêm)
                 const Icon(Icons.info_outline, color: textGrey, size: 20),
               ],
             ),
           ),
         ),
 
-        // Body: Thẻ Timesheet chi tiết (Giữ nguyên)
         DailyTimesheetCard(data: item.timesheet),
 
         const SizedBox(height: 12),
-        const Divider(
-          height: 1,
-          color: Color(0xFFE2E8F0),
-        ), // Thêm dòng kẻ mờ ngăn cách các user
+        const Divider(height: 1, color: Color(0xFFE2E8F0)),
         const SizedBox(height: 12),
       ],
     );
@@ -584,11 +689,10 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
     return name[0].toUpperCase();
   }
 
-  // Hàm hiển thị Bottom Sheet thông tin nhân viên
   void _showEmployeeDetails(AttendanceModel user) {
     showModalBottomSheet(
       context: context,
-      isScrollControlled: true, // Cho phép chiều cao linh hoạt
+      isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
         return Container(
@@ -600,7 +704,6 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Thanh kéo nhỏ ở trên
               Container(
                 width: 40,
                 height: 4,
@@ -611,7 +714,6 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
                 ),
               ),
 
-              // Avatar to
               Container(
                 width: 80,
                 height: 80,
@@ -631,7 +733,6 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Tên to
               Text(
                 user.fullName,
                 style: const TextStyle(
@@ -651,7 +752,6 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
               ),
               const SizedBox(height: 24),
 
-              // Các thông tin chi tiết
               _buildDetailRow(Icons.email_outlined, "Email", user.email),
               _buildDetailRow(
                 Icons.phone_outlined,
@@ -668,7 +768,6 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
                 "Birthday",
                 user.dateOfBirth ?? "N/A",
               ),
-              // Hiển thị Device ID để quản lý kiểm tra thiết bị chấm công
               _buildDetailRow(
                 Icons.phone_android,
                 "Device ID (BSSID)",
@@ -677,7 +776,6 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
 
               const SizedBox(height: 24),
 
-              // Nút đóng
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
@@ -701,7 +799,6 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
     );
   }
 
-  // Widget con để vẽ từng dòng thông tin
   Widget _buildDetailRow(IconData icon, String label, String value) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
@@ -739,45 +836,8 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
       ),
     );
   }
-
-  Color _getStatusColor(String status) {
-    switch (status) {
-      case 'OK':
-        return const Color(0xFF10B981); // Xanh lá
-      case 'LATE':
-        return Colors.orange; // Cam
-      case 'WORKING':
-        return const Color(0xFF2260FF); // Xanh dương
-      case 'MISSING_CHECKOUT':
-        return const Color(0xFFEF4444); // Đỏ
-      case 'ABSENT':
-        return Colors.grey;
-      default:
-        return Colors.grey;
-    }
-  }
-
-  String _getStatusText(String status) {
-    switch (status) {
-      case 'OK':
-        return 'OK';
-      case 'LATE':
-        return 'Late';
-      case 'WORKING':
-        return 'In progress';
-      case 'MISSING_CHECKOUT':
-        return 'Forget to Checkout';
-      case 'ABSENT':
-        return 'Absent';
-      default:
-        return status;
-    }
-  }
 }
 
-// --- HELPER CLASS ---
-// Class này giúp ghép thông tin User (từ API Attendance)
-// với Timesheet đã xử lý để hiển thị lên UI
 class ManagerTimesheetDisplayItem {
   final AttendanceModel userInfo;
   final TimesheetModel timesheet;

@@ -514,7 +514,7 @@ class _LoginScreenState extends State<LoginScreen> {
         }
 
         // [QUAN TRỌNG] KẾT NỐI SOCKET TẠI ĐÂY
-        WebSocketService().connect();
+        WebSocketService().connect('ws://10.0.2.2:8081/ws-hr/websocket');
 
         if (mounted) {
           Navigator.pushAndRemoveUntil(

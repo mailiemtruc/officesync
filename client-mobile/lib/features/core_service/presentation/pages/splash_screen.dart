@@ -53,7 +53,7 @@ class _SplashScreenState extends State<SplashScreen> {
         }
         // --- [KẾT THÚC ĐOẠN CẦN THÊM] ---
 
-        WebSocketService().connect();
+        WebSocketService().connect('ws://10.0.2.2:8081/ws-hr/websocket');
 
         Navigator.pushReplacement(
           context,

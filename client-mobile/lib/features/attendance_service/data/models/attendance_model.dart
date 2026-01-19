@@ -36,20 +36,19 @@ class AttendanceModel {
     this.deviceBssid,
   });
 
+  /// features/attendance_service/data/models/attendance_model.dart
+
   factory AttendanceModel.fromJson(Map<String, dynamic> json) {
     return AttendanceModel(
       id: json['id'] ?? 0,
-      checkInTime: (json['checkInTime'] == null || json['checkInTime'] == "")
-          ? DateTime.now().toIso8601String()
-          : json['checkInTime'],
+
+      // [QUAN TRỌNG] Thay đoạn checkInTime cũ bằng hàm _parseDateTime
+      checkInTime: _parseDateTime(json['checkInTime']),
+
       locationName: json['locationName'] ?? 'Unknown Location',
       status: json['status'] ?? 'UNKNOWN',
       type: json['type'],
-
-      // [THÊM MỚI] Map từ JSON
       lateMinutes: json['lateMinutes'],
-
-      // Map các trường thông tin nhân viên
       fullName: json['fullName'] ?? "Unknown User",
       email: json['email'] ?? "No Email",
       phone: json['phone'] ?? "No Phone",
@@ -58,5 +57,34 @@ class AttendanceModel {
       dateOfBirth: json['dateOfBirth'],
       deviceBssid: json['deviceBssid'],
     );
+  }
+
+  // --- HÀM PHỤ TRỢ (Thêm vào cuối class AttendanceModel) ---
+  static String _parseDateTime(dynamic input) {
+    if (input == null) return DateTime.now().toIso8601String();
+
+    // Trường hợp 1: Backend trả về String chuẩn ("2024-01-21T10:30:00")
+    if (input is String) {
+      return input.isEmpty ? DateTime.now().toIso8601String() : input;
+    }
+
+    // Trường hợp 2: Backend trả về Mảng số ([2024, 1, 21, 10, 30, 0]) -> Đây là lỗi hay gặp nhất!
+    if (input is List) {
+      if (input.isEmpty) return DateTime.now().toIso8601String();
+      try {
+        // Lưu ý: List trả về [Năm, Tháng, Ngày, Giờ, Phút, Giây]
+        int y = input[0];
+        int M = input.length > 1 ? input[1] : 1;
+        int d = input.length > 2 ? input[2] : 1;
+        int h = input.length > 3 ? input[3] : 0;
+        int m = input.length > 4 ? input[4] : 0;
+        int s = input.length > 5 ? input[5] : 0;
+        // Format lại thành chuỗi ISO để App hiểu
+        return DateTime(y, M, d, h, m, s).toIso8601String();
+      } catch (e) {
+        print("Lỗi parse ngày dạng mảng: $e");
+      }
+    }
+    return DateTime.now().toIso8601String();
   }
 }

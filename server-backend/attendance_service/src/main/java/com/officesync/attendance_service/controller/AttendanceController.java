@@ -6,12 +6,13 @@ import java.util.List;
 import java.util.Map;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam; // [MỚI]
+import org.springframework.web.bind.annotation.RequestMapping; // [MỚI]
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.officesync.attendance_service.dto.DailyTimesheetDTO;
@@ -32,6 +33,7 @@ public class AttendanceController {
     private final AttendanceService attendanceService;
     private final AttendanceRepository attendanceRepo;
     private final AttendanceUserRepository userRepo;
+    private final SimpMessagingTemplate messagingTemplate;
 
     @Data
     public static class CheckInRequest {
@@ -65,9 +67,14 @@ public class AttendanceController {
                     request.getLongitude(),
                     request.getBssid()
             );
+            String topic = "/topic/company/" + request.getCompanyId() + "/attendance";
+            System.out.println("👉 [BACKEND] Đang bắn Socket tới: " + topic);
+            System.out.println("👉 [BACKEND] Dữ liệu User: " + result.getFullName());
+            messagingTemplate.convertAndSend(topic, result);
             return ResponseEntity.ok(result);
 
         } catch (RuntimeException e) {
+            System.out.println("❌ [BACKEND] Lỗi Check-in: " + e.getMessage());
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }
     }
