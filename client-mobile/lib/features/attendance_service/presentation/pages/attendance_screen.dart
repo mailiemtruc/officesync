@@ -479,7 +479,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           ),
           const Expanded(
             child: Text(
-              "ATTENDANCE",
+              "MY ATTENDANCE",
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 24,
