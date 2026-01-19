@@ -337,4 +337,13 @@ public class ChatService {
             memberDTOs
         );
     }
+    @Transactional // Quan trọng: Phải có để thực hiện lệnh Delete
+public void leaveRoom(Long userId, Long roomId) {
+    // 1. Kiểm tra xem user có trong phòng không (tùy chọn)
+    // 2. Xóa user khỏi bảng room_members
+    roomMemberRepository.deleteByChatRoomIdAndUserId(roomId, userId);
+    
+    // (Nâng cao: Nếu phòng không còn ai thì xóa luôn phòng - làm sau)
+    log.info("User {} left room {}", userId, roomId);
+}
 }

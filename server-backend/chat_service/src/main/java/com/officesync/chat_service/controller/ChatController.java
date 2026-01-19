@@ -191,4 +191,18 @@ public class ChatController {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
+    @PostMapping("/api/chat/rooms/{roomId}/leave")
+public ResponseEntity<?> leaveRoom(@PathVariable Long roomId, Principal principal) {
+    try {
+        String email = principal.getName();
+        ChatUser me = chatUserRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        
+        chatService.leaveRoom(me.getId(), roomId);
+        
+        return ResponseEntity.ok("Left room successfully");
+    } catch (Exception e) {
+        return ResponseEntity.badRequest().body(e.getMessage());
+    }
+}
 }
