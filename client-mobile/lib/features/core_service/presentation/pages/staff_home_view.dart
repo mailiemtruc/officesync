@@ -6,8 +6,14 @@ import 'package:officesync/features/notification_service/presentation/pages/noti
 import 'package:officesync/features/communication_service/presentation/pages/newsfeed_screen.dart';
 import 'package:officesync/features/chat_service/presentation/pages/chat_screen.dart';
 
+import '../../../../core/api/api_client.dart';
+import '../../../task_service/data/models/task_model.dart';
+import '../../../task_service/widgets/task_detail_dialog.dart';
+import '../../../task_service/data/task_session.dart';
+
+
 class StaffHomeView extends StatefulWidget {
-  final int currentUserId; // 👈 Thêm dòng này
+  final int currentUserId;
   const StaffHomeView({super.key, required this.currentUserId});
 
   @override
@@ -17,12 +23,46 @@ class StaffHomeView extends StatefulWidget {
 class _StaffHomeViewState extends State<StaffHomeView> {
   bool _animate = false;
 
+  // 1. Khai báo biến quản lý dữ liệu Task
+  final ApiClient api = ApiClient();
+  List<TaskModel> tasks = [];
+  bool loadingTasks = true;
+
   @override
   void initState() {
     super.initState();
     Future.delayed(const Duration(milliseconds: 100), () {
       if (mounted) setState(() => _animate = true);
     });
+
+    // 2. Gọi hàm lấy dữ liệu Task khi khởi tạo
+    fetchTasks();
+  }
+
+  
+
+  // 3. Hàm lấy dữ liệu Task được giao cho Staff (Endpoint /mine)
+  Future<void> fetchTasks() async {
+    try {
+      // Lấy danh sách task mà nhân viên này được giao thực hiện
+      final resp = await api.get('${ApiClient.taskUrl}/tasks/mine');
+      final List data = resp.data as List;
+
+      if (mounted) {
+        setState(() {
+          tasks = data
+              .map((e) => TaskModel.fromJson(Map<String, dynamic>.from(e)))
+              .toList();
+
+          // Sắp xếp Task mới nhất lên đầu (createdAt giảm dần)
+          tasks.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          loadingTasks = false;
+        });
+      }
+    } catch (e) {
+      debugPrint("Error fetching tasks for Staff Home: $e");
+      if (mounted) setState(() => loadingTasks = false);
+    }
   }
 
   @override
@@ -307,36 +347,6 @@ class _StaffHomeViewState extends State<StaffHomeView> {
     );
   }
 
-  Widget _buildTaskList() {
-    return Column(
-      children: [
-        _buildTaskItem(
-          title: "UI/UX Design - Home",
-          status: "Todo",
-          statusColor: AppColors.primary,
-          assignedBy: "Nguyen Van B",
-          onTap: () {},
-        ),
-        const SizedBox(height: 16),
-        _buildTaskItem(
-          title: "Payment Integration",
-          status: "In Progress",
-          statusColor: const Color(0xFFF59E0B),
-          assignedBy: "Nguyen Van B",
-          onTap: () {},
-        ),
-        const SizedBox(height: 16),
-        _buildTaskItem(
-          title: "Code Review",
-          status: "Done",
-          statusColor: const Color(0xFF10B981),
-          assignedBy: "Nguyen Van B",
-          onTap: () {},
-        ),
-      ],
-    );
-  }
-
   Widget _buildActionItem(String label, IconData icon, VoidCallback onTap) {
     return Column(
       children: [
@@ -367,22 +377,88 @@ class _StaffHomeViewState extends State<StaffHomeView> {
     );
   }
 
+  // 4. HIỂN THỊ 3 TASK MỚI NHẤT
+  Widget _buildTaskList() {
+    if (loadingTasks) {
+      return const Center(
+        child: CircularProgressIndicator(color: Color(0xFF2260FF)),
+      );
+    }
+
+    if (tasks.isEmpty) {
+      return const Center(
+        child: Text(
+          "You have no tasks assigned.",
+          style: TextStyle(color: Colors.grey),
+        ),
+      );
+    }
+
+    // LẤY 3 TASK MỚI NHẤT
+    final latestTasks = tasks.take(3).toList();
+
+    return Column(
+      children: latestTasks.map((task) {
+        // Màu sắc theo yêu cầu của bạn
+        Color statusBgColor;
+        switch (task.status) {
+          case TaskStatus.TODO:
+            statusBgColor = const Color(0xFF2260FF);
+            break;
+          case TaskStatus.IN_PROGRESS:
+            statusBgColor = const Color(0xFFFFA322);
+            break;
+          default:
+            statusBgColor = const Color(0xFF4EE375); // Done / Review
+        }
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: _buildTaskItem(
+            title: task.title,
+            status: task.statusText,
+            statusColor: statusBgColor,
+            assignedBy: task.creatorName ?? "Manager",
+            startDate: task.createdAt,
+            dueDate: task.dueDate,
+            onTap: () {
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (_) => TaskDetailDialog(
+                  task: task,
+                  currentUserId: widget.currentUserId,
+                  role: 'STAFF',
+                  onRefresh: fetchTasks,
+                ),
+              );
+            },
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  // 5. GIAO DIỆN SLIM VỚI MÀU SẮC CHUẨN (GIỐNG ADMIN/MANAGER)
   Widget _buildTaskItem({
     required String title,
     required String status,
     required Color statusColor,
     required String assignedBy,
+    required DateTime startDate,
+    required DateTime dueDate,
     required VoidCallback onTap,
   }) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 15,
-            offset: const Offset(0, 5),
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -390,57 +466,69 @@ class _StaffHomeViewState extends State<StaffHomeView> {
         color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(20),
           child: Padding(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        title,
-                        style: const TextStyle(
-                          color: Color(0xFF1E293B),
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    Icon(PhosphorIconsBold.dotsThree, color: Colors.grey),
-                  ],
+                // Title màu 4EE375
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: Color(0xFF4EE375),
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
+                    // Status tag: Nền màu trạng thái, chữ trắng ffffff
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 10,
                         vertical: 5,
                       ),
                       decoration: BoxDecoration(
-                        color: statusColor.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
+                        color: statusColor,
+                        borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
                         status,
-                        style: TextStyle(
-                          color: statusColor,
-                          fontSize: 12,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                     ),
                     const Spacer(),
-                    Text(
-                      'By $assignedBy',
-                      style: const TextStyle(
-                        color: Color(0xFF94A3B8),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                      ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          'By $assignedBy',
+                          style: const TextStyle(
+                            color: Color(0xFF1E293B),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'S: ${startDate.toLocal().toString().split(" ").first} | D: ${dueDate.toLocal().toString().split(" ").first}',
+                          style: const TextStyle(
+                            color: Color(0xFF94A3B8),
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),

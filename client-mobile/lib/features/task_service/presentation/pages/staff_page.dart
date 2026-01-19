@@ -6,6 +6,7 @@ import '../../data/models/task_model.dart';
 import '../../widgets/task_detail_dialog.dart';
 import '../../data/task_session.dart';
 import '../../data/models/task_user.dart';
+import '../../data/network/task_stomp_service.dart';
 
 class StaffPage extends StatefulWidget {
   const StaffPage({super.key});
@@ -17,6 +18,10 @@ class _StaffPageState extends State<StaffPage> {
   final ApiClient api = ApiClient();
   List<TaskModel> tasks = [];
   bool loading = true;
+  TaskStatus? selectedStatus;
+  bool showOverdueOnly = false;
+
+  late TaskStompService _taskStompService; // 1. Khai báo biến
 
   // Menu key để kích hoạt hiệu ứng Flash Border
   final GlobalKey<PopupMenuButtonState<TaskStatus?>> _statusMenuKey =
@@ -29,13 +34,31 @@ class _StaffPageState extends State<StaffPage> {
   final Color colorWhite = const Color(0xFFFFFFFF);
   final Color colorBlack = const Color(0xFF000000);
 
-  TaskStatus? selectedStatus;
-  bool showOverdueOnly = false;
-
   @override
   void initState() {
     super.initState();
     _initializeSessionAndData();
+    _setupRealtime(); // 2. Gọi hàm thiết lập
+  }
+
+  // 3. Logic Real-time cho Staff
+  void _setupRealtime() {
+    _taskStompService = TaskStompService(
+      onTaskReceived: (data) {
+        if (mounted) {
+          setState(() {
+            fetchTasks(); // Staff tự động cập nhật lại List của mình
+          });
+        }
+      },
+    );
+    _taskStompService.connect();
+  }
+
+  @override
+  void dispose() {
+    _taskStompService.disconnect(); // 4. Ngắt kết nối
+    super.dispose();
   }
 
   Future<void> _initializeSessionAndData() async {
@@ -98,7 +121,11 @@ class _StaffPageState extends State<StaffPage> {
         centerTitle: true,
         title: Text(
           'STAFF',
-          style: TextStyle(fontWeight: FontWeight.bold, color: colorBlue),
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: colorBlue,
+            fontSize: 30,
+          ),
         ),
       ),
       body: Column(

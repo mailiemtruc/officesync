@@ -10,6 +10,11 @@ import 'director_company_profile_screen.dart';
 import '../../../../core/utils/custom_snackbar.dart';
 import 'package:officesync/features/notification_service/presentation/pages/notification_list_screen.dart';
 
+import '../../../../core/api/api_client.dart';
+import '../../../task_service/data/models/task_model.dart';
+import '../../../task_service/widgets/task_detail_dialog.dart';
+import '../../../task_service/data/task_session.dart';
+
 class DirectorHomeView extends StatefulWidget {
   final int currentUserId;
   const DirectorHomeView({super.key, required this.currentUserId});
@@ -21,12 +26,43 @@ class DirectorHomeView extends StatefulWidget {
 class _DirectorHomeViewState extends State<DirectorHomeView> {
   bool _animate = false;
 
+  // 1. Khai báo biến quản lý dữ liệu Task
+  final ApiClient api = ApiClient();
+  List<TaskModel> tasks = [];
+  bool loadingTasks = true;
+
   @override
   void initState() {
     super.initState();
     Future.delayed(const Duration(milliseconds: 100), () {
       if (mounted) setState(() => _animate = true);
     });
+    // 2. Gọi hàm lấy dữ liệu khi khởi tạo
+    fetchTasks();
+  }
+
+  // 3. Hàm lấy dữ liệu Task từ Backend
+  Future<void> fetchTasks() async {
+    try {
+      // Gọi endpoint /api/tasks (đã định nghĩa trong TaskController.java)
+      final resp = await api.get('${ApiClient.taskUrl}/tasks');
+      final List data = resp.data as List;
+
+      if (mounted) {
+        setState(() {
+          tasks = data
+              .map((e) => TaskModel.fromJson(Map<String, dynamic>.from(e)))
+              .toList();
+
+          // Sắp xếp Task mới nhất lên đầu (dựa trên createdAt)
+          tasks.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          loadingTasks = false;
+        });
+      }
+    } catch (e) {
+      debugPrint("Error fetching tasks for Home: $e");
+      if (mounted) setState(() => loadingTasks = false);
+    }
   }
 
   @override
@@ -320,7 +356,7 @@ class _DirectorHomeViewState extends State<DirectorHomeView> {
           child: const Padding(
             padding: EdgeInsets.symmetric(vertical: 4, horizontal: 2),
             child: Text(
-              'Assigned Tasks',
+              'My Tasks',
               style: TextStyle(
                 color: Color(0xFF1E293B),
                 fontSize: 24,
@@ -343,36 +379,6 @@ class _DirectorHomeViewState extends State<DirectorHomeView> {
               fontWeight: FontWeight.w600,
             ),
           ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildAssignedTaskList() {
-    return Column(
-      children: [
-        _buildTaskProgressItem(
-          title: "Q3 Sales Report",
-          status: "In Progress",
-          statusColor: const Color(0xFFFFA222),
-          assignee: "Sales Manager",
-          onTap: () {},
-        ),
-        const SizedBox(height: 16),
-        _buildTaskProgressItem(
-          title: "Update Brand Guidelines",
-          status: "Pending",
-          statusColor: AppColors.primary,
-          assignee: "Design Lead",
-          onTap: () {},
-        ),
-        const SizedBox(height: 16),
-        _buildTaskProgressItem(
-          title: "Server Migration Plan",
-          status: "Done",
-          statusColor: const Color(0xFF10B981),
-          assignee: "CTO",
-          onTap: () {},
         ),
       ],
     );
@@ -412,22 +418,89 @@ class _DirectorHomeViewState extends State<DirectorHomeView> {
     );
   }
 
+  // 4. CẬP NHẬT HÀM HIỂN THỊ DANH SÁCH TASK
+  Widget _buildAssignedTaskList() {
+    if (loadingTasks) {
+      return const Center(
+        child: CircularProgressIndicator(color: Color(0xFF2260FF)),
+      );
+    }
+
+    if (tasks.isEmpty) {
+      return const Center(
+        child: Text(
+          "No tasks assigned yet.",
+          style: TextStyle(color: Colors.grey),
+        ),
+      );
+    }
+
+    final latestTasks = tasks.take(3).toList();
+
+    return Column(
+      children: latestTasks.map((task) {
+        // Định nghĩa màu trạng thái dựa trên yêu cầu của bạn
+        Color statusBgColor;
+        switch (task.status) {
+          case TaskStatus.TODO:
+            statusBgColor = const Color(0xFF2260FF);
+            break;
+          case TaskStatus.IN_PROGRESS:
+            statusBgColor = const Color(0xFFFFA322);
+            break;
+          case TaskStatus.DONE:
+          case TaskStatus.REVIEW:
+            statusBgColor = const Color(0xFF4EE375);
+            break;
+        }
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: _buildTaskProgressItem(
+            title: task.title,
+            status: task.statusText,
+            statusColor: statusBgColor, // Màu nền theo trạng thái
+            assignee: task.assigneeName ?? "No Assignee",
+            startDate: task.createdAt,
+            dueDate: task.dueDate,
+            onTap: () {
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (_) => TaskDetailDialog(
+                  task: task,
+                  currentUserId: widget.currentUserId,
+                  role: 'COMPANY_ADMIN',
+                  onRefresh: fetchTasks,
+                ),
+              );
+            },
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  // 5. GIỮ NGUYÊN KÍCH THƯỚC VÀ STYLE NHƯ TRONG ẢNH
   Widget _buildTaskProgressItem({
     required String title,
     required String status,
     required Color statusColor,
     required String assignee,
+    required DateTime startDate,
+    required DateTime dueDate,
     required VoidCallback onTap,
   }) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 15,
-            offset: const Offset(0, 5),
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -435,57 +508,74 @@ class _DirectorHomeViewState extends State<DirectorHomeView> {
         color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(20),
           child: Padding(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        title,
-                        style: const TextStyle(
-                          color: Color(0xFF1E293B),
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                    Icon(PhosphorIconsBold.dotsThree, color: Colors.grey),
-                  ],
+                // TIÊU ĐỀ: Màu 4EE375 theo yêu cầu
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: Color(0xFF4EE375), // Màu xanh lá cho Title
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
+
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
+                    // TAG TRẠNG THÁI: Nền màu trạng thái, Chữ trắng (ffffff)
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 10,
                         vertical: 5,
                       ),
                       decoration: BoxDecoration(
-                        color: statusColor.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
+                        color:
+                            statusColor, // Màu nền (2260FF, FFA322, hoặc 4EE375)
+                        borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
                         status,
-                        style: TextStyle(
-                          color: statusColor,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
+                        style: const TextStyle(
+                          color: Colors.white, // Chữ trắng ffffff
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
                     ),
                     const Spacer(),
-                    Text(
-                      'To: $assignee',
-                      style: const TextStyle(
-                        color: Color(0xFF94A3B8),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                      ),
+
+                    // THÔNG TIN BÊN PHẢI
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          'To: $assignee',
+                          style: const TextStyle(
+                            color: Color(0xFF1E293B),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        // Ngày tháng trên cùng 1 hàng để tiết kiệm diện tích
+                        Text(
+                          'S: ${startDate.toLocal().toString().split(" ").first} | D: ${dueDate.toLocal().toString().split(" ").first}',
+                          style: const TextStyle(
+                            color: Color(0xFF94A3B8),
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),

@@ -110,7 +110,11 @@ class _CompanyAdminPageState extends State<CompanyAdminPage>
         ),
         title: Text(
           'COMPANY ADMIN',
-          style: TextStyle(fontWeight: FontWeight.bold, color: colorBlue),
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: colorBlue,
+            fontSize: 30,
+          ),
         ),
       ),
       body: Column(

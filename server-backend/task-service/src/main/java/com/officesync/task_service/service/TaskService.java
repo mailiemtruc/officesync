@@ -24,6 +24,11 @@ import com.officesync.task_service.repository.TaskUserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import com.officesync.task_service.config.RabbitMQConfig;
+import com.officesync.task_service.dto.NotificationEvent;
+
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -32,7 +37,10 @@ public class TaskService {
     private final TaskRepository taskRepo;
     private final TaskUserRepository userRepo;
     private final TaskDepartmentRepository deptRepo;
-    
+
+    private final RabbitTemplate rabbitTemplate; // Tiêm RabbitTemplate để gửi tin nhắn
+    private final SimpMessagingTemplate messagingTemplate;
+
     private final String HR_SERVICE_URL = "http://localhost:8081/api";
 
     // --- LOGIC TÌM HOẶC ĐỒNG BỘ ---
@@ -211,12 +219,15 @@ public class TaskService {
     // --- CÁC HÀM NGHIỆP VỤ ---
 
     public Task createTask(Task task, Long creatorId) {
+        // 1. Kiểm tra và đồng bộ thông tin người tạo (Creator)
         TaskUser creator = getOrSyncUser(creatorId);
 
+        // 2. Kiểm tra quyền hạn: Chỉ Admin hoặc Manager mới được tạo Task
         if (!"COMPANY_ADMIN".equals(creator.getRole()) && !"MANAGER".equals(creator.getRole())) {
             throw new RuntimeException("Unauthorized to create task");
         }
 
+        // 3. Logic riêng cho Manager: Chỉ được giao việc trong phòng ban của mình
         if ("MANAGER".equals(creator.getRole())) {
             if (task.getDepartmentId() == null) {
                 task.setDepartmentId(creator.getDepartmentId());
@@ -225,33 +236,102 @@ public class TaskService {
             }
         }
 
-        //LẤY TÊN PHÒNG BAN
+        // 4. Lấy và lưu tên phòng ban vào Task
         if (task.getDepartmentId() != null) {
             deptRepo.findById(task.getDepartmentId())
                     .ifPresent(d -> task.setDepartmentName(d.getName()));
         }
 
+        // 5. Thiết lập các thông tin cơ bản cho Task
         task.setCreatorId(creatorId);
-        task.setCreatorName(creator.getFullName());//để lưu tên người giao
+        task.setCreatorName(creator.getFullName());
         task.setCreatedAt(LocalDateTime.now());
         if (task.getStatus() == null) task.setStatus(TaskStatus.TODO);
         task.setCompanyId(creator.getCompanyId());
-        // Tự động phát hành nếu là Admin, Manager tạo thì chưa phát hành
+        
+        // Admin tạo thì phát hành ngay (isPublished = true), Manager tạo thì chờ duyệt/phát hành sau
         task.setPublished("COMPANY_ADMIN".equals(creator.getRole()));
+
+        // 6. Đồng bộ tên người được giao việc (Assignee)
         if (task.getAssigneeId() != null) {
             try {
-                // Sync nhanh người được giao việc nếu chưa có
-                userRepo.findById(task.getAssigneeId()).orElseGet(() -> {
-                    // Nếu không tìm thấy trong DB, force sync từ HR
-                    // (Thực tế syncAllEmployeesInCompany đã lo việc này, đây là fallback)
-                    return null; 
-                });
-                userRepo.findById(task.getAssigneeId()).ifPresent(u -> task.setAssigneeName(u.getFullName()));
-            } catch (Exception e) {}
+                userRepo.findById(task.getAssigneeId())
+                        .ifPresent(u -> task.setAssigneeName(u.getFullName()));
+            } catch (Exception e) {
+                log.warn("Không tìm thấy thông tin Assignee Name cho ID: {}", task.getAssigneeId());
+            }
         }
 
-        return taskRepo.save(task);
+        // 7. Lưu Task vào Database
+        Task savedTask = taskRepo.save(task);
+
+        // 8. LOGIC GỬI THÔNG BÁO QUA MQ 
+        // Khi Admin giao cho Manager hoặc Manager giao cho Staff
+        if (savedTask.getAssigneeId() != null) {
+            try {
+                String title = "New task";
+                String body = "Task: " + savedTask.getTitle();
+                
+                NotificationEvent event = NotificationEvent.builder()
+                        .userId(savedTask.getAssigneeId()) // ID người nhận (Manager/Staff)
+                        .title(title)
+                        .body(body)
+                        .type("TASK_ASSIGNED")
+                        .referenceId(savedTask.getId())
+                        .build();
+
+                // Gửi tin nhắn đến Notification Service qua RabbitMQ
+                rabbitTemplate.convertAndSend(
+                    RabbitMQConfig.NOTIFICATION_EXCHANGE, 
+                    RabbitMQConfig.NOTIFICATION_ROUTING_KEY, 
+                    event
+                );
+                
+                log.info("--> [MQ] Đã gửi thông báo giao việc cho User ID: {}", savedTask.getAssigneeId());
+            } catch (Exception e) {
+                // Log lỗi nhưng không làm sập luồng tạo Task chính
+                log.error("Lỗi khi gửi thông báo MQ: {}", e.getMessage());
+            }
+        }
+        // --- LOGIC REAL-TIME QUA WEBSOCKET (MỚI) ---
+        if (savedTask.getAssigneeId() != null) {
+            String destination = "/topic/tasks/" + savedTask.getAssigneeId();
+            messagingTemplate.convertAndSend(destination, (Object) savedTask);
+            log.info("--> [WebSocket] Đã đẩy Task mới tới topic: {}", destination);
+        }
+
+        return savedTask;
     }
+
+    public void deleteTask(Long taskId, Long requesterId) {
+        Task task = taskRepo.findById(taskId)
+                .orElseThrow(() -> new RuntimeException("Task not found"));
+        
+        if (!task.getCreatorId().equals(requesterId)) {
+            throw new RuntimeException("Bạn không có quyền xóa task này.");
+        }
+
+        Long assigneeId = task.getAssigneeId();
+        taskRepo.deleteById(taskId);
+
+        // --- LOGIC REAL-TIME QUA WEBSOCKET ---
+        if (assigneeId != null) {
+            String destination = "/topic/tasks/" + assigneeId;
+            
+            // Tạo Map dữ liệu xóa
+            Map<String, Object> deletePayload = Map.of(
+                "action", "DELETE",
+                "taskId", taskId,
+                "message", "Một công việc đã bị gỡ bỏ"
+            );
+
+            // Ép kiểu (Object) ở đây là QUAN TRỌNG NHẤT
+            messagingTemplate.convertAndSend(destination, (Object) deletePayload);
+            
+            log.info("--> [WebSocket] Đã gửi thông báo XÓA Task tới topic: {}", destination);
+        }
+    }
+
 
     // Thêm hàm phát hành task
     public Task publishTask(Long taskId) {
@@ -294,17 +374,6 @@ public class TaskService {
         return taskRepo.save(task);
     }
 
-    public void deleteTask(Long taskId, Long requesterId) {
-        Task task = taskRepo.findById(taskId)
-                .orElseThrow(() -> new RuntimeException("Task not found"));
-        
-        // KIỂM TRA QUYỀN: Chỉ người tạo (creatorId) mới được xóa
-        if (!task.getCreatorId().equals(requesterId)) {
-            throw new RuntimeException("Bạn không có quyền xóa task này vì bạn không phải người tạo.");
-        }
-        
-        taskRepo.deleteById(taskId);
-    }
 
     // Sửa hàm listTasksForCompany để phân quyền hiển thị
     public List<Task> listTasksForCompany(Long companyId, Long requesterId) {

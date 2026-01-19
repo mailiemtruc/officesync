@@ -8,6 +8,7 @@ import '../../data/models/task_department.dart';
 import '../../widgets/create_task_dialog.dart';
 import '../../widgets/task_detail_dialog.dart';
 import '../../data/task_session.dart';
+import '../../data/network/task_stomp_service.dart';
 
 class ManagerPage extends StatefulWidget {
   const ManagerPage({super.key});
@@ -24,17 +25,19 @@ class _ManagerPageState extends State<ManagerPage>
   bool loading = true;
   List<TaskDepartment> managedDepartments = [];
 
-  // Keys để mở Menu thủ công (giúp hiệu ứng Flash Border hoạt động)
-  final GlobalKey<PopupMenuButtonState<int?>> _deptMenuKey = GlobalKey();
-  final GlobalKey<PopupMenuButtonState<int?>> _staffMenuKey = GlobalKey();
-  final GlobalKey<PopupMenuButtonState<TaskStatus?>> _statusMenuKey =
-      GlobalKey();
-
   int? filterDeptId;
   int? filterStaffId;
   TaskStatus? filterStatus;
   DateTime? filterDate;
   bool showAllAssigned = false;
+
+  late TaskStompService _taskStompService; // 1. Khai báo biến
+
+  // Keys để mở Menu thủ công (giúp hiệu ứng Flash Border hoạt động)
+  final GlobalKey<PopupMenuButtonState<int?>> _deptMenuKey = GlobalKey();
+  final GlobalKey<PopupMenuButtonState<int?>> _staffMenuKey = GlobalKey();
+  final GlobalKey<PopupMenuButtonState<TaskStatus?>> _statusMenuKey =
+      GlobalKey();
 
   final Color colorBlue = const Color(0xFF2260FF);
   final Color colorWhite = const Color(0xFFFFFFFF);
@@ -54,6 +57,32 @@ class _ManagerPageState extends State<ManagerPage>
       setState(() {});
     });
     _initializeSessionAndData();
+    _setupRealtime(); // 2. Gọi hàm thiết lập Real-time
+  }
+
+  // 3. Hàm thiết lập logic Real-time
+  void _setupRealtime() {
+    _taskStompService = TaskStompService(
+      onTaskReceived: (data) {
+        if (mounted) {
+          setState(() {
+            fetchTasks(); // Tải lại danh sách để đồng bộ với DB
+          });
+
+          // Kiểm tra xem đây là hành động XÓA hay TẠO MỚI
+          if (data is Map && data['action'] == 'DELETE') {
+          } else {}
+        }
+      },
+    );
+    _taskStompService.connect();
+  }
+
+  @override
+  void dispose() {
+    _taskStompService.disconnect(); // 4. Ngắt kết nối khi đóng trang
+    _tabController.dispose();
+    super.dispose();
   }
 
   // --- LOGIC DATA (Giữ nguyên) ---

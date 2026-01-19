@@ -14,6 +14,19 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 @Configuration
 public class RabbitMQConfig {
 
+    public static final String NOTIFICATION_EXCHANGE = "notification.exchange";
+    public static final String NOTIFICATION_ROUTING_KEY = "notification.send";
+
+    @Bean
+    public TopicExchange notificationExchange() {
+        return new TopicExchange(NOTIFICATION_EXCHANGE);
+    }
+
+    @Bean
+    public MessageConverter jsonMessageConverter() {
+        return new Jackson2JsonMessageConverter();
+    }
+
     // Tên Queue phải DUY NHẤT cho Task Service
     public static final String TASK_SYNC_QUEUE = "task.sync.queue";
     
