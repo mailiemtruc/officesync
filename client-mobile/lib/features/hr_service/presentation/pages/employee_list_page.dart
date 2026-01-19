@@ -207,18 +207,6 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
     }
   }
 
-  void _onBottomNavTap(int index) {
-    if (index == 0) {
-      Navigator.pushNamedAndRemoveUntil(
-        context,
-        '/dashboard',
-        (route) => false,
-      );
-    } else if (index == 2) {
-      Navigator.pushNamed(context, '/user_profile');
-    }
-  }
-
   // --- MENU NHÂN VIÊN ---
   void _showOptions(BuildContext context, EmployeeModel employee) async {
     final result = await showModalBottomSheet(
@@ -368,7 +356,6 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF9F9F9),
-      bottomNavigationBar: _buildBottomNavBar(),
 
       floatingActionButton: showFab
           ? FloatingActionButton(
@@ -572,46 +559,6 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
           Text(
             message,
             style: TextStyle(color: Colors.grey[500], fontSize: 16),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBottomNavBar() {
-    return Container(
-      decoration: BoxDecoration(
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, -5),
-          ),
-        ],
-      ),
-      child: BottomNavigationBar(
-        backgroundColor: Colors.white,
-        currentIndex: 1,
-        onTap: _onBottomNavTap,
-        selectedItemColor: AppColors.primary,
-        unselectedItemColor: Colors.grey,
-        showUnselectedLabels: true,
-        type: BottomNavigationBarType.fixed,
-        items: [
-          BottomNavigationBarItem(
-            icon: Icon(PhosphorIconsRegular.house),
-            activeIcon: Icon(PhosphorIconsFill.house),
-            label: 'Home',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(PhosphorIconsFill.squaresFour),
-            activeIcon: Icon(PhosphorIconsFill.squaresFour),
-            label: 'Menu',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(PhosphorIconsRegular.user),
-            activeIcon: Icon(PhosphorIconsFill.user),
-            label: 'Profile',
           ),
         ],
       ),

@@ -623,25 +623,6 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
     );
   }
 
-  void _onBottomNavTap(int index) {
-    switch (index) {
-      case 0:
-        Navigator.pushNamedAndRemoveUntil(
-          context,
-          '/dashboard',
-          (route) => false,
-        );
-        break;
-      case 1:
-        break;
-      case 2:
-        Navigator.pushNamed(context, '/user_profile');
-        break;
-    }
-  }
-
-  // --- ĐÃ XÓA CÁC HÀM CŨ BỊ TRÙNG Ở ĐÂY ---
-
   @override
   Widget build(BuildContext context) {
     // 1. Tính toán logic filter và count ngay tại build
@@ -662,43 +643,6 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF9F9F9),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, -5),
-            ),
-          ],
-        ),
-        child: BottomNavigationBar(
-          backgroundColor: Colors.white,
-          currentIndex: 1,
-          onTap: _onBottomNavTap,
-          selectedItemColor: AppColors.primary,
-          unselectedItemColor: Colors.grey,
-          showUnselectedLabels: true,
-          type: BottomNavigationBarType.fixed,
-          items: [
-            BottomNavigationBarItem(
-              icon: Icon(PhosphorIconsRegular.house),
-              activeIcon: Icon(PhosphorIconsFill.house),
-              label: 'Home',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(PhosphorIconsFill.squaresFour),
-              activeIcon: Icon(PhosphorIconsFill.squaresFour),
-              label: 'Menu',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(PhosphorIconsRegular.user),
-              activeIcon: Icon(PhosphorIconsFill.user),
-              label: 'Profile',
-            ),
-          ],
-        ),
-      ),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(

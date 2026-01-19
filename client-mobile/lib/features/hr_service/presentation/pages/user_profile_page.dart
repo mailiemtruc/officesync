@@ -68,6 +68,22 @@ class _UserProfilePageState extends State<UserProfilePage> {
     }
   }
 
+  // [THÊM MỚI] Hàm chuyển đổi Role sang tên hiển thị đẹp (giống Dashboard)
+  String _getDisplayRole(String rawRole) {
+    switch (rawRole) {
+      case 'SUPER_ADMIN':
+        return 'ADMIN'; // Hoặc sửa thành 'QUẢN TRỊ VIÊN'
+      case 'COMPANY_ADMIN':
+        return 'DIRECTOR'; // Hoặc sửa thành 'GIÁM ĐỐC'
+      case 'MANAGER':
+        return 'MANAGER'; // Hoặc sửa thành 'QUẢN LÝ'
+      case 'STAFF':
+        return 'STAFF'; // Hoặc sửa thành 'NHÂN VIÊN'
+      default:
+        return rawRole;
+    }
+  }
+
   // --- HÀM HỖ TRỢ ---
   String _formatDate(String? dateStr) {
     if (dateStr == null || dateStr.isEmpty || dateStr == 'N/A') return 'N/A';
@@ -451,8 +467,12 @@ class _UserProfilePageState extends State<UserProfilePage> {
   Widget build(BuildContext context) {
     final fullName =
         _detailedEmployee?.fullName ?? widget.userInfo['fullName'] ?? 'User';
-    final role =
+
+    // [MỚI] Lấy role thô trước
+    final rawRole =
         _detailedEmployee?.role ?? widget.userInfo['role'] ?? 'Employee';
+    // [MỚI] Sau đó chuyển đổi qua hàm hiển thị
+    final role = _getDisplayRole(rawRole);
     final avatarUrl = _detailedEmployee?.avatarUrl;
 
     return Scaffold(
