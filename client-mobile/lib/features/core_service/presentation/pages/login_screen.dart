@@ -43,6 +43,15 @@ class _LoginScreenState extends State<LoginScreen> {
   void initState() {
     super.initState();
 
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final args = ModalRoute.of(context)?.settings.arguments;
+      if (args is Map && args['email'] != null) {
+        setState(() {
+          _emailController.text = args['email'];
+        });
+      }
+    });
+
     Future.delayed(const Duration(milliseconds: 100), () {
       if (mounted) setState(() => _isHeaderVisible = true);
     });
