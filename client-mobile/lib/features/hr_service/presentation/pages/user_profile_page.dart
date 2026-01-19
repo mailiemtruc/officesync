@@ -17,6 +17,7 @@ import '../../domain/repositories/employee_repository_impl.dart';
 import '../../data/datasources/employee_remote_data_source.dart';
 import '../../data/models/employee_model.dart';
 import '../../../../core/services/websocket_service.dart';
+import 'package:shimmer/shimmer.dart';
 
 class UserProfilePage extends StatefulWidget {
   final Map<String, dynamic> userInfo;
@@ -467,97 +468,61 @@ class _UserProfilePageState extends State<UserProfilePage> {
                 child: Column(
                   children: [
                     const SizedBox(height: 20),
-                    Row(
-                      children: [
-                        IconButton(
-                          icon: Icon(
-                            PhosphorIcons.caretLeft(PhosphorIconsStyle.bold),
-                            color: AppColors.primary,
-                            size: 24,
-                          ),
-                          // [SỬA LOGIC BACK]
-                          onPressed: () async {
-                            // Ưu tiên 1: Pop nếu có thể (Giữ nguyên trạng thái cũ)
-                            if (Navigator.canPop(context)) {
-                              Navigator.pop(context);
-                              return;
-                            }
-
-                            // Ưu tiên 2: Nếu bắt buộc phải reset về Dashboard
-                            // Ta phải đảm bảo dữ liệu userInfo truyền về là ĐẦY ĐỦ nhất
-                            Map<String, dynamic> dataToPass = Map.of(
-                              widget.userInfo,
-                            );
-
-                            // Nếu dữ liệu hiện tại bị thiếu Role hoặc ID
-                            if (dataToPass.isEmpty ||
-                                dataToPass['role'] == null ||
-                                dataToPass['id'] == null) {
-                              try {
-                                // Đọc lại từ Storage
-                                String? storedInfo = await _storage.read(
-                                  key: 'user_info',
-                                );
-                                if (storedInfo != null) {
-                                  dataToPass = jsonDecode(storedInfo);
-                                }
-                              } catch (e) {
-                                print("Error reading storage for nav: $e");
-                              }
-                            }
-
-                            if (context.mounted) {
-                              Navigator.pushNamedAndRemoveUntil(
-                                context,
-                                '/dashboard',
-                                (route) => false,
-                                arguments:
-                                    dataToPass, // Truyền map đầy đủ quyền
-                              );
-                            }
-                          },
+                    // Header
+                    const Center(
+                      child: Text(
+                        'PERSONAL INFORMATION',
+                        style: TextStyle(
+                          color: AppColors.primary,
+                          fontSize: 24,
+                          fontFamily: 'Inter',
+                          fontWeight: FontWeight.w700,
                         ),
-                        const Expanded(
-                          child: Center(
-                            child: Text(
-                              'PERSONAL INFORMATION',
-                              style: TextStyle(
-                                color: AppColors.primary,
-                                fontSize: 22,
-                                fontFamily: 'Inter',
-                                fontWeight: FontWeight.w700,
-                              ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+
+                    // [TỐI ƯU ANIMATION PROFILE]
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 500),
+                      reverseDuration: const Duration(
+                        milliseconds: 50,
+                      ), // Fix dính hình
+                      switchInCurve: Curves.easeIn,
+                      switchOutCurve: Curves.easeOut,
+                      transitionBuilder: (child, animation) {
+                        return FadeTransition(opacity: animation, child: child);
+                      },
+                      child: _isLoadingProfile
+                          ? const SkeletonUserProfile(
+                              key: ValueKey('profile_skeleton'),
+                            )
+                          : Column(
+                              key: const ValueKey('profile_content'),
+                              children: [
+                                _HeaderSection(
+                                  fullName: fullName,
+                                  role: role,
+                                  avatarUrl: avatarUrl,
+                                  isUploading: _isUploading,
+                                  localImage: _localAvatarFile,
+                                  onCameraTap: () =>
+                                      _showImagePickerOptions(context),
+                                ),
+                                const SizedBox(height: 24),
+                                _InfoSection(
+                                  userInfo: widget.userInfo,
+                                  detailedEmployee: _detailedEmployee,
+                                  dateFormatter: _formatDate,
+                                  onRefresh: _fetchEmployeeDetail,
+                                ),
+                                const SizedBox(height: 24),
+                                _ActionSection(
+                                  onLogoutTap: () =>
+                                      _showLogoutConfirmation(context),
+                                ),
+                              ],
                             ),
-                          ),
-                        ),
-                        const SizedBox(width: 40),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-                    // [SỬA] Truyền localImage xuống
-                    _HeaderSection(
-                      fullName: fullName,
-                      role: role,
-                      avatarUrl: avatarUrl,
-                      isUploading: _isUploading,
-                      localImage: _localAvatarFile,
-                      onCameraTap: () => _showImagePickerOptions(context),
-                    ),
-                    const SizedBox(height: 24),
-                    _isLoadingProfile
-                        ? const Padding(
-                            padding: EdgeInsets.all(20.0),
-                            child: CircularProgressIndicator(),
-                          )
-                        : _InfoSection(
-                            userInfo: widget.userInfo,
-                            detailedEmployee: _detailedEmployee,
-                            dateFormatter: _formatDate,
-                            onRefresh: _fetchEmployeeDetail,
-                          ),
-                    const SizedBox(height: 24),
-                    _ActionSection(
-                      onLogoutTap: () => _showLogoutConfirmation(context),
                     ),
                     const SizedBox(height: 40),
                   ],
@@ -983,6 +948,119 @@ class _InfoRow extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class SkeletonUserProfile extends StatelessWidget {
+  const SkeletonUserProfile({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Shimmer.fromColors(
+      baseColor: Colors.grey[200]!, // [MÀU MỚI]
+      highlightColor: Colors.grey[50]!, // [MÀU MỚI]
+      period: const Duration(milliseconds: 2000), // [TỐC ĐỘ MỚI]
+      child: Column(
+        children: [
+          // Avatar
+          Container(
+            width: 110,
+            height: 110,
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(height: 12),
+          // Name & Role
+          Container(
+            width: 180,
+            height: 24,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            width: 100,
+            height: 16,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ),
+          const SizedBox(height: 32),
+
+          // Info Section giả
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(32),
+              border: Border.all(color: Colors.white),
+            ),
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              children: List.generate(4, (index) {
+                // [LOGIC ORGANIC] Độ dài ngẫu nhiên: chẵn thì dài, lẻ thì ngắn
+                final double textWidth = index % 2 == 0
+                    ? double.infinity
+                    : 150.0;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 24),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 24,
+                        height: 24,
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              width: 60,
+                              height: 10,
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Container(
+                              width: textWidth, // Áp dụng độ dài ngẫu nhiên
+                              height: 14,
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ),
+          ),
+          const SizedBox(height: 24),
+          // Action Section giả
+          Container(
+            height: 120,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(32),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

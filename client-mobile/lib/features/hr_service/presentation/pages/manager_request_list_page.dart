@@ -9,6 +9,7 @@ import '../../data/models/request_model.dart';
 import 'manager_request_review_page.dart';
 import '../../data/datasources/request_remote_data_source.dart';
 import 'dart:async';
+import '../../widgets/skeleton_request_card.dart';
 
 enum FilterType { none, date, month, year }
 
@@ -643,7 +644,8 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
 
   @override
   Widget build(BuildContext context) {
-    // 1. Filter danh sách hiển thị
+    // 1. Tính toán logic filter và count ngay tại build
+    // Để dùng cho cả Tabs và List
     final displayList = _requestList.where((item) {
       final req = item['request'] as RequestModel;
       if (_isToReviewTab) {
@@ -653,7 +655,6 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
       }
     }).toList();
 
-    // 2. Đếm số lượng Pending
     final int pendingCount = _requestList.where((item) {
       final req = item['request'] as RequestModel;
       return req.status == RequestStatus.PENDING;
@@ -724,18 +725,15 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
                 ),
                 const SizedBox(height: 24),
 
-                // [SỬA] Đổi Label "TODAY" thành "PENDING REQUESTS"
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
-                      _isToReviewTab
-                          ? 'PENDING REQUESTS'
-                          : 'HISTORY', // Logic mới
+                      _isToReviewTab ? 'PENDING REQUESTS' : 'HISTORY',
                       style: const TextStyle(
                         color: Color(0xFF655F5F),
-                        fontSize: 14, // Giảm size chút cho tinh tế
+                        fontSize: 14,
                         fontWeight: FontWeight.w700,
                         fontFamily: 'Inter',
                         letterSpacing: 0.5,
@@ -743,117 +741,125 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 4), // Giảm khoảng cách
+                const SizedBox(height: 4),
 
+                // [MAIN CONTENT] Bọc AnimatedSwitcher
                 Expanded(
-                  child: _isLoading
-                      ? const Center(child: CircularProgressIndicator())
-                      : displayList.isEmpty
-                      ? _buildEmptyState()
-                      : RefreshIndicator(
-                          // [SỬA] Bắt đầu RefreshIndicator
-                          onRefresh: () async {
-                            // Gọi hàm lấy dữ liệu khi người dùng kéo xuống
-                            await _fetchRequests(isBackgroundRefresh: true);
-                          },
-                          color: const Color(0xFF2260FF),
-                          // [SỬA QUAN TRỌNG] Thay dấu ":" sai bằng "child:"
-                          child: ListView.builder(
-                            physics:
-                                const AlwaysScrollableScrollPhysics(), // Giúp kéo được ngay cả khi list ngắn
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 24,
-                              vertical: 8,
-                            ),
-                            itemCount: displayList.length,
-                            itemBuilder: (context, index) {
-                              final item = displayList[index];
-                              final request = item['request'] as RequestModel;
-
-                              // --- LOGIC GOM NHÓM THÁNG ---
-                              final date =
-                                  request.createdAt ?? request.startTime;
-                              bool showHeader = false;
-
-                              if (index == 0) {
-                                showHeader = true;
-                              } else {
-                                final prevItem = displayList[index - 1];
-                                final prevRequest =
-                                    prevItem['request'] as RequestModel;
-                                final prevDate =
-                                    prevRequest.createdAt ??
-                                    prevRequest.startTime;
-
-                                // Kiểm tra khác tháng hoặc khác năm
-                                if (date.month != prevDate.month ||
-                                    date.year != prevDate.year) {
-                                  showHeader = true;
-                                }
-                              }
-
-                              return Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  // Hiển thị Header Tháng
-                                  if (showHeader)
-                                    Padding(
-                                      padding: const EdgeInsets.only(
-                                        top: 16,
-                                        bottom: 12,
-                                      ),
-                                      child: Text(
-                                        DateFormat('MMMM yyyy').format(date),
-                                        style: const TextStyle(
-                                          color: Color(0xFF6B7280),
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.bold,
-                                          fontFamily: 'Inter',
-                                        ),
-                                      ),
-                                    ),
-
-                                  _ManagerRequestCard(
-                                    data: item,
-                                    // [SỬA LẠI ĐOẠN NÀY]
-                                    onTap: () async {
-                                      // 1. Thêm từ khóa async
-                                      // 2. Thêm await để chờ kết quả từ trang Review
-                                      final result = await Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (context) =>
-                                              ManagerRequestReviewPage(
-                                                request: item['request'],
-                                              ),
-                                        ),
-                                      );
-
-                                      // 3. Kiểm tra: Nếu trang kia trả về 'true' (tức là đã Duyệt/Từ chối thành công)
-                                      if (result == true) {
-                                        print(
-                                          "--> Action success. Reloading list...",
-                                        );
-                                        // Gọi hàm load lại API ngay lập tức
-                                        if (mounted) {
-                                          _fetchRequests(
-                                            isBackgroundRefresh: true,
-                                          );
-                                        }
-                                      }
-                                    },
-                                  ),
-                                ],
-                              );
-                            },
-                          ),
-                        ), // [SỬA] Đóng ngoặc RefreshIndicator
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 300),
+                    transitionBuilder: (child, animation) =>
+                        FadeTransition(opacity: animation, child: child),
+                    child: _buildBodyContent(displayList),
+                  ),
                 ),
               ],
             ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildBodyContent(List<Map<String, dynamic>> displayList) {
+    Widget content;
+    Key contentKey;
+
+    if (_isLoading) {
+      contentKey = const ValueKey('loading_skeleton');
+      content = ListView.builder(
+        padding: const EdgeInsets.only(top: 10),
+        itemCount: 6,
+        itemBuilder: (context, index) => const SkeletonRequestCard(),
+      );
+    } else if (displayList.isEmpty) {
+      contentKey = ValueKey('empty_${_isToReviewTab ? "review" : "history"}');
+      content = RefreshIndicator(
+        onRefresh: () async => await _fetchRequests(isBackgroundRefresh: true),
+        color: const Color(0xFF2260FF),
+        child: Stack(
+          children: [
+            ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: [
+                SizedBox(height: MediaQuery.of(context).size.height * 0.3),
+              ],
+            ),
+            Positioned.fill(child: _buildEmptyState()),
+          ],
+        ),
+      );
+    } else {
+      contentKey = ValueKey('data_${_isToReviewTab ? "review" : "history"}');
+      content = RefreshIndicator(
+        onRefresh: () async => await _fetchRequests(isBackgroundRefresh: true),
+        color: const Color(0xFF2260FF),
+        child: ListView.builder(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+          itemCount: displayList.length,
+          itemBuilder: (context, index) {
+            final item = displayList[index];
+            final request = item['request'] as RequestModel;
+            final date = request.createdAt ?? request.startTime;
+            bool showHeader = false;
+
+            if (index == 0) {
+              showHeader = true;
+            } else {
+              final prevItem = displayList[index - 1];
+              final prevRequest = prevItem['request'] as RequestModel;
+              final prevDate = prevRequest.createdAt ?? prevRequest.startTime;
+              if (date.month != prevDate.month || date.year != prevDate.year) {
+                showHeader = true;
+              }
+            }
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (showHeader)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 16, bottom: 12),
+                    child: Text(
+                      DateFormat('MMMM yyyy').format(date),
+                      style: const TextStyle(
+                        color: Color(0xFF6B7280),
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        fontFamily: 'Inter',
+                      ),
+                    ),
+                  ),
+                _ManagerRequestCard(
+                  data: item,
+                  onTap: () async {
+                    final result = await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            ManagerRequestReviewPage(request: item['request']),
+                      ),
+                    );
+                    if (result == true) {
+                      if (mounted) _fetchRequests(isBackgroundRefresh: true);
+                    }
+                  },
+                ),
+              ],
+            );
+          },
+        ),
+      );
+    }
+
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 300),
+      reverseDuration: const Duration(milliseconds: 50), // Fix dính hình
+      switchInCurve: Curves.easeIn,
+      switchOutCurve: Curves.easeOut,
+      transitionBuilder: (child, animation) =>
+          FadeTransition(opacity: animation, child: child),
+      child: KeyedSubtree(key: contentKey, child: content),
     );
   }
 

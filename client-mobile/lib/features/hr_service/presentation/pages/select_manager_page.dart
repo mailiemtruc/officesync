@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-
+import '../../widgets/skeleton_employee_card.dart';
 import '../../../../core/config/app_colors.dart';
 import '../../data/models/employee_model.dart';
 import '../../widgets/employee_card.widget.dart';
@@ -110,7 +110,6 @@ class _SelectManagerPageState extends State<SelectManagerPage> {
                   child: Row(
                     children: [
                       IconButton(
-                        // [ĐÃ SỬA] Đổi Icon cho đồng bộ với trang AddMember
                         icon: Icon(
                           PhosphorIcons.caretLeft(PhosphorIconsStyle.bold),
                           color: AppColors.primary,
@@ -159,45 +158,73 @@ class _SelectManagerPageState extends State<SelectManagerPage> {
                   ),
                 ),
 
-                // List Items
+                // List Items (Đã bọc AnimatedSwitcher)
                 Expanded(
-                  child: _isLoading
-                      ? const Center(child: CircularProgressIndicator())
-                      : _displayList.isEmpty
-                      ? _buildEmptyState(
-                          _searchController.text.isNotEmpty
-                              ? "No employees found matching '${_searchController.text}'"
-                              : "No employees found",
-                        )
-                      : ListView.builder(
-                          padding: const EdgeInsets.symmetric(horizontal: 24),
-                          itemCount: _displayList.length,
-                          itemBuilder: (context, index) {
-                            final emp = _displayList[index];
-                            final isSelected =
-                                emp.id.toString() == widget.selectedId;
-                            final isLocked = emp.status == "LOCKED";
-
-                            return EmployeeCard(
-                              employee: emp,
-                              isSelected: isSelected,
-                              // KHÔNG TRUYỀN onMenuTap ĐỂ ẨN NÚT 3 CHẤM
-                              onTap: isLocked
-                                  ? null
-                                  : () => Navigator.pop(context, emp),
-                              selectionWidget: _buildSelectionIcon(
-                                isSelected,
-                                isLocked,
-                              ),
-                            );
-                          },
-                        ),
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 300),
+                    transitionBuilder: (child, animation) =>
+                        FadeTransition(opacity: animation, child: child),
+                    child: _buildListContent(),
+                  ),
                 ),
               ],
             ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildListContent() {
+    Widget content;
+    Key contentKey;
+
+    if (_isLoading) {
+      contentKey = const ValueKey('loading_list');
+      content = ListView.builder(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        itemCount: 8,
+        itemBuilder: (context, index) => const SkeletonEmployeeCard(),
+      );
+    } else if (_displayList.isEmpty) {
+      contentKey = const ValueKey('empty_list');
+      content = Container(
+        width: double.infinity,
+        alignment: Alignment.center,
+        child: _buildEmptyState(
+          _searchController.text.isNotEmpty
+              ? "No employees found matching '${_searchController.text}'"
+              : "No employees found",
+        ),
+      );
+    } else {
+      contentKey = const ValueKey('data_list');
+      content = ListView.builder(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        itemCount: _displayList.length,
+        itemBuilder: (context, index) {
+          final emp = _displayList[index];
+          final isSelected = emp.id.toString() == widget.selectedId;
+          final isLocked = emp.status == "LOCKED";
+
+          return EmployeeCard(
+            employee: emp,
+            isSelected: isSelected,
+            onTap: isLocked ? null : () => Navigator.pop(context, emp),
+            selectionWidget: _buildSelectionIcon(isSelected, isLocked),
+          );
+        },
+      );
+    }
+
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 300),
+      reverseDuration: const Duration(milliseconds: 50), // Fix dính hình
+      switchInCurve: Curves.easeIn,
+      switchOutCurve: Curves.easeOut,
+      transitionBuilder: (child, animation) =>
+          FadeTransition(opacity: animation, child: child),
+      child: KeyedSubtree(key: contentKey, child: content),
     );
   }
 

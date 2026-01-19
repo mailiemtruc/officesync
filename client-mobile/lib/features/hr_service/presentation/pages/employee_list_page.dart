@@ -1,29 +1,28 @@
-import 'dart:async'; // Dùng cho Debounce
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:officesync/features/hr_service/domain/repositories/employee_repository.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-
 import '../../../../core/config/app_colors.dart';
 import '../../data/models/employee_model.dart';
 import '../../data/models/department_model.dart';
 import '../../domain/repositories/employee_repository_impl.dart';
 import '../../data/datasources/employee_remote_data_source.dart';
-// Import Department Repository & DataSource
 import '../../domain/repositories/department_repository.dart';
 import '../../data/datasources/department_remote_data_source.dart';
 import '../../domain/repositories/department_repository_impl.dart';
-import '../../domain/repositories/department_repository.dart';
 import '../../widgets/employee_card.widget.dart';
+import '../../widgets/skeleton_employee_card.dart';
 import '../../widgets/department_card.widget.dart';
-import '../../widgets/department_bottom_sheet.dart'; // Đảm bảo đã import cái này
+import '../../widgets/department_bottom_sheet.dart';
 import '../../widgets/employee_bottom_sheet.dart';
 import 'add_employee_page.dart';
 import 'create_department_page.dart';
 import 'department_details_page.dart';
 import '../../../../core/utils/custom_snackbar.dart';
 import 'employee_profile_page.dart';
+import '../../widgets/skeleton_department_card.dart';
 
 class EmployeeListPage extends StatefulWidget {
   const EmployeeListPage({super.key});
@@ -395,16 +394,14 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
                 _buildSearchAndFilter(),
                 const SizedBox(height: 20),
 
+                // [MAIN CONTENT] Đã được tách ra hàm riêng và bọc AnimatedSwitcher
                 Expanded(
-                  child: _isLoading
-                      ? const Center(child: CircularProgressIndicator())
-                      : RefreshIndicator(
-                          onRefresh: () async =>
-                              _fetchData(keyword: _searchController.text),
-                          child: _isEmployeesTab
-                              ? _buildEmployeeList()
-                              : _buildDepartmentList(),
-                        ),
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 300),
+                    transitionBuilder: (child, animation) =>
+                        FadeTransition(opacity: animation, child: child),
+                    child: _buildBodyContent(),
+                  ),
                 ),
               ],
             ),
@@ -414,20 +411,78 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
     );
   }
 
+  Widget _buildBodyContent() {
+    Widget content;
+    Key contentKey;
+
+    // 1. Trạng thái Loading
+    if (_isLoading) {
+      contentKey = ValueKey('loading_${_isEmployeesTab ? "emp" : "dept"}');
+      content = ListView.builder(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+        itemCount: 8,
+        itemBuilder: (context, index) {
+          return _isEmployeesTab
+              ? const SkeletonEmployeeCard()
+              : const SkeletonDepartmentCard();
+        },
+      );
+    } else {
+      // 2. Trạng thái Data / Empty (đã xử lý bên trong các hàm con)
+      contentKey = ValueKey('content_${_isEmployeesTab ? "emp" : "dept"}');
+      content = RefreshIndicator(
+        onRefresh: () async {
+          await _fetchData(keyword: _searchController.text);
+        },
+        child: _isEmployeesTab ? _buildEmployeeList() : _buildDepartmentList(),
+      );
+    }
+
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 300),
+      reverseDuration: const Duration(milliseconds: 50), // Fix dính hình
+      switchInCurve: Curves.easeIn,
+      switchOutCurve: Curves.easeOut,
+      transitionBuilder: (child, animation) =>
+          FadeTransition(opacity: animation, child: child),
+      child: KeyedSubtree(key: contentKey, child: content),
+    );
+  }
+
+  // Hàm render danh sách Nhân viên
   Widget _buildEmployeeList() {
+    // Lọc bỏ chính bản thân user ra khỏi danh sách hiển thị
     final filteredList = _employees.where((emp) {
       return emp.id != _currentUserId;
     }).toList();
 
+    // Check Empty
     if (filteredList.isEmpty) {
       String msg = _searchController.text.isNotEmpty
           ? "No employees found matching '${_searchController.text}'"
           : "No employees found.";
-      return _buildEmptyState(msg);
+
+      // [QUAN TRỌNG] Bọc EmptyState trong ListView + Stack
+      // để vẫn có thể kéo xuống (Pull-to-refresh) được
+      return Stack(
+        children: [
+          ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            children: [
+              SizedBox(height: MediaQuery.of(context).size.height * 0.3),
+            ],
+          ),
+          Positioned.fill(child: _buildEmptyState(msg)),
+        ],
+      );
     }
 
+    // Render List
     return ListView.builder(
+      key: const ValueKey('employee_list_data'),
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+      // Luôn cho phép scroll để RefreshIndicator hoạt động mượt
+      physics: const AlwaysScrollableScrollPhysics(),
       itemCount: filteredList.length,
       itemBuilder: (context, index) {
         final emp = filteredList[index];
@@ -439,15 +494,12 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
             employee: emp,
             onMenuTap: () => _showOptions(context, emp),
             onTap: () {
-              // [ĐÃ SỬA] Chuyển hướng sang trang Profile (Xem chi tiết)
               Navigator.push(
                 context,
                 MaterialPageRoute(
                   builder: (context) => EmployeeProfilePage(employee: emp),
                 ),
-              ).then(
-                (_) => _fetchData(),
-              ); // Vẫn giữ fetch lại data đề phòng có sửa trong trang chi tiết
+              ).then((_) => _fetchData());
             },
           ),
         );
@@ -455,16 +507,33 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
     );
   }
 
+  // Hàm render danh sách Phòng ban
   Widget _buildDepartmentList() {
+    // Check Empty
     if (_departments.isEmpty) {
       String msg = _searchController.text.isNotEmpty
           ? "No departments found matching '${_searchController.text}'"
           : "No departments found.";
-      return _buildEmptyState(msg);
+
+      // [QUAN TRỌNG] Bọc EmptyState để support Pull-to-refresh
+      return Stack(
+        children: [
+          ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            children: [
+              SizedBox(height: MediaQuery.of(context).size.height * 0.3),
+            ],
+          ),
+          Positioned.fill(child: _buildEmptyState(msg)),
+        ],
+      );
     }
 
+    // Render List
     return ListView.builder(
+      key: const ValueKey('department_list_data'),
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+      physics: const AlwaysScrollableScrollPhysics(),
       itemCount: _departments.length,
       itemBuilder: (context, index) {
         final dept = _departments[index];
@@ -474,14 +543,9 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
               : EdgeInsets.zero,
           child: DepartmentCard(
             department: dept,
-
-            // [SỬA QUAN TRỌNG] Gọi hàm _showDepartmentOptions thay vì navigate
             onMenuTap: (_currentUserRole == 'COMPANY_ADMIN')
-                ? () =>
-                      _showDepartmentOptions(dept) // [ĐÃ SỬA]
+                ? () => _showDepartmentOptions(dept)
                 : null,
-
-            // [SỬA ĐOẠN NÀY]
             onTap: () {
               Navigator.push(
                 context,
@@ -489,7 +553,6 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
                   builder: (context) => DepartmentDetailsPage(department: dept),
                 ),
               ).then((_) {
-                // [QUAN TRỌNG] Load lại dữ liệu khi quay về để cập nhật Manager mới
                 _fetchData(keyword: _searchController.text);
               });
             },

@@ -12,6 +12,7 @@ import '../../domain/repositories/request_repository.dart';
 import 'dart:async';
 import 'create_request_page.dart';
 import 'request_detail_page.dart';
+import '../../widgets/skeleton_request_card.dart';
 
 enum FilterType { none, date, month, year }
 
@@ -825,7 +826,7 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
                 ),
 
                 const SizedBox(height: 24),
-                // Search & Filter (Đã cập nhật UI mới)
+                // Search & Filter
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: Row(
@@ -838,7 +839,7 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
                 ),
 
                 const SizedBox(height: 20),
-                // Filter Tabs (Giữ nguyên)
+                // Filter Tabs
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -904,127 +905,156 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
                 ),
                 const SizedBox(height: 12),
 
-                // List Items
+                // [MAIN CONTENT] Bọc AnimatedSwitcher
                 Expanded(
-                  child: _isLoading
-                      ? const Center(child: CircularProgressIndicator())
-                      : _filteredRequests.isEmpty
-                      // [ĐÃ SỬA] Gọi hàm hiển thị rỗng đồng bộ
-                      ? _buildEmptyState()
-                      // [ĐÃ SỬA] Đồng bộ giao diện "Rỗng" giống trang Manager
-                      : ListView.builder(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 24,
-                            vertical: 8,
-                          ),
-                          itemCount: _filteredRequests.length,
-                          itemBuilder: (context, index) {
-                            final request = _filteredRequests[index];
-
-                            // LOGIC HIỂN THỊ HEADER THÁNG
-                            final date = request.createdAt ?? request.startTime;
-                            bool showHeader = false;
-
-                            if (index == 0) {
-                              showHeader = true;
-                            } else {
-                              final prevRequest = _filteredRequests[index - 1];
-                              final prevDate =
-                                  prevRequest.createdAt ??
-                                  prevRequest.startTime;
-                              if (date.month != prevDate.month ||
-                                  date.year != prevDate.year) {
-                                showHeader = true;
-                              }
-                            }
-
-                            return Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                if (showHeader)
-                                  Padding(
-                                    padding: const EdgeInsets.only(
-                                      top: 16,
-                                      bottom: 12,
-                                    ),
-                                    child: Text(
-                                      DateFormat('MMMM yyyy').format(date),
-                                      style: const TextStyle(
-                                        color: Color(0xFF6B7280),
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w700,
-                                        fontFamily: 'Inter',
-                                        letterSpacing: 0.5,
-                                      ),
-                                    ),
-                                  ),
-
-                                Dismissible(
-                                  key: Key(request.id.toString()),
-                                  direction: DismissDirection.endToStart,
-                                  background: Container(
-                                    alignment: Alignment.centerRight,
-                                    padding: const EdgeInsets.only(right: 24),
-                                    margin: const EdgeInsets.only(bottom: 16),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFFEE2E2),
-                                      borderRadius: BorderRadius.circular(16),
-                                    ),
-                                    child: Container(
-                                      padding: const EdgeInsets.all(8),
-                                      decoration: const BoxDecoration(
-                                        color: Color(0xFFEF4444),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: const Icon(
-                                        Icons.delete_outline,
-                                        color: Colors.white,
-                                        size: 20,
-                                      ),
-                                    ),
-                                  ),
-                                  confirmDismiss: (direction) async {
-                                    return await showDialog(
-                                      context: context,
-                                      builder: (context) => _buildConfirmDialog(
-                                        context,
-                                        isPending:
-                                            request.status ==
-                                            RequestStatus.PENDING,
-                                      ),
-                                    );
-                                  },
-                                  onDismissed: (direction) async {
-                                    setState(() {
-                                      _requests.removeWhere(
-                                        (item) => item.id == request.id,
-                                      );
-                                    });
-                                    try {
-                                      final userId =
-                                          await _getUserIdFromStorage();
-                                      if (userId != null) {
-                                        await _repository.cancelRequest(
-                                          request.id.toString(),
-                                          userId,
-                                        );
-                                      }
-                                    } catch (e) {
-                                      print("Lỗi xóa đơn: $e");
-                                    }
-                                  },
-                                  child: _buildRequestCard(request),
-                                ),
-                              ],
-                            );
-                          },
-                        ),
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 300),
+                    transitionBuilder: (child, animation) =>
+                        FadeTransition(opacity: animation, child: child),
+                    child: _buildListContent(),
+                  ),
                 ),
               ],
             ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildListContent() {
+    Widget content;
+    Key contentKey;
+
+    if (_isLoading) {
+      contentKey = const ValueKey('loading_list');
+      content = ListView.builder(
+        padding: const EdgeInsets.only(top: 10),
+        itemCount: 6,
+        itemBuilder: (context, index) => const SkeletonRequestCard(),
+      );
+    } else if (_filteredRequests.isEmpty) {
+      contentKey = const ValueKey('empty_list');
+      content = RefreshIndicator(
+        onRefresh: () async => await _fetchRequests(),
+        child: Stack(
+          children: [
+            ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: [
+                SizedBox(height: MediaQuery.of(context).size.height * 0.3),
+              ],
+            ),
+            Positioned.fill(child: _buildEmptyState()),
+          ],
+        ),
+      );
+    } else {
+      contentKey = const ValueKey('data_list');
+      content = RefreshIndicator(
+        onRefresh: () async => await _fetchRequests(),
+        child: ListView.builder(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+          itemCount: _filteredRequests.length,
+          itemBuilder: (context, index) {
+            final request = _filteredRequests[index];
+            final date = request.createdAt ?? request.startTime;
+            bool showHeader = false;
+
+            if (index == 0) {
+              showHeader = true;
+            } else {
+              final prevRequest = _filteredRequests[index - 1];
+              final prevDate = prevRequest.createdAt ?? prevRequest.startTime;
+              if (date.month != prevDate.month || date.year != prevDate.year) {
+                showHeader = true;
+              }
+            }
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (showHeader)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 16, bottom: 12),
+                    child: Text(
+                      DateFormat('MMMM yyyy').format(date),
+                      style: const TextStyle(
+                        color: Color(0xFF6B7280),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        fontFamily: 'Inter',
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                Dismissible(
+                  key: Key(request.id.toString()),
+                  direction: DismissDirection.endToStart,
+                  background: Container(
+                    alignment: Alignment.centerRight,
+                    padding: const EdgeInsets.only(right: 24),
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEE2E2),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFEF4444),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.delete_outline,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                  confirmDismiss: (direction) async {
+                    return await showDialog(
+                      context: context,
+                      builder: (context) => _buildConfirmDialog(
+                        context,
+                        isPending: request.status == RequestStatus.PENDING,
+                      ),
+                    );
+                  },
+                  onDismissed: (direction) async {
+                    setState(() {
+                      _requests.removeWhere((item) => item.id == request.id);
+                    });
+                    try {
+                      final userId = await _getUserIdFromStorage();
+                      if (userId != null) {
+                        await _repository.cancelRequest(
+                          request.id.toString(),
+                          userId,
+                        );
+                      }
+                    } catch (e) {
+                      print("Lỗi xóa đơn: $e");
+                    }
+                  },
+                  child: _buildRequestCard(request),
+                ),
+              ],
+            );
+          },
+        ),
+      );
+    }
+
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 300),
+      reverseDuration: const Duration(milliseconds: 50), // Fix dính hình
+      switchInCurve: Curves.easeIn,
+      switchOutCurve: Curves.easeOut,
+      transitionBuilder: (child, animation) =>
+          FadeTransition(opacity: animation, child: child),
+      child: KeyedSubtree(key: contentKey, child: content),
     );
   }
 

@@ -6,6 +6,7 @@ import '../../../../core/config/app_colors.dart';
 import '../../data/models/department_model.dart';
 import '../../data/models/employee_model.dart';
 import '../../widgets/employee_card.widget.dart';
+import '../../widgets/skeleton_employee_card.dart';
 import '../../domain/repositories/employee_repository_impl.dart';
 import '../../domain/repositories/employee_repository.dart';
 import '../../data/datasources/employee_remote_data_source.dart';
@@ -403,8 +404,7 @@ class _DepartmentDetailsPageState extends State<DepartmentDetailsPage> {
                               ),
                             ),
 
-                            // [LOGIC UI MỚI] Chỉ hiện nút Add Member nếu là COMPANY_ADMIN
-                            // Các quyền khác (MANAGER, STAFF) sẽ không thấy nút này
+                            // Chỉ hiện nút Add Member nếu là COMPANY_ADMIN
                             if (_currentUserRole == 'COMPANY_ADMIN')
                               InkWell(
                                 onTap: _onAddMembers,
@@ -440,45 +440,14 @@ class _DepartmentDetailsPageState extends State<DepartmentDetailsPage> {
                         ),
                         const SizedBox(height: 12),
 
-                        if (_isLoading)
-                          const Center(child: CircularProgressIndicator())
-                        else if (_members.isEmpty)
-                          const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 20),
-                            child: Center(
-                              child: Text(
-                                "No other members.",
-                                style: TextStyle(color: Colors.grey),
-                              ),
-                            ),
-                          )
-                        else
-                          ListView.builder(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            itemCount: _members.length,
-                            itemBuilder: (context, index) {
-                              final emp = _members[index];
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: 8.0),
-                                child: EmployeeCard(
-                                  employee: emp,
+                        // 4. MEMBER LIST (Đã bọc AnimatedSwitcher)
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 300),
+                          transitionBuilder: (child, animation) =>
+                              FadeTransition(opacity: animation, child: child),
+                          child: _buildMemberList(),
+                        ),
 
-                                  onMenuTap:
-                                      null, // Luôn truyền null để ẩn nút 3 chấm đi
-                                  onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) =>
-                                            EmployeeProfilePage(employee: emp),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              );
-                            },
-                          ),
                         const SizedBox(height: 40),
                       ],
                     ),
@@ -489,6 +458,73 @@ class _DepartmentDetailsPageState extends State<DepartmentDetailsPage> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildMemberList() {
+    Widget content;
+    Key contentKey;
+
+    if (_isLoading) {
+      contentKey = const ValueKey('loading_list');
+      content = ListView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: 4,
+        itemBuilder: (context, index) => const SkeletonEmployeeCard(),
+      );
+    } else if (_members.isEmpty) {
+      contentKey = const ValueKey('empty_list');
+      content = Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 30),
+        alignment: Alignment.center,
+        child: Column(
+          children: [
+            Icon(PhosphorIcons.usersThree(), size: 48, color: Colors.grey[300]),
+            const SizedBox(height: 8),
+            const Text(
+              "No other members.",
+              style: TextStyle(color: Colors.grey, fontSize: 14),
+            ),
+          ],
+        ),
+      );
+    } else {
+      contentKey = const ValueKey('data_list');
+      content = ListView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: _members.length,
+        itemBuilder: (context, index) {
+          final emp = _members[index];
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8.0),
+            child: EmployeeCard(
+              employee: emp,
+              onMenuTap: null,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => EmployeeProfilePage(employee: emp),
+                  ),
+                );
+              },
+            ),
+          );
+        },
+      );
+    }
+
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 300),
+      reverseDuration: const Duration(milliseconds: 50), // Fix dính hình
+      switchInCurve: Curves.easeIn,
+      switchOutCurve: Curves.easeOut,
+      transitionBuilder: (child, animation) =>
+          FadeTransition(opacity: animation, child: child),
+      child: KeyedSubtree(key: contentKey, child: content),
     );
   }
 }

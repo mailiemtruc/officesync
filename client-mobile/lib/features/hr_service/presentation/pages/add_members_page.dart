@@ -9,6 +9,7 @@ import '../../widgets/employee_card.widget.dart';
 import '../../domain/repositories/employee_repository_impl.dart';
 import '../../domain/repositories/employee_repository.dart';
 import '../../data/datasources/employee_remote_data_source.dart';
+import '../../widgets/skeleton_employee_card.dart';
 
 class AddMembersPage extends StatefulWidget {
   final List<EmployeeModel> alreadySelectedMembers;
@@ -227,8 +228,8 @@ class _AddMembersPageState extends State<AddMembersPage> {
                   ),
                 ),
                 const SizedBox(height: 24),
-                // Select All
-                // Select All
+
+                // Select All Section
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: Row(
@@ -242,13 +243,11 @@ class _AddMembersPageState extends State<AddMembersPage> {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      // [ĐÃ SỬA] Thay GestureDetector bằng Material + InkWell để có hiệu ứng
                       Material(
                         color: Colors.transparent,
                         child: InkWell(
                           onTap: _toggleSelectAll,
                           borderRadius: BorderRadius.circular(4),
-                          // Thêm hiệu ứng splash màu xanh nhạt cho đồng bộ
                           splashColor: AppColors.primary.withOpacity(0.1),
                           highlightColor: AppColors.primary.withOpacity(0.05),
                           child: Padding(
@@ -272,67 +271,22 @@ class _AddMembersPageState extends State<AddMembersPage> {
                 ),
                 const SizedBox(height: 12),
 
-                // List Items
+                // List Items (Đã bọc AnimatedSwitcher)
                 Expanded(
-                  child: _isLoading
-                      ? const Center(child: CircularProgressIndicator())
-                      : _displayList.isEmpty
-                      ? _buildEmptyState(
-                          _searchController.text.isNotEmpty
-                              ? "No employees found matching '${_searchController.text}'"
-                              : "No employees found",
-                        )
-                      : ListView.builder(
-                          padding: const EdgeInsets.symmetric(horizontal: 24),
-                          itemCount: _displayList.length,
-                          itemBuilder: (context, index) {
-                            final emp = _displayList[index];
-                            final isSelected = _selectedIds.contains(emp.id);
-                            final isLocked = emp.status == "LOCKED";
-
-                            return EmployeeCard(
-                              employee: emp,
-                              isSelected: isSelected,
-                              onTap: isLocked
-                                  ? null
-                                  : () {
-                                      setState(() {
-                                        if (isSelected) {
-                                          _selectedIds.remove(emp.id);
-                                          _selectedObjects.remove(emp.id);
-                                        } else {
-                                          _selectedIds.add(emp.id!);
-                                          _selectedObjects[emp.id!] = emp;
-                                        }
-                                      });
-                                    },
-                              selectionWidget: Container(
-                                width: 24,
-                                height: 24,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: isSelected
-                                      ? AppColors.primary
-                                      : Colors.white,
-                                  border: Border.all(
-                                    color: isSelected
-                                        ? AppColors.primary
-                                        : const Color(0xFF9CA3AF),
-                                    width: 1.5,
-                                  ),
-                                ),
-                                child: isSelected && !isLocked
-                                    ? const Icon(
-                                        Icons.check,
-                                        size: 16,
-                                        color: Colors.white,
-                                      )
-                                    : null,
-                              ),
-                            );
-                          },
-                        ),
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 300),
+                    transitionBuilder:
+                        (Widget child, Animation<double> animation) {
+                          return FadeTransition(
+                            opacity: animation,
+                            child: child,
+                          );
+                        },
+                    // Gọi hàm tách biệt để xử lý logic hiển thị
+                    child: _buildListContent(),
+                  ),
                 ),
+
                 // Bottom Button
                 Padding(
                   padding: const EdgeInsets.all(24),
@@ -389,6 +343,90 @@ class _AddMembersPageState extends State<AddMembersPage> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildListContent() {
+    Widget content;
+    Key contentKey;
+
+    if (_isLoading) {
+      contentKey = const ValueKey('loading_list');
+      content = ListView.builder(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        itemCount: 8,
+        itemBuilder: (context, index) => const SkeletonEmployeeCard(),
+      );
+    } else if (_displayList.isEmpty) {
+      contentKey = const ValueKey('empty_state');
+      content = Container(
+        width: double.infinity,
+        alignment: Alignment.center,
+        child: _buildEmptyState(
+          _searchController.text.isNotEmpty
+              ? "No employees found matching '${_searchController.text}'"
+              : "No employees found",
+        ),
+      );
+    } else {
+      contentKey = const ValueKey('data_list');
+      content = ListView.builder(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        itemCount: _displayList.length,
+        itemBuilder: (context, index) {
+          final emp = _displayList[index];
+          final isSelected = _selectedIds.contains(emp.id);
+          final isLocked = emp.status == "LOCKED";
+
+          return EmployeeCard(
+            employee: emp,
+            isSelected: isSelected,
+            onTap: isLocked
+                ? null
+                : () {
+                    setState(() {
+                      if (isSelected) {
+                        _selectedIds.remove(emp.id);
+                        _selectedObjects.remove(emp.id);
+                      } else {
+                        _selectedIds.add(emp.id!);
+                        _selectedObjects[emp.id!] = emp;
+                      }
+                    });
+                  },
+            selectionWidget: Container(
+              width: 24,
+              height: 24,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: isSelected ? AppColors.primary : Colors.white,
+                border: Border.all(
+                  color: isSelected
+                      ? AppColors.primary
+                      : const Color(0xFF9CA3AF),
+                  width: 1.5,
+                ),
+              ),
+              child: isSelected && !isLocked
+                  ? const Icon(Icons.check, size: 16, color: Colors.white)
+                  : null,
+            ),
+          );
+        },
+      );
+    }
+
+    // [TỐI ƯU ANIMATION]
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 300),
+      // Reverse duration ngắn giúp cái cũ biến mất nhanh hơn -> Hết bị dính
+      reverseDuration: const Duration(milliseconds: 50),
+      switchInCurve: Curves.easeIn,
+      switchOutCurve: Curves.easeOut,
+      transitionBuilder: (Widget child, Animation<double> animation) {
+        return FadeTransition(opacity: animation, child: child);
+      },
+      child: KeyedSubtree(key: contentKey, child: content),
     );
   }
 
