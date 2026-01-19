@@ -14,19 +14,26 @@ import org.springframework.stereotype.Component;
 public class DepartmentEventListener {
 
     private final ChatService chatService;
-
-    // Lắng nghe Queue của HR mà ta vừa cấu hình
-    @RabbitListener(queues = RabbitMQConfig.HR_EVENT_QUEUE)
+@RabbitListener(queues = RabbitMQConfig.HR_EVENT_QUEUE)
     public void handleDepartmentEvent(DepartmentEventDTO event) {
-        log.info("📩 [RabbitMQ] Nhận sự kiện HR: {}", event);
+        log.info("📩 [Chat] Nhận lệnh: {} - DeptID: {}", event.getEvent(), event.getDeptId());
 
-        if ("DEPT_CREATED".equals(event.getEvent())) {
-            chatService.createDepartmentRoom(
-                event.getDeptId(), 
-                event.getDeptName(), 
-                event.getManagerId(), 
-                event.getMemberIds()
-            );
+        switch (event.getEvent()) {
+            case "DEPT_CREATED":
+                chatService.createDepartmentRoom(
+                    event.getDeptId(), event.getDeptName(), 
+                    event.getManagerId(), event.getMemberIds(), event.getCompanyId()
+                );
+                break;
+            case "DEPT_DELETED":
+                chatService.deleteDepartmentRoom(event.getDeptId());
+                break;
+            case "MEMBER_ADDED":
+                chatService.addMemberToDepartmentRoom(event.getDeptId(), event.getMemberIds());
+                break;
+            case "MEMBER_REMOVED":
+                chatService.removeMemberFromDepartmentRoom(event.getDeptId(), event.getMemberIds());
+                break;
         }
     }
 }

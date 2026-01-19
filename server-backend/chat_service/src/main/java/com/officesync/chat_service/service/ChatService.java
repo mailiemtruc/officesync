@@ -247,39 +247,74 @@ public class ChatService {
         return messages;
     }
 
+   // 1. TẠO PHÒNG
     @Transactional
-    public void createDepartmentRoom(Long deptId, String deptName, Long managerId, List<Long> memberIds) {
-        if (chatRoomRepository.existsByDepartmentId(deptId)) {
-            log.info("⚠️ Department Chat Room for ID {} already exists. Skipped.", deptId);
-            return;
-        }
+    public void createDepartmentRoom(Long deptId, String deptName, Long managerId, List<Long> memberIds, Long companyId) {
+        if (chatRoomRepository.existsByDepartmentId(deptId)) return;
+
+        // Tạo Avatar tự động
+        String avatarUrl = "https://ui-avatars.com/api/?name=" + deptName.replace(" ", "+") + "&background=random&size=128";
 
         ChatRoom room = ChatRoom.builder()
                 .roomName(deptName)
                 .type(ChatRoom.RoomType.DEPARTMENT)
                 .departmentId(deptId)
-                .roomAvatarUrl("https://ui-avatars.com/api/?name=" + deptName.replace(" ", "+") + "&background=random") 
+                .roomAvatarUrl(avatarUrl)
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();
-
-        if (managerId != null) {
-            room.setAdminId(managerId);
-        }
+        
+        if (managerId != null) room.setAdminId(managerId);
         ChatRoom savedRoom = chatRoomRepository.save(room);
+
+        // Add Manager
         if (managerId != null) {
-            addMemberToRoom(savedRoom, managerId, RoomMember.GroupRole.ADMIN);
+             Optional<ChatUser> m = chatUserRepository.findById(managerId);
+             if (m.isPresent() && m.get().getCompanyId().equals(companyId)) {
+                 addMemberToRoom(savedRoom, managerId, RoomMember.GroupRole.ADMIN);
+             }
         }
-        if (memberIds != null && !memberIds.isEmpty()) {
-            for (Long memberId : memberIds) {
-                if (managerId == null || !memberId.equals(managerId)) {
-                    addMemberToRoom(savedRoom, memberId, RoomMember.GroupRole.MEMBER);
+
+        // Add Members
+        if (memberIds != null) {
+            List<ChatUser> members = chatUserRepository.findAllById(memberIds);
+            for (ChatUser u : members) {
+                if (u.getCompanyId().equals(companyId) && !u.getId().equals(managerId)) {
+                    addMemberToRoom(savedRoom, u.getId(), RoomMember.GroupRole.MEMBER);
                 }
             }
         }
-        log.info("✅ Department Chat Room created: {}", deptName);
+        log.info("✅ Đã tạo nhóm chat: {}", deptName);
     }
 
+    // 2. XÓA PHÒNG
+    @Transactional
+    public void deleteDepartmentRoom(Long deptId) {
+        chatRoomRepository.findByDepartmentId(deptId).ifPresent(room -> {
+            chatRoomRepository.delete(room); // Cascade sẽ xóa room_members nếu cấu hình DB chuẩn
+            log.info("🗑️ Đã xóa nhóm chat: {}", room.getRoomName());
+        });
+    }
+
+    // 3. THÊM THÀNH VIÊN (Khi chuyển phòng đến)
+    @Transactional
+    public void addMemberToDepartmentRoom(Long deptId, List<Long> memberIds) {
+        chatRoomRepository.findByDepartmentId(deptId).ifPresent(room -> {
+            for (Long uid : memberIds) {
+                addMemberToRoom(room, uid, RoomMember.GroupRole.MEMBER);
+            }
+        });
+    }
+
+    // 4. XÓA THÀNH VIÊN (Khi chuyển phòng đi)
+    @Transactional
+    public void removeMemberFromDepartmentRoom(Long deptId, List<Long> memberIds) {
+        chatRoomRepository.findByDepartmentId(deptId).ifPresent(room -> {
+            for (Long uid : memberIds) {
+                roomMemberRepository.deleteByChatRoomIdAndUserId(room.getId(), uid);
+            }
+        });
+    }
     public ChatRoom getOrCreatePrivateRoom(Long user1Id, Long user2Id) {
         Optional<ChatRoom> existingRoom = chatRoomRepository.findExistingPrivateRoom(user1Id, user2Id);
         if (existingRoom.isPresent()) {

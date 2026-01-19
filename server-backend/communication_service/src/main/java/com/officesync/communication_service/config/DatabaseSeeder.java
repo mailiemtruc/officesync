@@ -18,17 +18,7 @@ public class DatabaseSeeder {
             // 1. Admin
             createSimpleUser(userRepository, 1L, "admin@system.com", "Super Admin", "SUPER_ADMIN");
 
-            // 2. Boss
-            createSimpleUser(userRepository, 2L, "boss@fpt.com", "FPT Boss", "COMPANY_ADMIN");
-
-            // 3. Manager
-            createSimpleUser(userRepository, 3L, "manager@abc.com", "Nguyen Van B", "MANAGER");
-
-            // 4. Staff
-            createSimpleUser(userRepository, 4L, "staff@abc.com", "Nguyen Van A", "STAFF");
-            
-            // 5. User test của bạn
-            createSimpleUser(userRepository, 5L, "rabbit_final@test.com", "Mr Rabbit", "DIRECTOR");
+        
         };
     }
 

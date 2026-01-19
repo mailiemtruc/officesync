@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 // Import đúng các file trong project
 import '../../data/chat_api.dart';
 import '../../data/models/chat_room.dart';
+import '../../data/models/chat_socket_service.dart'; // [MỚI] Import Socket Service
 import 'chat_detail_screen.dart';
 import 'create_group_screen.dart';
 import 'contact_screen.dart';
@@ -18,42 +19,120 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   final ChatApi _chatApi = ChatApi();
+  // [MỚI] Khởi tạo Socket Service
+  final ChatSocketService _socketService = ChatSocketService();
   final _storage = const FlutterSecureStorage();
   final TextEditingController _searchController = TextEditingController();
 
-  List<ChatRoom> _allRooms = []; // Danh sách gốc
-  List<ChatRoom> _filteredRooms = []; // Danh sách hiển thị
+  List<ChatRoom> _allRooms = [];
+  List<ChatRoom> _filteredRooms = [];
   bool isLoading = true;
   String myId = "";
 
   @override
   void initState() {
     super.initState();
-    _loadData();
+    _initDataAndSocket();
   }
 
-  Future<void> _loadData() async {
+  @override
+  void dispose() {
+    // [MỚI] Ngắt kết nối socket khi thoát màn hình này để tránh rò rỉ bộ nhớ
+    _socketService.disconnect();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _initDataAndSocket() async {
     String? id = await _storage.read(key: 'userId');
     if (id != null) {
       if (mounted) setState(() => myId = id);
 
-      try {
-        final list = await _chatApi.fetchMyRooms();
-        if (mounted) {
-          setState(() {
-            _allRooms = list;
-            _filteredRooms = list; // Ban đầu hiện tất cả
-            isLoading = false;
-          });
-        }
-      } catch (e) {
-        print("Lỗi tải danh sách phòng: $e");
-        if (mounted) setState(() => isLoading = false);
-      }
+      // 1. Load dữ liệu API trước
+      await _loadData();
+
+      // 2. Kết nối Socket sau khi đã có dữ liệu nền
+      _connectSocket(id);
     }
   }
 
-  // Hàm lọc tìm kiếm
+  void _connectSocket(String userId) {
+    _socketService.connect(userId);
+
+    // [QUAN TRỌNG] Lắng nghe sự kiện từ Socket trả về
+    _socketService.onMessageReceived = (dynamic data) {
+      print("⚡ Socket Event ở ChatScreen: $data");
+
+      // Giả sử data trả về có dạng: { "roomId": 123, "content": "Hello", ... }
+      // Tùy vào cấu trúc JSON backend trả về ở kênh /user/queue/notifications
+
+      if (data['roomId'] != null) {
+        _handleNewMessage(data);
+      } else {
+        // Nếu không parse được ID, tốt nhất gọi lại API cho chắc
+        _loadData();
+      }
+    };
+  }
+
+  // [LOGIC SỬA LỖI ĐÈ DANH SÁCH]
+  void _handleNewMessage(dynamic data) {
+    int roomId = data['roomId'];
+    // Backend nên trả về cả tên phòng, avatar... nếu là nhóm mới
+    // Nếu data thiếu thông tin, ta buộc phải gọi API reload
+
+    if (mounted) {
+      setState(() {
+        // 1. Tìm xem phòng này đã có trong danh sách chưa
+        int index = _allRooms.indexWhere((r) => r.id == roomId);
+
+        if (index != -1) {
+          // ==> CÓ RỒI: Lấy nó ra, xóa khỏi vị trí cũ
+          ChatRoom existingRoom = _allRooms[index];
+          _allRooms.removeAt(index);
+
+          // Đưa nó lên đầu danh sách (Top 1)
+          _allRooms.insert(0, existingRoom);
+
+          // (Tùy chọn) Nếu bạn có trường lastMessage trong ChatRoom, hãy update ở đây
+          // existingRoom.lastMessage = data['content'];
+        } else {
+          // ==> CHƯA CÓ (Nhóm mới hoặc Chat mới):
+          // Cách an toàn nhất là gọi lại API load lại list
+          // Vì ta cần đầy đủ avatar, tên nhóm từ server
+          print("✨ Phát hiện phòng mới, reload lại list...");
+          _loadData();
+          return;
+        }
+
+        // Cập nhật lại danh sách hiển thị (nếu đang không tìm kiếm)
+        if (_searchController.text.isEmpty) {
+          _filteredRooms = _allRooms;
+        }
+      });
+    }
+  }
+
+  Future<void> _loadData() async {
+    try {
+      final list = await _chatApi.fetchMyRooms();
+      if (mounted) {
+        setState(() {
+          _allRooms = list;
+          // Logic sắp xếp: Phòng mới cập nhật lên đầu (dựa vào updatedAt)
+          // Nếu backend chưa sort, ta sort ở đây cho chắc
+          _allRooms.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+
+          _filteredRooms = list;
+          isLoading = false;
+        });
+      }
+    } catch (e) {
+      print("Lỗi tải danh sách phòng: $e");
+      if (mounted) setState(() => isLoading = false);
+    }
+  }
+
   void _runFilter(String keyword) {
     List<ChatRoom> results = [];
     if (keyword.isEmpty) {
@@ -86,9 +165,8 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
         backgroundColor: Colors.white,
         elevation: 0,
-        centerTitle: false, // Để tiêu đề lệch trái cho hiện đại
+        centerTitle: false,
         actions: [
-          // Nút Danh Bạ (Chỉ giữ lại nút này ở trên)
           IconButton(
             icon: Container(
               padding: const EdgeInsets.all(8),
@@ -103,32 +181,36 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
             ),
             tooltip: "Contacts",
-            onPressed: () {
-              Navigator.push(
+            onPressed: () async {
+              // [SỬA LỖI 1] Thêm await để đợi user thao tác xong ở Contact
+              await Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => const ContactScreen()),
-              ).then((_) => _loadData());
+              );
+              // Sau khi quay về -> Load lại ngay lập tức
+              _loadData();
             },
           ),
           const SizedBox(width: 10),
         ],
       ),
-      // Dùng Stack để đè nút FAB lên trên
       floatingActionButton: FloatingActionButton(
-        backgroundColor: Color(0xFF2260FF),
+        backgroundColor: const Color(0xFF2260FF),
         child: const Icon(Icons.edit, color: Colors.white),
         onPressed: () async {
-          // Nút tạo nhóm nhanh
           bool? result = await Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const CreateGroupScreen()),
           );
-          if (result == true) _loadData();
+          // Nếu tạo nhóm thành công (trả về true) -> Load lại
+          if (result == true) {
+            print("Tạo nhóm thành công, đang reload...");
+            _loadData();
+          }
         },
       ),
       body: Column(
         children: [
-          // 1. THANH TÌM KIẾM
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             child: TextField(
@@ -147,8 +229,6 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
             ),
           ),
-
-          // 2. DANH SÁCH CHAT
           Expanded(
             child: isLoading
                 ? const Center(child: CircularProgressIndicator())
@@ -157,6 +237,8 @@ class _ChatScreenState extends State<ChatScreen> {
                 : RefreshIndicator(
                     onRefresh: _loadData,
                     child: ListView.builder(
+                      // Thêm physics này để đảm bảo luôn kéo refresh được kể cả khi list ngắn
+                      physics: const AlwaysScrollableScrollPhysics(),
                       itemCount: _filteredRooms.length,
                       itemBuilder: (context, index) {
                         final room = _filteredRooms[index];
@@ -174,31 +256,30 @@ class _ChatScreenState extends State<ChatScreen> {
     String displayName = room.roomName;
     bool isGroup = room.type == 'GROUP' || room.type == 'DEPARTMENT';
 
-    // Logic Avatar: Nếu không có ảnh -> Dùng dịch vụ tạo ảnh theo tên
     String displayAvatar =
         room.avatarUrl ??
         "https://ui-avatars.com/api/?name=${Uri.encodeComponent(displayName)}&background=random&color=fff&size=128";
 
     return InkWell(
-      onTap: () {
-        Navigator.push(
+      onTap: () async {
+        // [SỬA] Thêm await để khi chat xong quay ra thì cập nhật lại list (ví dụ tin nhắn mới nhất)
+        await Navigator.push(
           context,
           MaterialPageRoute(
             builder: (_) => ChatDetailScreen(
               roomId: room.id,
               chatName: displayName,
               avatarUrl: room.avatarUrl,
-              // Lưu ý: Room model hiện tại chưa có partnerId nên tạm thời chưa truyền
-              // initIsOnline, tính năng online sẽ cập nhật khi vào trong.
             ),
           ),
-        ).then((_) => _loadData());
+        );
+        // Load lại để cập nhật tin nhắn cuối hoặc thứ tự
+        _loadData();
       },
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         child: Row(
           children: [
-            // 1. Avatar
             Stack(
               children: [
                 CircleAvatar(
@@ -218,7 +299,6 @@ class _ChatScreenState extends State<ChatScreen> {
                         )
                       : null,
                 ),
-                // Nếu là Group thì hiện icon nhỏ ở góc để phân biệt
                 if (isGroup)
                   Positioned(
                     right: 0,
@@ -240,8 +320,6 @@ class _ChatScreenState extends State<ChatScreen> {
               ],
             ),
             const SizedBox(width: 16),
-
-            // 2. Tên & Tin nhắn cuối
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -269,16 +347,13 @@ class _ChatScreenState extends State<ChatScreen> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    // [TẠM THỜI] Vẫn hiện loại phòng vì API chưa trả về tin nhắn cuối
-                    // Sau này Backend update sẽ sửa thành: room.lastMessage
                     isGroup ? "Group Conversation" : "Private Message",
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: Colors.grey[600],
                       fontSize: 14,
-                      fontStyle:
-                          FontStyle.normal, // Không in nghiêng nữa cho sạch
+                      fontStyle: FontStyle.normal,
                     ),
                   ),
                 ],
@@ -318,11 +393,13 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
           const SizedBox(height: 10),
           ElevatedButton(
-            onPressed: () {
-              Navigator.push(
+            onPressed: () async {
+              // [SỬA LỖI 1] Logic tương tự nút danh bạ ở trên
+              await Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => const ContactScreen()),
-              ).then((_) => _loadData());
+              );
+              _loadData();
             },
             style: ElevatedButton.styleFrom(
               shape: const StadiumBorder(),
@@ -340,11 +417,9 @@ class _ChatScreenState extends State<ChatScreen> {
     try {
       DateTime dt = DateTime.parse(timestamp).toLocal();
       DateTime now = DateTime.now();
-      // Nếu là hôm nay thì hiện giờ
       if (dt.year == now.year && dt.month == now.month && dt.day == now.day) {
         return DateFormat('HH:mm').format(dt);
       }
-      // Nếu khác ngày thì hiện ngày tháng
       return DateFormat('MMM dd').format(dt);
     } catch (e) {
       return "";

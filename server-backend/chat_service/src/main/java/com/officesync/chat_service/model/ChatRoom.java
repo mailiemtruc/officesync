@@ -7,6 +7,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import java.util.List;
 
 @Entity
 @Table(name = "chat_rooms")
@@ -52,4 +53,6 @@ public class ChatRoom {
         GROUP,      // Nhóm tùy chọn (Đi ăn, đá bóng...)
         DEPARTMENT  // Nhóm mặc định theo phòng ban công ty
     }
+    @OneToMany(mappedBy = "chatRoom", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<RoomMember> members;
 }

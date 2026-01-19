@@ -24,4 +24,5 @@ public interface ChatRoomRepository extends JpaRepository<ChatRoom, Long> {
 
     // Tìm phòng chat theo Department ID (để đồng bộ từ HR)
     Optional<ChatRoom> findByDepartmentId(Long departmentId);
+    
 }

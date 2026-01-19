@@ -9,9 +9,10 @@ import java.util.List;
 @AllArgsConstructor
 @NoArgsConstructor
 public class DepartmentEventDTO {
-    private String event;       // Loại sự kiện: "DEPT_CREATED"
-    private Long deptId;        // ID phòng ban
-    private String deptName;    // Tên phòng ban
-    private Long managerId;     // ID trưởng phòng (lấy từ mục "Select Manager")
-    private List<Long> memberIds; // Danh sách nhân viên ban đầu
+    private String event;       
+    private Long deptId;        
+    private String deptName;    
+    private Long managerId;     
+    private List<Long> memberIds; 
+    private Long companyId; // [QUAN TRỌNG]
 }
