@@ -242,7 +242,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                           color: AppColors.primary,
                           fontSize: 30,
                           fontFamily: 'Inter',
-                          fontWeight: FontWeight.w700,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
                     ),

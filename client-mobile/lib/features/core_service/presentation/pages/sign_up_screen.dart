@@ -414,7 +414,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       style: TextStyle(
                         color: AppColors.primary,
                         fontSize: 30,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.bold,
+                        fontFamily: 'Inter',
                       ),
                     ),
                   ),

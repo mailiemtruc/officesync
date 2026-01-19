@@ -91,6 +91,8 @@ class _CreateAdminScreenState extends State<CreateAdminScreen> {
           style: TextStyle(
             color: Color(0xFF2260FF),
             fontWeight: FontWeight.bold,
+            fontSize: 24,
+            fontFamily: 'Inter',
           ),
         ),
       ),

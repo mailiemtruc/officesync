@@ -85,14 +85,14 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF3F5F9),
       appBar: AppBar(
-        // 👇 [ĐÃ SỬA] Thêm dòng này để căn giữa tiêu đề
         centerTitle: true,
-
         title: const Text(
           "SYSTEM ANALYTICS",
           style: TextStyle(
             fontWeight: FontWeight.bold,
             color: AppColors.primary,
+            fontSize: 24, // 👈 Thêm dòng này để chỉnh cỡ chữ
+            fontFamily: 'Inter',
           ),
         ),
         backgroundColor: Colors.white,

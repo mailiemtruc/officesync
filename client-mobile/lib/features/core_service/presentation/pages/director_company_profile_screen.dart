@@ -353,6 +353,8 @@ class _DirectorCompanyProfileScreenState
           style: TextStyle(
             color: Color(0xFF2260FF),
             fontWeight: FontWeight.bold,
+            fontSize: 24, // 👈 Đã thêm cỡ chữ tại đây
+            fontFamily: 'Inter',
           ),
         ),
         centerTitle: true,

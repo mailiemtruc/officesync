@@ -169,6 +169,8 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
           style: const TextStyle(
             color: Color(0xFF2260FF),
             fontWeight: FontWeight.bold,
+            fontSize: 24, // 👈 Đã thêm cỡ chữ tại đây
+            fontFamily: 'Inter',
           ),
         ),
         bottom: TabBar(

@@ -288,8 +288,9 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
                       'Set Password',
                       style: TextStyle(
                         color: AppColors.primary,
-                        fontSize: 26,
-                        fontWeight: FontWeight.w700,
+                        fontSize: 30,
+                        fontWeight: FontWeight.bold,
+                        fontFamily: 'Inter',
                       ),
                     ),
                   ),

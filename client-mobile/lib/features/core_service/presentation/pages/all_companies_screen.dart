@@ -77,6 +77,8 @@ class _AllCompaniesScreenState extends State<AllCompaniesScreen> {
           style: TextStyle(
             color: Color(0xFF2260FF),
             fontWeight: FontWeight.bold,
+            fontSize: 24, // <-- Đã thêm cỡ chữ tại đây
+            fontFamily: 'Inter',
           ),
         ),
       ),

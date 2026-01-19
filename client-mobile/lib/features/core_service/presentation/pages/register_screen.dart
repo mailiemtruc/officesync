@@ -140,7 +140,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 color: AppColors.primary,
                 fontSize: sloganSize,
                 fontFamily: 'Inter',
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.bold,
                 letterSpacing: 0.5,
               ),
             ),
