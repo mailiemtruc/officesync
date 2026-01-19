@@ -406,11 +406,11 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
           ),
           const Expanded(
             child: Text(
-              "MANAGER TIMESHEET",
+              "ATTENDANCE MANAGEMENT",
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
                 color: primaryColor,
                 fontFamily: 'Inter',
               ),

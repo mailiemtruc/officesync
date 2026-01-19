@@ -482,8 +482,8 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
               "ATTENDANCE",
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w800,
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
                 color: primaryColor,
                 fontFamily: 'Inter',
                 letterSpacing: 0.5,
