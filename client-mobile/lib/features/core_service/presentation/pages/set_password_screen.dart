@@ -77,8 +77,10 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
       if (response.statusCode == 200) {
         await AnalyticsService.logSignUp('email');
         if (mounted) {
+          // [SỬA] Truyền email từ prevData vào dialog
           _showSuccessDialog(
             "Your account has been created.\nPlease log in to continue.",
+            email: prevData['email'],
           );
         }
       }
@@ -109,8 +111,10 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
 
       if (response.statusCode == 200) {
         if (mounted) {
+          // [SỬA] Truyền email vào dialog
           _showSuccessDialog(
             "Password reset successfully!\nPlease log in with your new password.",
+            email: email,
           );
         }
       }
@@ -455,7 +459,7 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
     );
   }
 
-  void _showSuccessDialog(String message) {
+  void _showSuccessDialog(String message, {String? email}) {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -503,6 +507,7 @@ class _SetPasswordScreenState extends State<SetPasswordScreen> {
                     context,
                     '/login',
                     (route) => false,
+                    arguments: {'email': email}, // Gửi email đi
                   );
                 },
               ),
