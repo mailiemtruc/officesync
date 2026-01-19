@@ -25,6 +25,7 @@ class ManagerAttendanceScreen extends StatefulWidget {
 class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
   final AttendanceApi _api = AttendanceApi();
   final _storage = const FlutterSecureStorage();
+  final TextEditingController _searchController = TextEditingController();
 
   // --- PALETTE MÀU ---
   static const Color primaryColor = Color(0xFF2260FF);
@@ -53,16 +54,16 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
   void initState() {
     super.initState();
     _fetchData();
-    // [MỚI] Kích hoạt lắng nghe Realtime
     _setupRealtimeListener();
+    _searchController.addListener(() {
+      setState(() {});
+    });
   }
 
   @override
   void dispose() {
-    // [MỚI] Hủy lắng nghe khi thoát màn hình (Clean up)
+    _searchController.dispose();
     if (_subscription != null) {
-      // Tùy vào cách viết WebSocketService của bạn, nếu có hàm unsubscribe thì gọi ở đây
-      // WebSocketService().unsubscribe(...);
       WebSocketService().disconnect();
       super.dispose();
     }
@@ -310,17 +311,29 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
     return result;
   }
 
-  // Lọc danh sách theo ngày cụ thể (nếu user chọn filter)
   List<ManagerTimesheetDisplayItem> _getFilteredList() {
-    if (_filterSpecificDate == null) {
-      return _processedList;
+    List<ManagerTimesheetDisplayItem> list = _processedList;
+
+    // 1. Lọc theo ngày cụ thể (Logic cũ)
+    if (_filterSpecificDate != null) {
+      list = list.where((item) {
+        DateTime tDate = item.timesheet.date;
+        return tDate.year == _filterSpecificDate!.year &&
+            tDate.month == _filterSpecificDate!.month &&
+            tDate.day == _filterSpecificDate!.day;
+      }).toList();
     }
-    return _processedList.where((item) {
-      DateTime tDate = item.timesheet.date;
-      return tDate.year == _filterSpecificDate!.year &&
-          tDate.month == _filterSpecificDate!.month &&
-          tDate.day == _filterSpecificDate!.day;
-    }).toList();
+
+    // 2. [MỚI] Lọc theo tên tìm kiếm
+    String query = _searchController.text.trim().toLowerCase();
+    if (query.isNotEmpty) {
+      list = list.where((item) {
+        // So sánh tên (viết thường)
+        return item.userInfo.fullName.toLowerCase().contains(query);
+      }).toList();
+    }
+
+    return list;
   }
 
   Future<void> _pickMonth() async {
@@ -389,9 +402,9 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
                     )
                   : Column(
                       children: [
-                        // Filter Section
+                        // Chỉ cần gọi cái này là đủ, bao gồm cả Search + Filter + Month
                         Padding(
-                          padding: const EdgeInsets.all(16),
+                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                           child: _buildFilterControlSection(
                             filteredList.length,
                           ),
@@ -402,9 +415,10 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
                           child: filteredList.isEmpty
                               ? _buildEmptyState()
                               : ListView.builder(
+                                  // Thêm padding top để list không dính sát vào filter
                                   padding: const EdgeInsets.fromLTRB(
                                     16,
-                                    0,
+                                    12,
                                     16,
                                     20,
                                   ),
@@ -531,82 +545,102 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
     final String displayMonth = DateFormat('MMMM yyyy').format(_selectedMonth);
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.all(16), // Tăng padding tổng thể
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(24), // Bo góc nhiều hơn chút
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 15,
-            offset: const Offset(0, 5),
+            color: const Color(
+              0xFF2260FF,
+            ).withOpacity(0.08), // Màu bóng xanh nhẹ theo theme
+            blurRadius: 20,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
       child: Column(
         children: [
+          // --- HÀNG 1: CHỌN THÁNG & SỐ LƯỢNG ---
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              GestureDetector(
+              // Nút chọn tháng
+              InkWell(
                 onTap: _pickMonth,
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: primaryColor.withOpacity(0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.calendar_month,
-                        color: primaryColor,
-                        size: 20,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          "View Month",
-                          style: TextStyle(fontSize: 11, color: textGrey),
+                borderRadius: BorderRadius.circular(12),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 4,
+                    horizontal: 4,
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: primaryColor.withOpacity(0.08),
+                          shape: BoxShape.circle,
                         ),
-                        Row(
-                          children: [
-                            Text(
-                              displayMonth,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: textDark,
-                              ),
-                            ),
-                            const Icon(
-                              Icons.keyboard_arrow_down,
+                        child: const Icon(
+                          Icons.calendar_month_rounded,
+                          color: primaryColor,
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            "Month",
+                            style: TextStyle(
+                              fontSize: 12,
                               color: textGrey,
-                              size: 20,
+                              fontWeight: FontWeight.w500,
                             ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ],
+                          ),
+                          Row(
+                            children: [
+                              Text(
+                                displayMonth,
+                                style: const TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w800,
+                                  color: textDark,
+                                  fontFamily: 'Inter',
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              const Icon(
+                                Icons.keyboard_arrow_down_rounded,
+                                color: textGrey,
+                                size: 18,
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
+
+              // Badge số lượng (Count)
               Container(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
+                  horizontal: 12,
+                  vertical: 8,
                 ),
                 decoration: BoxDecoration(
                   color: bgColor,
                   borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey.shade200),
                 ),
                 child: Text(
-                  "$count Items",
+                  "$count Recs",
                   style: const TextStyle(
-                    fontSize: 12,
+                    fontSize: 13,
                     fontWeight: FontWeight.bold,
                     color: textGrey,
                   ),
@@ -614,49 +648,150 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
               ),
             ],
           ),
-          const Divider(height: 24, color: Color(0xFFF1F5F9)),
-          GestureDetector(
-            onTap: _pickSpecificDate,
+
+          const SizedBox(height: 20),
+
+          // --- HÀNG 2: THANH TÌM KIẾM (ĐẸP HƠN) ---
+          Container(
+            height: 48,
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC), // Màu nền xám rất nhạt
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFE2E8F0)), // Viền mỏng
+            ),
             child: Row(
               children: [
-                Icon(
-                  Icons.filter_alt,
-                  size: 18,
-                  color: _filterSpecificDate != null ? primaryColor : textGrey,
+                const Padding(
+                  padding: EdgeInsets.only(left: 14, right: 10),
+                  child: Icon(Icons.search_rounded, color: textGrey, size: 22),
                 ),
-                const SizedBox(width: 8),
-                const Text(
-                  "Filter Date:",
-                  style: TextStyle(fontSize: 13, color: textGrey),
-                ),
-                const Spacer(),
-                if (_filterSpecificDate != null)
-                  Chip(
-                    label: Text(
-                      DateFormat('dd/MM/yyyy').format(_filterSpecificDate!),
-                      style: const TextStyle(color: Colors.white, fontSize: 12),
-                    ),
-                    backgroundColor: primaryColor,
-                    deleteIcon: const Icon(
-                      Icons.close,
-                      size: 16,
-                      color: Colors.white,
-                    ),
-                    onDeleted: () => setState(() => _filterSpecificDate = null),
-                    visualDensity: VisualDensity.compact,
-                  )
-                else
-                  const Text(
-                    "All Days",
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
+                Expanded(
+                  child: TextField(
+                    controller: _searchController,
+                    style: const TextStyle(
                       color: textDark,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    decoration: const InputDecoration(
+                      hintText: "Search employee...",
+                      hintStyle: TextStyle(color: Colors.grey, fontSize: 14),
+                      border: InputBorder.none,
+                      isDense: true,
+                      contentPadding: EdgeInsets.symmetric(vertical: 8),
                     ),
                   ),
-                if (_filterSpecificDate == null)
-                  const Icon(Icons.chevron_right, color: textGrey),
+                ),
+                if (_searchController.text.isNotEmpty)
+                  GestureDetector(
+                    onTap: () {
+                      _searchController.clear();
+                      FocusScope.of(context).unfocus();
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: Icon(
+                        Icons.cancel,
+                        color: Colors.grey[400],
+                        size: 20,
+                      ),
+                    ),
+                  ),
               ],
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // --- HÀNG 3: LỌC NGÀY (FILTER DATE) ---
+          // Dùng Divider ngắt nhẹ
+          const Divider(height: 1, color: Color(0xFFF1F5F9)),
+          const SizedBox(height: 12),
+
+          InkWell(
+            onTap: _pickSpecificDate,
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.filter_list_rounded,
+                    size: 20,
+                    color: _filterSpecificDate != null
+                        ? primaryColor
+                        : textGrey,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    "Filter by Date",
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: _filterSpecificDate != null
+                          ? primaryColor
+                          : textGrey,
+                    ),
+                  ),
+                  const Spacer(),
+
+                  // Hiển thị Chip ngày nếu đang chọn, hoặc text mặc định
+                  if (_filterSpecificDate != null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: primaryColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: primaryColor.withOpacity(0.2),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Text(
+                            DateFormat('dd/MM').format(_filterSpecificDate!),
+                            style: const TextStyle(
+                              color: primaryColor,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          GestureDetector(
+                            onTap: () =>
+                                setState(() => _filterSpecificDate = null),
+                            child: const Icon(
+                              Icons.close,
+                              size: 14,
+                              color: primaryColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  else
+                    const Text(
+                      "All Days",
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: textDark,
+                      ),
+                    ),
+
+                  if (_filterSpecificDate == null)
+                    const Padding(
+                      padding: EdgeInsets.only(left: 6),
+                      child: Icon(
+                        Icons.arrow_forward_ios_rounded,
+                        size: 12,
+                        color: textGrey,
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
         ],
@@ -676,6 +811,45 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
             style: TextStyle(color: Colors.grey[500]),
           ),
         ],
+      ),
+    );
+  }
+
+  // [MỚI] Widget ô tìm kiếm
+  Widget _buildSearchField() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16), // Cách lề
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade300),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: TextField(
+        controller: _searchController,
+        decoration: InputDecoration(
+          hintText: "Search by employee name...",
+          hintStyle: const TextStyle(color: textGrey, fontSize: 14),
+          icon: const Icon(Icons.search, color: textGrey),
+          border: InputBorder.none,
+          // Nút xóa text
+          suffixIcon: _searchController.text.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.clear, size: 20, color: textGrey),
+                  onPressed: () {
+                    _searchController.clear();
+                    FocusScope.of(context).unfocus(); // Ẩn bàn phím
+                  },
+                )
+              : null,
+        ),
       ),
     );
   }

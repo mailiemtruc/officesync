@@ -460,7 +460,8 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                                       if (!_isLoadingHistory &&
                                           _filterSpecificDate == null)
                                         Text(
-                                          "Total: $_monthlyTotalHours hrs",
+                                          // Sửa thành toStringAsFixed(2)
+                                          "Total: ${_monthlyTotalHours.toStringAsFixed(2)} hrs",
                                           style: const TextStyle(
                                             fontSize: 12,
                                             fontWeight: FontWeight.bold,
@@ -640,7 +641,8 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                   ),
                   // [SỬA] Hiển thị thống kê thay vì đếm số record đơn thuần
                   Text(
-                    "$_monthlyDaysWorked Days • $_monthlyTotalHours Hours",
+                    // Sử dụng toStringAsFixed(2) để lấy 2 số thập phân (ví dụ: 10.26)
+                    "$_monthlyDaysWorked Days • ${_monthlyTotalHours.toStringAsFixed(2)} Hours",
                     style: const TextStyle(
                       fontSize: 11,
                       color: textGrey,
