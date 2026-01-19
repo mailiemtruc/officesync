@@ -175,22 +175,62 @@ class _ChatInfoScreenState extends State<ChatInfoScreen> {
           onTap: () {}, // Tính năng phát triển sau
         ),
         ListTile(
-          leading: const Icon(Icons.search, color: Colors.black54),
-          title: const Text("Search in Conversation"),
-          onTap: () {},
-        ),
-        const Divider(),
-        ListTile(
           leading: const Icon(Icons.logout, color: Colors.red),
           title: Text(
             widget.isGroup ? "Leave Group" : "Delete Chat",
             style: const TextStyle(color: Colors.red),
           ),
-          onTap: () {
-            // Gọi API rời nhóm ở đây
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text("Feature coming soon")),
+          onTap: () async {
+            // 1. Hỏi xác nhận trước khi rời
+            bool? confirm = await showDialog(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text("Confirm"),
+                content: Text(
+                  widget.isGroup
+                      ? "Are you sure you want to leave this group?"
+                      : "Delete this conversation?",
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: const Text("Cancel"),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, true),
+                    child: const Text(
+                      "Leave",
+                      style: TextStyle(color: Colors.red),
+                    ),
+                  ),
+                ],
+              ),
             );
+
+            if (confirm != true) return;
+
+            // 2. Hiện loading
+            showDialog(
+              context: context,
+              barrierDismissible: false,
+              builder: (_) => const Center(child: CircularProgressIndicator()),
+            );
+
+            // 3. Gọi API
+            bool success = await _chatApi.leaveRoom(widget.roomId);
+
+            // Tắt loading
+            Navigator.pop(context);
+
+            if (success) {
+              // 4. Nếu thành công -> Về màn hình danh sách chat (ChatScreen)
+              // Dùng popUntil để xóa hết các màn hình chat detail và info đang mở
+              Navigator.of(context).popUntil((route) => route.isFirst);
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Failed to leave group")),
+              );
+            }
           },
         ),
       ],

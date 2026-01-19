@@ -292,19 +292,17 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
-                  Text(
-                    // Logic: Nếu mất mạng -> hiện "Connecting..."
-                    // Nếu có mạng -> hiện trạng thái của Partner (Online/Offline)
-                    !isConnected
-                        ? "Connecting..."
-                        : (isPartnerOnline ? "Online" : "Offline"),
-                    style: TextStyle(
-                      color: (!isConnected || !isPartnerOnline)
-                          ? Colors.grey
-                          : Colors.green, // Online màu xanh, Offline màu xám
-                      fontSize: 12,
-                    ),
-                  ),
+                  (!isConnected || isPartnerOnline)
+                      ? Text(
+                          !isConnected ? "Connecting..." : "Online",
+                          style: TextStyle(
+                            color: !isConnected
+                                ? Colors.grey
+                                : Colors.green, // Online màu xanh
+                            fontSize: 12,
+                          ),
+                        )
+                      : const SizedBox(), // Nếu Offline thì ẩn luôn, không chiếm chỗ
                 ],
               ),
             ),

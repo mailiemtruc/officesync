@@ -229,6 +229,21 @@ class ChatApi {
       throw Exception('Failed to load room details');
     }
   }
+
+  Future<bool> leaveRoom(int roomId) async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/chat/rooms/$roomId/leave'),
+        headers: headers,
+      );
+
+      return response.statusCode == 200;
+    } catch (e) {
+      print("Error leaveRoom: $e");
+      return false;
+    }
+  }
 }
 
 // Model đơn giản dùng cho Danh bạ (Paste luôn xuống cuối file chat_api.dart cũng được)
