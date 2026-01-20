@@ -11,7 +11,6 @@ import '../../../task_service/data/models/task_model.dart';
 import '../../../task_service/widgets/task_detail_dialog.dart';
 import '../../../task_service/data/task_session.dart';
 
-
 class StaffHomeView extends StatefulWidget {
   final int currentUserId;
   const StaffHomeView({super.key, required this.currentUserId});
@@ -38,8 +37,6 @@ class _StaffHomeViewState extends State<StaffHomeView> {
     // 2. Gọi hàm lấy dữ liệu Task khi khởi tạo
     fetchTasks();
   }
-
-  
 
   // 3. Hàm lấy dữ liệu Task được giao cho Staff (Endpoint /mine)
   Future<void> fetchTasks() async {
@@ -473,12 +470,11 @@ class _StaffHomeViewState extends State<StaffHomeView> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Title màu 4EE375
                 Text(
                   title,
                   style: const TextStyle(
-                    color: Color(0xFF4EE375),
-                    fontSize: 16,
+                    color: Color(0xFF000000),
+                    fontSize: 20,
                     fontWeight: FontWeight.bold,
                   ),
                   maxLines: 1,
@@ -514,7 +510,7 @@ class _StaffHomeViewState extends State<StaffHomeView> {
                         Text(
                           'By $assignedBy',
                           style: const TextStyle(
-                            color: Color(0xFF1E293B),
+                            color: Colors.grey,
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
                           ),

@@ -55,11 +55,7 @@ class TaskCard extends StatelessWidget {
               children: [
                 Text(
                   "Department: ${task.departmentName ?? '-'}",
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black,
-                  ),
+                  style: const TextStyle(fontSize: 11, color: Colors.black),
                 ),
                 const SizedBox(height: 2),
                 // Hiển thị người giao (Creator)

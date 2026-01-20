@@ -206,7 +206,11 @@ class _ManagerPageState extends State<ManagerPage>
         ),
         title: Text(
           'MANAGEMENT',
-          style: TextStyle(fontWeight: FontWeight.bold, color: colorBlue),
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: colorBlue,
+            fontSize: 30,
+          ),
         ),
       ),
       body: Column(
@@ -516,6 +520,7 @@ class _ManagerPageState extends State<ManagerPage>
       data: Theme.of(context).copyWith(cardColor: colorWhite),
       child: PopupMenuButton<TaskStatus?>(
         key: _statusMenuKey,
+        color: colorWhite,
         onSelected: (s) => setState(() => filterStatus = s),
         itemBuilder: (context) => [
           const PopupMenuItem(value: null, child: Text("All Status")),
@@ -539,20 +544,25 @@ class _ManagerPageState extends State<ManagerPage>
   // --- HELPER WIDGETS ---
   Widget _circularIconContainer(IconData icon) {
     return Container(
-      width: 40,
-      height: 40,
+      width: 42,
+      height: 42,
       decoration: BoxDecoration(
         color: colorWhite,
         shape: BoxShape.circle,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Color(0xFFFFFFFF),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),
         ],
       ),
-      child: Icon(icon, color: colorBlue, size: 18),
+      child: Icon(
+        icon,
+        color: colorBlue,
+        size: 18,
+        fontWeight: FontWeight.bold,
+      ),
     );
   }
 
@@ -776,6 +786,21 @@ class _ManagerPageState extends State<ManagerPage>
       initialDate: DateTime.now(),
       firstDate: DateTime(2020),
       lastDate: DateTime(2030),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.light(
+              primary: colorBlue, // Màu chủ đạo (nút, ngày chọn)
+              onPrimary: colorWhite, // Chữ trên nền primary
+              surface: colorWhite, // Nền của bảng lịch
+              onSurface: colorBlack, // Chữ trên nền trắng
+            ),
+            dialogBackgroundColor:
+                colorWhite, // Nền trắng cho toàn bộ hộp thoại
+          ),
+          child: child!,
+        );
+      },
     );
     if (d != null) setState(() => filterDate = d);
   }
@@ -827,9 +852,9 @@ class _ManagerPageState extends State<ManagerPage>
                   child: Text(
                     task.title,
                     style: TextStyle(
-                      fontSize: 17,
+                      fontSize: 22,
                       fontWeight: FontWeight.bold,
-                      color: colorGreen, // Màu xanh lá như hình
+                      color: colorBlack,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -844,7 +869,7 @@ class _ManagerPageState extends State<ManagerPage>
             const SizedBox(height: 4),
             Text(
               task.description,
-              style: const TextStyle(color: Colors.grey, fontSize: 13),
+              style: const TextStyle(color: Color(0xFF000000), fontSize: 13),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -859,7 +884,7 @@ class _ManagerPageState extends State<ManagerPage>
                       Text(
                         "Department: ${task.departmentName ?? '-'}",
                         style: const TextStyle(
-                          color: Colors.black,
+                          color: Colors.grey,
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
                         ),
@@ -868,7 +893,7 @@ class _ManagerPageState extends State<ManagerPage>
                       Text(
                         "Creator: ${task.creatorName ?? '-'} | Assignee: ${task.assigneeName ?? '-'}",
                         style: const TextStyle(
-                          color: Colors.black,
+                          color: Colors.grey,
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
                         ),
@@ -883,16 +908,16 @@ class _ManagerPageState extends State<ManagerPage>
                     Text(
                       "Start: ${task.createdAt.toLocal().toString().split(" ").first}",
                       style: const TextStyle(
-                        color: Colors.black,
-                        fontSize: 10,
+                        color: Colors.grey,
+                        fontSize: 11,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                     Text(
                       "Due: ${task.dueDate.toLocal().toString().split(" ").first}",
                       style: const TextStyle(
-                        color: Colors.black,
-                        fontSize: 10,
+                        color: Colors.grey,
+                        fontSize: 11,
                         fontWeight: FontWeight.bold,
                       ),
                     ),

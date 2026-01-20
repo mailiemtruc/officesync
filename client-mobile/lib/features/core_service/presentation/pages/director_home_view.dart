@@ -519,8 +519,8 @@ class _DirectorHomeViewState extends State<DirectorHomeView> {
                 Text(
                   title,
                   style: const TextStyle(
-                    color: Color(0xFF4EE375), // Màu xanh lá cho Title
-                    fontSize: 16,
+                    color: Color(0xFF000000), 
+                    fontSize: 20,
                     fontWeight: FontWeight.bold,
                   ),
                   maxLines: 1,
@@ -560,7 +560,7 @@ class _DirectorHomeViewState extends State<DirectorHomeView> {
                         Text(
                           'To: $assignee',
                           style: const TextStyle(
-                            color: Color(0xFF1E293B),
+                            color: Colors.grey,
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
                           ),

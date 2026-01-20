@@ -293,7 +293,7 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
           Text(
             label,
             style: TextStyle(
-              color: isTitle ? colorNeon : Colors.grey,
+              color: isTitle ? Colors.grey : Colors.grey,
               fontSize: 11,
               fontWeight: FontWeight.bold,
             ),
@@ -315,11 +315,13 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
 
   Widget _buildDropdownRow(String label, Widget dropdown) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
+        crossAxisAlignment:
+            CrossAxisAlignment.center, // canh giữa theo trục dọc
         children: [
           SizedBox(
-            width: 100,
+            width: 110, // <--- cùng 1 width cho tất cả labels để thẳng hàng
             child: Text(
               "$label:",
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
@@ -355,26 +357,35 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
     );
   }
 
-  // --- DROP DOWN & DATE PICKER (Đã thu gọn để nằm ngang) ---
-
+  // -------------------- Priority --------------------
   Widget _buildDropdownPriority() {
-    return DropdownButton<TaskPriority>(
-      value: _selectedPriority,
-      isExpanded: true,
-      underline: const SizedBox(),
-      hint: const Text("Select", style: TextStyle(fontSize: 13)),
-      items: TaskPriority.values
-          .map(
-            (p) => DropdownMenuItem(
-              value: p,
-              child: Text(p.name, style: const TextStyle(fontSize: 13)),
-            ),
-          )
-          .toList(),
-      onChanged: (v) => setState(() => _selectedPriority = v),
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        // không cần border nếu muốn giống Date (bạn đã bỏ border)
+        borderRadius: BorderRadius.circular(15),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<TaskPriority>(
+          value: _selectedPriority,
+          isExpanded: true,
+          hint: const Text("Select", style: TextStyle(fontSize: 14)),
+          items: TaskPriority.values
+              .map(
+                (p) => DropdownMenuItem(
+                  value: p,
+                  child: Text(p.name, style: const TextStyle(fontSize: 14)),
+                ),
+              )
+              .toList(),
+          onChanged: (v) => setState(() => _selectedPriority = v),
+          icon: const Icon(Icons.arrow_drop_down, size: 20),
+        ),
+      ),
     );
   }
 
+  // -------------------- Date Picker (giữ như bạn đã chỉnh, chỉ chỉnh text size để đồng bộ) --------------------
   Widget _buildDatePicker() {
     return InkWell(
       onTap: () async {
@@ -382,46 +393,72 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
           context: context,
           firstDate: DateTime.now(),
           lastDate: DateTime.now().add(const Duration(days: 365)),
-          initialDate: DateTime.now(),
+          initialDate: dueDate ?? DateTime.now(),
+          builder: (context, child) {
+            return Theme(
+              data: Theme.of(
+                context,
+              ).copyWith(colorScheme: ColorScheme.light(primary: colorBlue)),
+              child: child!,
+            );
+          },
         );
         if (d != null) setState(() => dueDate = d);
       },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Text(
-          dueDate == null ? "Choose date" : dueDate!.toString().split(' ')[0],
-          style: TextStyle(
-            fontSize: 13,
-            color: dueDate == null ? Colors.blue : Colors.black,
-          ),
+      child: Container(
+        width: double.infinity,
+        decoration: BoxDecoration(borderRadius: BorderRadius.circular(15)),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                dueDate == null
+                    ? "Choose a date"
+                    : "${dueDate!.day}/${dueDate!.month}/${dueDate!.year}",
+                style: const TextStyle(fontSize: 14),
+              ),
+            ),
+            const Icon(Icons.calendar_month, color: Colors.grey, size: 20),
+          ],
         ),
       ),
     );
   }
 
+  // -------------------- Department --------------------
   Widget _buildDeptDropdown() {
-    return DropdownButton<int>(
-      value: selectedDeptId,
-      isExpanded: true,
-      underline: const SizedBox(),
-      items: departments
-          .map(
-            (d) => DropdownMenuItem(
-              value: d.id,
-              child: Text(d.name, style: const TextStyle(fontSize: 13)),
-            ),
-          )
-          .toList(),
-      onChanged: (v) => _onDepartmentChanged(v),
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(15)),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<int>(
+          value: selectedDeptId,
+          isExpanded: true,
+          hint: const Text(
+            "Choose a department",
+            style: TextStyle(fontSize: 14),
+          ),
+          items: departments
+              .map(
+                (d) => DropdownMenuItem(
+                  value: d.id,
+                  child: Text(d.name, style: const TextStyle(fontSize: 14)),
+                ),
+              )
+              .toList(),
+          onChanged: (v) => _onDepartmentChanged(v),
+          icon: const Icon(Icons.arrow_drop_down, size: 20),
+        ),
+      ),
     );
   }
 
+  // -------------------- Assignee --------------------
   Widget _buildAssigneeDropdown() {
     String hintText = widget.role == 'COMPANY_ADMIN'
         ? "Select Manager"
         : "Select Staff";
 
-    // Nếu chọn soccer (ID 4) mà danh sách vẫn rỗng
     if (selectedDeptId != null && filteredUsers.isEmpty) {
       return Container(
         padding: const EdgeInsets.symmetric(vertical: 12),
@@ -432,7 +469,7 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
               color: Colors.orange,
               size: 16,
             ),
-            const SizedBox(width: 4),
+            const SizedBox(width: 6),
             Text(
               widget.role == 'COMPANY_ADMIN'
                   ? "Phòng này chưa có Quản lý"
@@ -448,33 +485,30 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
       );
     }
 
-    return DropdownButtonFormField<int>(
-      isExpanded: true,
-      value: selectedAssigneeId,
-      decoration: InputDecoration(
-        labelText: widget.role == 'COMPANY_ADMIN' ? 'Manager' : 'Staff',
-        labelStyle: const TextStyle(
-          fontWeight: FontWeight.bold,
-          fontSize: 13,
-          color: Colors.black,
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(15)),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<int>(
+          value: selectedAssigneeId,
+          isExpanded: true,
+          hint: Text(hintText, style: const TextStyle(fontSize: 14)),
+          items: filteredUsers.map((u) {
+            return DropdownMenuItem<int>(
+              value: u.id,
+              child: Text(
+                u.fullName,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            );
+          }).toList(),
+          onChanged: (v) => setState(() => selectedAssigneeId = v),
+          icon: const Icon(Icons.arrow_drop_down, size: 20),
         ),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 15,
-        ),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
       ),
-      hint: Text(hintText, style: const TextStyle(fontSize: 13)),
-      items: filteredUsers.map((u) {
-        return DropdownMenuItem<int>(
-          value: u.id,
-          child: Text(
-            u.fullName,
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
-          ),
-        );
-      }).toList(),
-      onChanged: (v) => setState(() => selectedAssigneeId = v),
     );
   }
 }

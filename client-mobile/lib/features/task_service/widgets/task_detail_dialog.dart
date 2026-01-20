@@ -166,10 +166,6 @@ class _TaskDetailDialogState extends State<TaskDetailDialog> {
                         "Due date",
                         widget.task.dueDate.toString().split(' ')[0],
                       ),
-                      _infoRow(
-                        "Visibility",
-                        widget.task.isPublished ? "Public" : "Draft",
-                      ),
                     ],
                   ),
                 ),

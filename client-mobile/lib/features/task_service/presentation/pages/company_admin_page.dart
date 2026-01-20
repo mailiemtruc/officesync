@@ -183,7 +183,6 @@ class _CompanyAdminPageState extends State<CompanyAdminPage>
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
           child: Row(
             children: [
-              // BÊN TRÁI: Nhãn lọc xuất hiện theo thứ tự 1, 2, 3
               Expanded(
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
@@ -269,12 +268,21 @@ class _CompanyAdminPageState extends State<CompanyAdminPage>
     );
   }
 
-  // --- DROP DOWN PHÒNG BAN (Nền trắng, chữ đen) ---
   Widget _buildDeptDropdown() {
     return Theme(
-      data: Theme.of(context).copyWith(cardColor: colorWhite), // Nền trắng ffff
+      data: Theme.of(context).copyWith(
+        cardColor: colorWhite,
+        popupMenuTheme: PopupMenuThemeData(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(15),
+          ),
+        ),
+        hoverColor: colorBlue.withOpacity(0.05),
+      ),
       child: PopupMenuButton<int?>(
         key: _deptMenuKey,
+        // SỬ DỤNG THUỘC TÍNH NÀY để làm trắng toàn bộ nền menu xổ xuống
+        color: colorWhite,
         onSelected: (id) => setState(() => filterDeptId = id),
         offset: const Offset(0, 45),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
@@ -284,7 +292,7 @@ class _CompanyAdminPageState extends State<CompanyAdminPage>
             child: Text(
               "All Departments",
               style: TextStyle(color: colorBlack, fontSize: 14),
-            ), // Chữ đen 0000
+            ),
           ),
           ...departments.map(
             (d) => PopupMenuItem(
@@ -299,8 +307,7 @@ class _CompanyAdminPageState extends State<CompanyAdminPage>
         child: FlashBorderWrapper(
           borderRadius: BorderRadius.circular(50),
           borderColor: colorBlue,
-          onTap: () =>
-              _deptMenuKey.currentState?.showButtonMenu(), // Kích hoạt sổ xuống
+          onTap: () => _deptMenuKey.currentState?.showButtonMenu(),
           child: _circularIconContainer(Icons.groups_outlined),
         ),
       ),
@@ -313,6 +320,7 @@ class _CompanyAdminPageState extends State<CompanyAdminPage>
       data: Theme.of(context).copyWith(cardColor: colorWhite),
       child: PopupMenuButton<TaskStatus?>(
         key: _statusMenuKey,
+        color: colorWhite,
         onSelected: (s) => setState(() => filterStatus = s),
         offset: const Offset(0, 45),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
@@ -347,20 +355,25 @@ class _CompanyAdminPageState extends State<CompanyAdminPage>
 
   Widget _circularIconContainer(IconData icon) {
     return Container(
-      width: 40,
-      height: 40,
+      width: 42,
+      height: 42,
       decoration: BoxDecoration(
         color: colorWhite,
         shape: BoxShape.circle,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Color(0xFFFFFFFF),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),
         ],
       ),
-      child: Icon(icon, color: colorBlue, size: 18),
+      child: Icon(
+        icon,
+        color: colorBlue,
+        size: 18,
+        fontWeight: FontWeight.bold,
+      ),
     );
   }
 
@@ -370,6 +383,21 @@ class _CompanyAdminPageState extends State<CompanyAdminPage>
       initialDate: DateTime.now(),
       firstDate: DateTime(2020),
       lastDate: DateTime(2030),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.light(
+              primary: colorBlue, // Màu chủ đạo (nút, ngày chọn)
+              onPrimary: colorWhite, // Chữ trên nền primary
+              surface: colorWhite, // Nền của bảng lịch
+              onSurface: colorBlack, // Chữ trên nền trắng
+            ),
+            dialogBackgroundColor:
+                colorWhite, // Nền trắng cho toàn bộ hộp thoại
+          ),
+          child: child!,
+        );
+      },
     );
     if (d != null) setState(() => filterListDate = d);
   }
@@ -422,9 +450,9 @@ class _CompanyAdminPageState extends State<CompanyAdminPage>
                   child: Text(
                     task.title,
                     style: TextStyle(
-                      fontSize: 17,
+                      fontSize: 22,
                       fontWeight: FontWeight.bold,
-                      color: colorGreen,
+                      color: colorBlack,
                     ),
                   ),
                 ),
@@ -437,7 +465,7 @@ class _CompanyAdminPageState extends State<CompanyAdminPage>
             const SizedBox(height: 4),
             Text(
               task.description,
-              style: const TextStyle(color: Colors.grey, fontSize: 13),
+              style: TextStyle(fontSize: 13, color: colorBlack),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -452,7 +480,7 @@ class _CompanyAdminPageState extends State<CompanyAdminPage>
                       Text(
                         "Department: ${task.departmentName ?? '-'}",
                         style: const TextStyle(
-                          color: Colors.black,
+                          color: Colors.grey,
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
                         ),
@@ -461,7 +489,7 @@ class _CompanyAdminPageState extends State<CompanyAdminPage>
                       Text(
                         "Creator: ${task.creatorName ?? '-'} | Assignee: ${task.assigneeName ?? '-'}",
                         style: const TextStyle(
-                          color: Colors.black,
+                          color: Colors.grey,
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
                         ),
@@ -476,16 +504,16 @@ class _CompanyAdminPageState extends State<CompanyAdminPage>
                     Text(
                       "Start: ${task.createdAt.toLocal().toString().split(" ").first}",
                       style: const TextStyle(
-                        color: Colors.black,
-                        fontSize: 10,
+                        color: Colors.grey,
+                        fontSize: 11,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                     Text(
                       "Due: ${task.dueDate.toLocal().toString().split(" ").first}",
                       style: const TextStyle(
-                        color: Colors.black,
-                        fontSize: 10,
+                        color: Colors.grey,
+                        fontSize: 11,
                         fontWeight: FontWeight.bold,
                       ),
                     ),

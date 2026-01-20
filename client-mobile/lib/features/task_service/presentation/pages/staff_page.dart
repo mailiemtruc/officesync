@@ -155,22 +155,6 @@ class _StaffPageState extends State<StaffPage> {
           ),
         ],
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        selectedItemColor: colorBlue,
-        unselectedItemColor: Colors.grey,
-        showSelectedLabels: true,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home_outlined),
-            label: "Home",
-          ),
-          BottomNavigationBarItem(icon: Icon(Icons.list_alt), label: "Menu"),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person_outline),
-            label: "Profile",
-          ),
-        ],
-      ),
     );
   }
 
@@ -242,6 +226,7 @@ class _StaffPageState extends State<StaffPage> {
       data: Theme.of(context).copyWith(cardColor: colorWhite),
       child: PopupMenuButton<TaskStatus?>(
         key: _statusMenuKey,
+        color: colorWhite,
         onSelected: (s) => setState(() => selectedStatus = s),
         itemBuilder: (context) => [
           PopupMenuItem(
@@ -279,20 +264,25 @@ class _StaffPageState extends State<StaffPage> {
 
   Widget _circularIconContainer(IconData icon, {bool active = false}) {
     return Container(
-      width: 40,
-      height: 40,
+      width: 42,
+      height: 42,
       decoration: BoxDecoration(
         color: active ? colorBlue.withOpacity(0.1) : colorWhite,
         shape: BoxShape.circle,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Color(0xFFFFFFFF),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),
         ],
       ),
-      child: Icon(icon, color: active ? Colors.red : colorBlue, size: 18),
+      child: Icon(
+        icon,
+        color: active ? Colors.red : colorBlue,
+        size: 18,
+        fontWeight: FontWeight.bold,
+      ),
     );
   }
 
@@ -343,9 +333,9 @@ class _StaffPageState extends State<StaffPage> {
                   child: Text(
                     task.title,
                     style: TextStyle(
-                      fontSize: 17,
+                      fontSize: 22,
                       fontWeight: FontWeight.bold,
-                      color: colorGreen,
+                      color: colorBlack,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -360,7 +350,7 @@ class _StaffPageState extends State<StaffPage> {
             const SizedBox(height: 4),
             Text(
               task.description,
-              style: const TextStyle(color: Colors.grey, fontSize: 13),
+              style: const TextStyle(color: Color(0xFF000000), fontSize: 13),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -375,7 +365,7 @@ class _StaffPageState extends State<StaffPage> {
                       Text(
                         "Department: ${task.departmentName ?? '-'}",
                         style: const TextStyle(
-                          color: Colors.black,
+                          color: Colors.grey,
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
                         ),
@@ -384,7 +374,7 @@ class _StaffPageState extends State<StaffPage> {
                       Text(
                         "Creator: ${task.creatorName ?? '-'} | Assignee: ${task.assigneeName ?? '-'}",
                         style: const TextStyle(
-                          color: Colors.black,
+                          color: Colors.grey,
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
                         ),
@@ -399,16 +389,16 @@ class _StaffPageState extends State<StaffPage> {
                     Text(
                       "Start: ${task.createdAt.toLocal().toString().split(" ").first}",
                       style: const TextStyle(
-                        color: Colors.black,
-                        fontSize: 10,
+                        color: Colors.grey,
+                        fontSize: 11,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                     Text(
                       "Due: ${task.dueDate.toLocal().toString().split(" ").first}",
                       style: const TextStyle(
-                        color: Colors.black,
-                        fontSize: 10,
+                        color: Colors.grey,
+                        fontSize: 11,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
