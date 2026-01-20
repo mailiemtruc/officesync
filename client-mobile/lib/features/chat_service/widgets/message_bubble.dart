@@ -156,6 +156,8 @@ class MessageBubble extends StatelessWidget {
     if (timestamp.isEmpty) return "";
     try {
       DateTime dt = DateTime.parse(timestamp).toLocal();
+
+      // CHỈ HIỆN GIỜ:PHÚT (Vì ngày đã có Header lo rồi)
       return DateFormat('HH:mm').format(dt);
     } catch (e) {
       return "";

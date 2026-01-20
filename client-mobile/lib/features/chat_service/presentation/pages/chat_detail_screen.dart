@@ -339,7 +339,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                 ? _buildEmptyState()
                 : ListView.builder(
                     controller: _scrollController,
-                    reverse: true, // Tin nhắn mới ở dưới cùng
+                    reverse: true, // Tin mới nhất ở dưới cùng (Index 0)
                     padding: const EdgeInsets.symmetric(
                       horizontal: 10,
                       vertical: 20,
@@ -348,26 +348,43 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                     itemBuilder: (context, index) {
                       final msg = messages[index];
 
-                      // --- LOGIC GOM NHÓM TIN NHẮN (Ẩn bớt Avatar) ---
-                      // Nguyên tắc: List đang reverse (0 là mới nhất, nằm dưới cùng).
-                      // Avatar thường hiện ở tin nhắn CUỐI CÙNG của nhóm (tức là tin mới nhất trong nhóm đó).
-                      // -> Ta cần kiểm tra tin nhắn "MỚI HƠN" (index - 1).
-                      // Nếu tin mới hơn (nằm ngay dưới) cũng là của người này -> Ẩn avatar tin hiện tại đi.
-
+                      // 1. Logic ẩn Avatar (Giữ nguyên code cũ của bạn)
                       bool showAvatar = true;
                       if (index > 0) {
-                        final newerMsg = messages[index - 1];
+                        final newerMsg =
+                            messages[index -
+                                1]; // Tin nhắn mới hơn (nằm ngay dưới về mặt hiển thị)
                         if (newerMsg.senderId == msg.senderId) {
                           showAvatar = false;
                         }
                       }
 
-                      // Trả về Bubble đã được nâng cấp (Tự lo hiển thị giờ và bo góc)
-                      return MessageBubble(
-                        message: msg,
-                        isMe: msg.isMe,
-                        showAvatar:
-                            showAvatar, // Truyền trạng thái ẩn/hiện avatar vào
+                      // 2. [MỚI] Logic hiện Header Ngày (Giống Zalo)
+                      bool showDateHeader = false;
+
+                      // Nếu là tin nhắn cuối cùng của list (tức là tin cũ nhất lịch sử) -> Luôn hiện ngày
+                      if (index == messages.length - 1) {
+                        showDateHeader = true;
+                      } else {
+                        // So sánh với tin nhắn cũ hơn (index + 1)
+                        final olderMsg = messages[index + 1];
+                        if (!_isSameDay(msg.timestamp, olderMsg.timestamp)) {
+                          showDateHeader = true;
+                        }
+                      }
+
+                      // 3. Ghép lại
+                      return Column(
+                        children: [
+                          // Vì reverse: true, nên phần tử đầu tiên của Column sẽ nằm "trên"
+                          if (showDateHeader) _buildDateHeader(msg.timestamp),
+
+                          MessageBubble(
+                            message: msg,
+                            isMe: msg.isMe,
+                            showAvatar: showAvatar,
+                          ),
+                        ],
                       );
                     },
                   ),
@@ -463,15 +480,15 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     );
   }
 
-  String _formatTime(String timestamp) {
-    if (timestamp.isEmpty) return "";
-    try {
-      DateTime dt = DateTime.parse(timestamp).toLocal();
-      return DateFormat('HH:mm').format(dt);
-    } catch (e) {
-      return "";
-    }
-  }
+  // String _formatTime(String timestamp) {
+  //   if (timestamp.isEmpty) return "";
+  //   try {
+  //     DateTime dt = DateTime.parse(timestamp).toLocal();
+  //     return DateFormat('HH:mm').format(dt);
+  //   } catch (e) {
+  //     return "";
+  //   }
+  // }
 
   void _fetchInitialRoomStatus() async {
     // Nếu là chat nhóm hoặc không có partnerId thì bỏ qua
@@ -505,5 +522,53 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     } catch (e) {
       print("⚠️ Không lấy được trạng thái Online: $e");
     }
+  }
+
+  // 1. Kiểm tra 2 ngày có trùng nhau không
+  bool _isSameDay(String? time1, String? time2) {
+    if (time1 == null || time2 == null) return false;
+    DateTime d1 = DateTime.parse(time1).toLocal();
+    DateTime d2 = DateTime.parse(time2).toLocal();
+    return d1.year == d2.year && d1.month == d2.month && d1.day == d2.day;
+  }
+
+  // 2. Widget hiển thị Header ngày (Cái cục màu xám ở giữa)
+  Widget _buildDateHeader(String timestamp) {
+    DateTime date = DateTime.parse(timestamp).toLocal();
+    DateTime now = DateTime.now();
+    String text = "";
+
+    if (date.year == now.year &&
+        date.month == now.month &&
+        date.day == now.day) {
+      text = "Hôm nay";
+    } else if (date.year == now.year &&
+        date.month == now.month &&
+        date.day == now.day - 1) {
+      text = "Hôm qua";
+    } else {
+      text = DateFormat('dd/MM/yyyy').format(date);
+    }
+
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 12),
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.grey[300], // Màu nền xám giống Zalo
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            text,
+            style: const TextStyle(
+              color: Colors.black54,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

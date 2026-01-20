@@ -19,7 +19,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate; 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
+import org.springframework.data.domain.PageRequest;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Date;
@@ -35,7 +36,7 @@ public class ChatService {
     private final ChatUserRepository chatUserRepository;
     private final ChatRoomRepository chatRoomRepository;
     private final RoomMemberRepository roomMemberRepository;
-    
+    private final SimpMessagingTemplate messagingTemplate;
     // [NEW] Inject RabbitMQ template and ObjectMapper
     private final RabbitTemplate rabbitTemplate;
     private final ObjectMapper objectMapper;
@@ -192,6 +193,13 @@ public class ChatService {
                 }
             }
         }
+        List<Long> allMemberIds = new ArrayList<>(request.getMemberIds());
+        if (!allMemberIds.contains(creatorId)) {
+            allMemberIds.add(creatorId);
+        }
+        
+        // Bắn Socket báo hiệu!
+        notifyNewRoom(room, allMemberIds);
         return room;
     }
 
@@ -228,23 +236,56 @@ public class ChatService {
         }
     }
 
-    public List<ChatMessage> getRecentConversations(Long userId) {
-        List<ChatMessage> messages = messageRepository.findRecentConversations(userId);
-        for (ChatMessage msg : messages) {
-            Long partnerId;
-            if (msg.getSenderId().equals(userId)) {
-                partnerId = msg.getRecipientId(); 
-            } else {
-                partnerId = msg.getSenderId();    
+   public List<ChatMessage> getRecentConversations(Long userId) {
+        // 1. Lấy danh sách ID các phòng mà user đang tham gia
+        List<RoomMember> memberships = roomMemberRepository.findByUserId(userId);
+        List<ChatMessage> recentMessages = new ArrayList<>();
+
+        for (RoomMember member : memberships) {
+            ChatRoom room = member.getChatRoom();
+            
+            // 2. Với mỗi phòng, lấy đúng 1 tin nhắn mới nhất
+            List<ChatMessage> lastMsgs = messageRepository.findByRoomIdOrderByTimestampDesc(
+                room.getId(), 
+                PageRequest.of(0, 1) // Limit 1
+            );
+
+            if (!lastMsgs.isEmpty()) {
+                ChatMessage lastMsg = lastMsgs.get(0);
+                
+                // 3. Xử lý hiển thị tên/avatar (cho Frontend đỡ phải gọi lại API)
+                if (room.getType() == ChatRoom.RoomType.PRIVATE) {
+                    // Chat 1-1: Tìm người kia để lấy tên & avatar
+                    populatePrivateChatInfo(lastMsg, room, userId);
+                } else {
+                    // Chat Nhóm: Lấy tên nhóm & avatar nhóm
+                    lastMsg.setSenderName(room.getRoomName());
+                    lastMsg.setAvatarUrl(room.getRoomAvatarUrl());
+                }
+                
+                recentMessages.add(lastMsg);
             }
-            if (partnerId != null) {
-                chatUserRepository.findById(partnerId).ifPresent(user -> {
+        }
+
+        // 4. Sắp xếp lại danh sách: Tin nào mới nhất nhảy lên đầu
+        recentMessages.sort((m1, m2) -> m2.getTimestamp().compareTo(m1.getTimestamp()));
+
+        return recentMessages;
+    }
+
+    // Hàm phụ trợ: Lấy thông tin đối phương trong phòng 1-1
+    private void populatePrivateChatInfo(ChatMessage msg, ChatRoom room, Long myId) {
+        List<RoomMember> members = roomMemberRepository.findByChatRoomId(room.getId());
+        for (RoomMember m : members) {
+            // Logic: Người kia chính là người KHÔNG PHẢI LÀ TÔI trong phòng này
+            if (!m.getUserId().equals(myId)) {
+                chatUserRepository.findById(m.getUserId()).ifPresent(user -> {
                     msg.setSenderName(user.getFullName());
                     msg.setAvatarUrl(user.getAvatarUrl());
                 });
+                break; 
             }
         }
-        return messages;
     }
 
    // 1. TẠO PHÒNG
@@ -284,7 +325,25 @@ public class ChatService {
                 }
             }
         }
+        List<Long> allIds = new ArrayList<>();
+        if (managerId != null) allIds.add(managerId);
+        if (memberIds != null) allIds.addAll(memberIds);
+        
+        notifyNewRoom(savedRoom, allIds);
         log.info("✅ Đã tạo nhóm chat: {}", deptName);
+    }
+    private ChatUser getOrCreateChatUser(Long userId, Long companyId) {
+        return chatUserRepository.findById(userId).orElseGet(() -> {
+            log.info("⚠️ User ID {} chưa đồng bộ kịp. Tạo User tạm...", userId);
+            ChatUser tempUser = new ChatUser();
+            tempUser.setId(userId);
+            tempUser.setCompanyId(companyId);
+            tempUser.setEmail("pending_sync_" + userId + "@system.local"); // Email tạm
+            tempUser.setFullName("Loading Member..."); // Tên tạm
+            tempUser.setOnline(false);
+            tempUser.setLastActiveAt(LocalDateTime.now());
+            return chatUserRepository.save(tempUser);
+        });
     }
 
     // 2. XÓA PHÒNG
@@ -334,6 +393,10 @@ public class ChatService {
     }
 
     private void addMemberToRoom(ChatRoom room, Long userId, RoomMember.GroupRole role) {
+        boolean exists = roomMemberRepository.findByChatRoomId(room.getId())
+                .stream().anyMatch(m -> m.getUserId().equals(userId));
+        
+        if (!exists) {
         RoomMember member = RoomMember.builder()
                 .chatRoom(room)
                 .userId(userId)
@@ -341,7 +404,7 @@ public class ChatService {
                 .joinedAt(LocalDateTime.now())
                 .build();
         roomMemberRepository.save(member);
-    }
+    }}
 
     public RoomDetailDTO getRoomDetails(Long roomId) {
         ChatRoom room = chatRoomRepository.findById(roomId)
@@ -381,4 +444,30 @@ public void leaveRoom(Long userId, Long roomId) {
     // (Nâng cao: Nếu phòng không còn ai thì xóa luôn phòng - làm sau)
     log.info("User {} left room {}", userId, roomId);
 }
+// Hàm bắn tin hiệu "Có phòng mới" qua Socket
+    private void notifyNewRoom(ChatRoom room, List<Long> memberIds) {
+        if (memberIds == null || memberIds.isEmpty()) return;
+
+        // Tạo payload đơn giản để Client nhận biết
+        ChatMessageDTO notification = new ChatMessageDTO();
+        notification.setRoomId(room.getId());
+        notification.setContent("Bạn đã được thêm vào nhóm " + room.getRoomName());
+        notification.setType(ChatMessage.MessageType.JOIN); // Loại tin nhắn là JOIN
+        notification.setSender("SYSTEM");
+        notification.setTimestamp(new Date().toString());
+
+        // Lấy danh sách User để lấy Email (vì Socket gửi theo Email)
+        List<ChatUser> users = chatUserRepository.findAllById(memberIds);
+
+        for (ChatUser user : users) {
+            // Gửi vào kênh riêng của từng người: /user/{email}/queue/notifications
+            // Client Flutter (ChatScreen) đang lắng nghe kênh này
+            messagingTemplate.convertAndSendToUser(
+                user.getEmail(),
+                "/queue/notifications",
+                notification
+            );
+        }
+        log.info("📢 Đã bắn socket báo nhóm mới cho {} thành viên", users.size());
+    }
 }
