@@ -120,5 +120,5 @@ public class AuthController {
         private String newPassword; 
     }
 
-    @Data @AllArgsConstructor public static class AuthResponse { private String token; private User user; }
+    @Data @AllArgsConstructor public static class AuthResponse { private String token; private User user; private String companyName; }
 }

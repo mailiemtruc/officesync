@@ -487,7 +487,11 @@ class _LoginScreenState extends State<LoginScreen> {
       if (response.statusCode == 200) {
         final data = response.data;
         final String token = data['token'];
-        final Map<String, dynamic> user = data['user'];
+        final Map<String, dynamic> user = Map<String, dynamic>.from(
+          data['user'],
+        );
+        final String companyName = data['companyName'] ?? '';
+        user['companyName'] = companyName;
 
         final storage = const FlutterSecureStorage();
         await storage.write(key: 'auth_token', value: token);

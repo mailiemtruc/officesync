@@ -57,24 +57,44 @@ public class AuthService {
 
     // --- LOGIN ---
     public AuthResponse login(LoginRequest req) {
+        // 1. Tìm User
         User user = userRepository.findByEmail(req.getEmail()).orElse(null);
         if (user == null || !passwordEncoder.matches(req.getPassword(), user.getPassword())) {
             throw new RuntimeException("Incorrect email or password!");
         }
 
+        // 2. Khai báo biến chứa tên công ty (mặc định rỗng hoặc tên cho Super Admin)
+        String companyName = "";
+
+        // 3. Kiểm tra Company (Status & Lấy tên)
         if (user.getCompanyId() != null) {
             Company company = companyRepository.findById(user.getCompanyId()).orElse(null);
-            if (company != null && "LOCKED".equals(company.getStatus())) {
-                throw new RuntimeException("Your company account has been locked.");
+            
+            if (company != null) {
+                // Kiểm tra xem công ty có bị khóa không
+                if ("LOCKED".equals(company.getStatus())) {
+                    throw new RuntimeException("Your company account has been locked.");
+                }
+                // [MỚI] Lấy tên công ty gán vào biến
+                companyName = company.getName();
+            }
+        } else {
+            // Trường hợp user không thuộc công ty nào (Super Admin)
+            if ("SUPER_ADMIN".equals(user.getRole())) {
+                companyName = "System Admin";
             }
         }
 
+        // 4. Kiểm tra trạng thái User
         if ("LOCKED".equals(user.getStatus())) {
             throw new RuntimeException("Your account has been locked by Administrator.");
         }
 
+        // 5. Tạo Token và trả về Response (kèm companyName)
         String token = tokenProvider.generateToken(user);
-        return new AuthResponse(token, user);
+        
+        // [MỚI] Truyền thêm companyName vào constructor
+        return new AuthResponse(token, user, companyName);
     }
 
     // --- OTP LOGIC ---
