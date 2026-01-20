@@ -193,7 +193,25 @@ public class EmployeeService {
             if (savedEmployee.getDepartment() != null) {
                 evictDepartmentCache(savedEmployee.getDepartment().getId());
             }
-            
+            // [Chat] ---------------------------------------------------
+        // Kiểm tra: Nếu nhân viên mới được gán phòng ban luôn -> Bắn tin sang Chat
+        if (savedEmployee.getDepartment() != null) {
+            try {
+                DepartmentSyncEvent addEvent = new DepartmentSyncEvent();
+                addEvent.setEvent(DepartmentSyncEvent.ACTION_ADD_MEMBER); // "MEMBER_ADDED"
+                addEvent.setDeptId(savedEmployee.getDepartment().getId());
+                addEvent.setCompanyId(savedEmployee.getCompanyId());
+                addEvent.setMemberIds(List.of(savedEmployee.getId())); // Gửi ID nhân viên
+                
+                // Bắn sang RabbitMQ
+                employeeProducer.sendDepartmentEvent(addEvent);
+                
+                log.info("✅ [Create] Đã bắn event thêm nhân viên {} vào phòng {}", 
+                        savedEmployee.getFullName(), savedEmployee.getDepartment().getName());
+            } catch (Exception e) {
+                log.error("⚠️ Lỗi gửi event sang Chat: {}", e.getMessage());
+            }
+        }
             // 5. Send Event
             try {
                 String passwordToSend = (password != null && !password.isEmpty()) ? password : "123456";
@@ -559,6 +577,23 @@ public class EmployeeService {
                 managedDept.setManager(null);
                 departmentRepository.saveAndFlush(managedDept);
             }
+            // [Chat] ==========================================
+            // FIX: Bắn lệnh xóa Member TẠM (ID dài) khỏi nhóm chat trước khi xóa User
+            if (memberOfDept != null) {
+                try {
+                    DepartmentSyncEvent removeTempEvent = new DepartmentSyncEvent();
+                    removeTempEvent.setEvent(DepartmentSyncEvent.ACTION_REMOVE_MEMBER);
+                    removeTempEvent.setDeptId(memberOfDept.getId());
+                    removeTempEvent.setCompanyId(existingEmp.getCompanyId());
+                    removeTempEvent.setMemberIds(List.of(existingEmp.getId())); // Gửi ID tạm để xóa
+                    
+                    employeeProducer.sendDepartmentEvent(removeTempEvent);
+                    log.info("🧹 [Chat Sync] Đã dọn dẹp User tạm ID {} khỏi phòng chat", existingEmp.getId());
+                } catch (Exception e) {
+                    log.error("⚠️ Lỗi dọn dẹp User tạm bên Chat: {}", e.getMessage());
+                }
+            }
+            // =======================================================================
 
             // 2. Delete old
             employeeRepository.delete(existingEmp);
@@ -603,6 +638,24 @@ public class EmployeeService {
                 evictDepartmentCache(finalEmployee.getDepartment().getId());
             }
         }
+        // [Chat] ---------------------------------------------------
+        // Nếu User đồng bộ về có phòng ban -> Thêm vào nhóm chat luôn
+        if (finalEmployee.getDepartment() != null) {
+            try {
+                DepartmentSyncEvent addEvent = new DepartmentSyncEvent();
+                addEvent.setEvent(DepartmentSyncEvent.ACTION_ADD_MEMBER);
+                addEvent.setDeptId(finalEmployee.getDepartment().getId());
+                addEvent.setCompanyId(finalEmployee.getCompanyId());
+                addEvent.setMemberIds(List.of(finalEmployee.getId()));
+                
+                employeeProducer.sendDepartmentEvent(addEvent);
+                
+                log.info("✅ [Sync] Đã bắn event thêm User ID {} vào phòng chat", finalEmployee.getId());
+            } catch (Exception e) {
+                log.error("⚠️ Lỗi gửi event sang Chat khi Sync: {}", e.getMessage());
+            }
+        }
+        // ------------------------------------------------------------------------
     }
 
  
