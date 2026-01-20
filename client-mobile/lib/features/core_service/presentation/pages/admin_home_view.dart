@@ -123,8 +123,13 @@ class _AdminHomeViewState extends State<AdminHomeView> {
     final isDesktop = width > 900;
 
     return Container(
-      color: const Color(0xFFF3F5F9),
-      child: isDesktop ? _buildDesktopLayout() : _buildMobileLayout(),
+      color: const Color(0xFFF3F5F9), // Giữ màu nền full màn hình
+      child: SafeArea(
+        // <--- THÊM WIDGET NÀY
+        bottom:
+            false, // (Tuỳ chọn) Đặt false nếu muốn nội dung tràn xuống đáy màn hình
+        child: isDesktop ? _buildDesktopLayout() : _buildMobileLayout(),
+      ),
     );
   }
 
@@ -133,7 +138,7 @@ class _AdminHomeViewState extends State<AdminHomeView> {
 
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
+      padding: const EdgeInsets.fromLTRB(24, 10, 24, 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
