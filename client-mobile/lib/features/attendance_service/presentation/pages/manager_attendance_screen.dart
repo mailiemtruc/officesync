@@ -26,6 +26,7 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
   final AttendanceApi _api = AttendanceApi();
   final _storage = const FlutterSecureStorage();
   final TextEditingController _searchController = TextEditingController();
+  final String _attendanceUrl = 'ws://10.0.2.2:8083/ws-attendance';
 
   // --- PALETTE MÀU ---
   static const Color primaryColor = Color(0xFF2260FF);
@@ -54,7 +55,13 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
   void initState() {
     super.initState();
     _fetchData();
+
+    // 1. Kết nối đích danh tới cổng 8083
+    WebSocketService().connect(_attendanceUrl);
+
+    // 2. Gọi hàm lắng nghe (Sửa lại hàm _setupRealtimeListener của bạn để subscribe)
     _setupRealtimeListener();
+
     _searchController.addListener(() {
       setState(() {});
     });
@@ -62,63 +69,63 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
 
   @override
   void dispose() {
+    // 1. Dọn dẹp Controller trước
     _searchController.dispose();
-    if (_subscription != null) {
-      WebSocketService().disconnect();
-      super.dispose();
-    }
+
+    // 2. [QUAN TRỌNG] Chỉ ngắt kết nối của cổng 8083
+    // Các cổng 8080 (Security) và 8081 (HR) vẫn sống để nhận thông báo
+    WebSocketService().disconnect(url: _attendanceUrl);
+
+    // 3. Luôn gọi super.dispose() CUỐI CÙNG và DUY NHẤT 1 LẦN
     super.dispose();
   }
 
-  // --- [MỚI] HÀM LẮNG NGHE REAL-TIME ---
+  // --- [ĐÃ SỬA] HÀM LẮNG NGHE REAL-TIME ---
   Future<void> _setupRealtimeListener() async {
     // 1. Lấy CompanyID từ Storage
     String? userInfoStr = await _storage.read(key: 'user_info');
     if (userInfoStr != null) {
       final userJson = jsonDecode(userInfoStr);
       _companyId = userJson['companyId'];
-      // [THÊM LOG] Kiểm tra xem ID có lấy được không
-      print("--> [DEBUG] UserInfo JSON: $userJson");
-      print("--> [DEBUG] Company ID tìm được: $_companyId");
     }
 
     if (_companyId == null) {
-      // [THÊM] Thử fallback lấy ID từ userRole hoặc api call khác nếu cần
       print("❌ LỖI: CompanyID bị null, không thể subscribe!");
       return;
     }
 
     final wsService = WebSocketService();
-    // Đảm bảo kết nối
-    wsService.connect('ws://10.0.2.2:8083/ws');
+
+    // [SỬA LẠI ĐOẠN NÀY]
+    // Không cần gọi connect() ở đây nữa vì initState đã gọi rồi.
+    // Hoặc nếu muốn chắc chắn, hãy dùng đúng biến _attendanceUrl
+    // wsService.connect(_attendanceUrl); <--- Dùng biến này nếu muốn gọi lại
 
     // 2. Subscribe đúng kênh công ty
-    // Topic này phải khớp với Backend: /topic/company/{id}/attendance
     String topic = '/topic/company/$_companyId/attendance';
 
     print("--> [Manager] Đang lắng nghe tại: $topic");
 
-    // Gọi hàm subscribe
-    wsService.subscribe(topic, (payload) {
-      print("--> [SOCKET] Nhận tin nhắn chấm công mới!");
-      try {
-        // Parse dữ liệu
-        Map<String, dynamic> dataMap;
-        if (payload is String) {
-          dataMap = jsonDecode(payload);
-        } else {
-          dataMap = payload;
+    // [QUAN TRỌNG] Truyền forceUrl để đảm bảo nó đăng ký đúng vào cổng 8083
+    wsService.subscribe(
+      topic,
+      (payload) {
+        print("--> [SOCKET] Nhận tin nhắn chấm công mới!");
+        try {
+          Map<String, dynamic> dataMap;
+          if (payload is String) {
+            dataMap = jsonDecode(payload);
+          } else {
+            dataMap = payload;
+          }
+          AttendanceModel newRecord = AttendanceModel.fromJson(dataMap);
+          _handleNewRealtimeRecord(newRecord);
+        } catch (e) {
+          print("Lỗi xử lý tin nhắn socket: $e");
         }
-
-        // Convert sang Model
-        AttendanceModel newRecord = AttendanceModel.fromJson(dataMap);
-
-        // Cập nhật UI
-        _handleNewRealtimeRecord(newRecord);
-      } catch (e) {
-        print("Lỗi xử lý tin nhắn socket: $e");
-      }
-    });
+      },
+      forceUrl: _attendanceUrl, // 👈 Thêm tham số này cho chắc chắn
+    );
   }
 
   // --- [MỚI] HÀM XỬ LÝ KHI CÓ RECORD MỚI ---

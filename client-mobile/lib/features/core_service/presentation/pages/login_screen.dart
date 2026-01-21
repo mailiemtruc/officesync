@@ -10,7 +10,8 @@ import '../../../../dashboard_screen.dart';
 import '../../../../core/utils/custom_snackbar.dart';
 // [MỚI] Import WebSocketService
 import '../../../../../core/services/websocket_service.dart';
-import '../../../../../core/services/analytics_service.dart';
+import '../../../../../core/services/analytics_service.dart'; // Thêm dòng này ở đầu file
+import '../../../../../core/services/security_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -450,6 +451,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
+    // 1. Validation
     if (email.isEmpty || password.isEmpty) {
       CustomSnackBar.show(
         context,
@@ -468,8 +470,7 @@ class _LoginScreenState extends State<LoginScreen> {
       CustomSnackBar.show(
         context,
         title: "Invalid Email",
-        message:
-            "Please enter a valid email address (e.g., user@domain.com) without special characters like #, \$, %",
+        message: "Please enter a valid email address.",
         isError: true,
       );
       return;
@@ -490,35 +491,39 @@ class _LoginScreenState extends State<LoginScreen> {
         final Map<String, dynamic> user = Map<String, dynamic>.from(
           data['user'],
         );
+
+        // Xử lý thông tin công ty
         final String companyName = data['companyName'] ?? '';
         user['companyName'] = companyName;
 
+        // 2. Lưu Storage
         final storage = const FlutterSecureStorage();
         await storage.write(key: 'auth_token', value: token);
         await storage.write(key: 'user_info', value: jsonEncode(user));
 
         if (user['id'] != null) {
-          // 1. Lưu UserID vào Storage (Code cũ của bạn)
           await storage.write(key: 'userId', value: user['id'].toString());
-          print("✅ Đã lưu UserID: ${user['id']} vào Storage");
 
-          // 👇 [MỚI] THÊM ĐOẠN NÀY ĐỂ LOG ANALYTICS
+          // Ghi Log Analytics
           try {
-            // Định danh user này trên hệ thống Firebase để theo dõi hành trình
             await AnalyticsService.setUserId(user['id'].toString());
-
-            // Ghi nhận sự kiện "User đã đăng nhập thành công"
             await AnalyticsService.logLogin('email_password');
           } catch (e) {
-            print(
-              "⚠️ Lỗi log analytics: $e",
-            ); // Không để lỗi analytics làm chặn app
+            print("⚠️ Lỗi log analytics: $e");
           }
-          // 👆 [HẾT ĐOẠN THÊM]
         }
 
-        // [QUAN TRỌNG] KẾT NỐI SOCKET TẠI ĐÂY
-        WebSocketService().connect('ws://10.0.2.2:8081/ws-hr/websocket');
+        // ============================================================
+        // [MỚI - QUAN TRỌNG] KÍCH HOẠT SECURITY SERVICE (Cổng 8080)
+        // ============================================================
+        int userId = user['id'];
+        // Parse companyId an toàn (vì backend có thể trả về null hoặc chuỗi)
+        int? companyId = int.tryParse(user['companyId']?.toString() ?? "");
+
+        SecurityService().startListening(userId, companyId);
+
+        // [CŨ] KẾT NỐI SOCKET HR (Cổng 8081)
+        WebSocketService().connect('ws://10.0.2.2:8081/ws-hr');
 
         if (mounted) {
           Navigator.pushAndRemoveUntil(

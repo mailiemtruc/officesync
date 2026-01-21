@@ -132,8 +132,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final userId = _currentUserInfo['id'];
     if (userId == null) return;
     final wsService = WebSocketService();
-    if (!wsService.isConnected)
-      wsService.connect('ws://10.0.2.2:8081/ws-hr/websocket');
+    if (wsService.isConnected == false) {
+      wsService.connect('ws://10.0.2.2:8081/ws-hr');
+    }
 
     wsService.subscribe('/topic/user/$userId/profile', (message) async {
       if (message == "REFRESH_PROFILE") {

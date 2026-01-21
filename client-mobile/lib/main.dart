@@ -42,6 +42,8 @@ import 'features/task_service/presentation/pages/manager_page.dart';
 import 'features/task_service/presentation/pages/staff_page.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+final GlobalKey<ScaffoldMessengerState> rootScaffoldMessengerKey =
+    GlobalKey<ScaffoldMessengerState>();
 
 // 👇 HÀM XỬ LÝ BACKGROUND MESSAGE
 @pragma('vm:entry-point')
@@ -95,6 +97,7 @@ class OfficeSyncApp extends StatelessWidget {
     return MaterialApp(
       title: 'OfficeSync',
       navigatorKey: navigatorKey,
+      scaffoldMessengerKey: rootScaffoldMessengerKey,
       debugShowCheckedModeBanner: false,
 
       // [MỚI] Đăng ký Observer để Analytics tự động log màn hình

@@ -23,6 +23,7 @@ public class CompanyService {
     @Autowired private UserRepository userRepository;
     @Autowired private RabbitMQProducer rabbitProducer;
     @Autowired private SystemDailyStatRepository statRepository;
+    @Autowired private SecurityNotificationService securitySocket;
 
     // --- Cho Admin ---
     public Map<String, Object> getSystemStats() {
@@ -66,7 +67,29 @@ public class CompanyService {
     public void updateCompanyStatus(Long id, String status) {
         Company company = getCompanyDetail(id);
         company.setStatus(status);
+        
+        // 1. Lưu vào Database
         companyRepository.save(company);
+
+        // 2. Bắn RabbitMQ (Tuỳ chọn - Để đồng bộ với các service backend khác như HR)
+        /* try {
+            CompanyStatusChangedEvent event = new CompanyStatusChangedEvent(id, status);
+            rabbitProducer.sendCompanyStatusChangedEvent(event);
+        } catch (Exception e) {
+            System.err.println("Lỗi gửi RabbitMQ Status Change: " + e.getMessage());
+        }
+        */
+
+        // 🔴 3. [THÊM MỚI] Bắn Socket trực tiếp xuống Mobile App
+        // Nếu trạng thái là LOCKED -> Đá văng toàn bộ nhân viên công ty ra
+        if ("LOCKED".equals(status)) {
+            try {
+                securitySocket.notifyCompanyLocked(id);
+                System.out.println("--> Đã gửi lệnh KHOÁ CÔNG TY qua WebSocket cho Company ID: " + id);
+            } catch (Exception e) {
+                System.err.println("Lỗi gửi WebSocket notification: " + e.getMessage());
+            }
+        }
     }
 
     public List<Map<String, Object>> getTopCompanies() {

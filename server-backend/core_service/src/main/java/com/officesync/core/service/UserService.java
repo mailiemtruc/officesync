@@ -21,6 +21,8 @@ public class UserService {
 
     @Autowired private PasswordEncoder passwordEncoder;
 
+    @Autowired private SecurityNotificationService securitySocket;
+
     public List<User> getUsersByCompanyId(Long companyId) {
         return userRepository.findByCompanyId(companyId);
     }
@@ -33,13 +35,24 @@ public class UserService {
         user.setStatus(status);
         userRepository.save(user);
         
-        // 🔴 2. Bắn MQ sang Profile Service (hoặc các service khác)
+        // 🔵 2. Bắn MQ sang Profile Service (LOGIC CŨ - GIỮ NGUYÊN)
+        // Mục đích: Để đồng bộ trạng thái sang các service backend khác (HR, Chat...)
         try {
             UserStatusChangedEvent event = new UserStatusChangedEvent(userId, status);
             rabbitMQProducer.sendUserStatusChangedEvent(event);
         } catch (Exception e) {
             System.err.println("Error submitting RabbitMQ status change: " + e.getMessage());
             // Không throw exception để tránh rollback việc update DB
+        }
+
+        // 🔴 3. [THÊM MỚI] Bắn Socket trực tiếp xuống Mobile App
+        // Mục đích: Đá văng người dùng ra khỏi App ngay lập tức
+        if ("LOCKED".equals(status)) {
+            try {
+                securitySocket.notifyUserLocked(userId);
+            } catch (Exception e) {
+                System.err.println("Error sending WebSocket notification: " + e.getMessage());
+            }
         }
     }
 

@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../../../core/config/app_colors.dart';
 import '../../../../dashboard_screen.dart';
 import '../../../../../core/services/websocket_service.dart';
+import '../../../../../core/services/security_service.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -42,8 +43,7 @@ class _SplashScreenState extends State<SplashScreen> {
       try {
         final Map<String, dynamic> userData = jsonDecode(userInfoStr);
 
-        // --- [BẮT ĐẦU ĐOẠN CẦN THÊM] ---
-        // Kiểm tra xem userId đã được lưu riêng chưa. Nếu chưa thì trích xuất từ user_info ra lưu lại.
+        // --- [CODE CŨ] Khôi phục UserID nếu thiếu ---
         String? currentUserId = await storage.read(key: 'userId');
         if (currentUserId == null && userData['id'] != null) {
           await storage.write(key: 'userId', value: userData['id'].toString());
@@ -51,24 +51,37 @@ class _SplashScreenState extends State<SplashScreen> {
             "✅ Auto Login: Đã khôi phục UserID thành công: ${userData['id']}",
           );
         }
-        // --- [KẾT THÚC ĐOẠN CẦN THÊM] ---
 
-        WebSocketService().connect('ws://10.0.2.2:8081/ws-hr/websocket');
+        // ============================================================
+        // [MỚI - QUAN TRỌNG] KÍCH HOẠT SECURITY SERVICE (Cổng 8080)
+        // ============================================================
+        // Parse ID an toàn để tránh lỗi crash
+        int userId = int.tryParse(userData['id']?.toString() ?? "0") ?? 0;
+        int? companyId = int.tryParse(userData['companyId']?.toString() ?? "");
 
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => DashboardScreen(userInfo: userData),
-          ),
-        );
+        if (userId > 0) {
+          SecurityService().startListening(userId, companyId);
+        }
+
+        // [CŨ] KẾT NỐI SOCKET HR (Cổng 8081)
+        WebSocketService().connect('ws://10.0.2.2:8081/ws-hr');
+
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => DashboardScreen(userInfo: userData),
+            ),
+          );
+        }
       } catch (e) {
         print("Lỗi parse user info: $e");
         // Nếu lỗi dữ liệu cũ, bắt đăng nhập lại cho an toàn
-        Navigator.pushReplacementNamed(context, '/register');
+        if (mounted) Navigator.pushReplacementNamed(context, '/register');
       }
     } else {
       // Chưa đăng nhập
-      Navigator.pushReplacementNamed(context, '/register');
+      if (mounted) Navigator.pushReplacementNamed(context, '/register');
     }
   }
 

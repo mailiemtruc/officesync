@@ -10,73 +10,101 @@ class WebSocketService {
   factory WebSocketService() => _instance;
   WebSocketService._internal();
 
-  StompClient? _client;
+  // [THAY ĐỔI LỚN 1] Dùng Map để lưu nhiều kết nối cùng lúc
+  // Key: URL (ví dụ ws://...:8080), Value: StompClient tương ứng
+  final Map<String, StompClient> _clients = {};
 
-  // [MỚI] Biến lưu URL hiện tại để phục vụ việc reconnect
-  String? _currentUrl;
+  // Lưu URL gần nhất để làm mặc định cho các màn hình cũ không truyền forceUrl
+  String? _lastConnectedUrl;
 
-  bool get isConnected => _client?.connected ?? false;
+  // Kiểm tra xem 1 URL cụ thể có đang kết nối không
+  bool isConnected(String url) => _clients[url]?.connected ?? false;
 
-  // 1. Hàm kết nối: [SỬA] Nhận tham số URL động
+  // 1. Hàm kết nối: Hỗ trợ đa kết nối
   void connect(String url) {
-    // Case 1: Nếu client đang kết nối TỐT và ĐÚNG URL này -> Không làm gì cả
-    if (_client != null && _client!.connected && _currentUrl == url) {
+    // Case 1: Nếu URL này ĐANG kết nối rồi -> Cập nhật mặc định và thoát
+    if (_clients.containsKey(url) && _clients[url]!.connected) {
       // debugPrint("ℹ️ [WS] Already connected to $url");
+      _lastConnectedUrl = url;
       return;
     }
 
-    // Case 2: Nếu đang có kết nối tới URL khác -> Ngắt cái cũ
-    if (_client != null) {
-      debugPrint("🔄 [WS] Switching connection from $_currentUrl to $url");
-      _client!.deactivate();
+    // Case 2: Nếu đang có client cũ tại URL này mà bị lỗi/ngắt -> Clean trước
+    if (_clients.containsKey(url)) {
+      debugPrint("🔄 [WS] Refreshing connection to $url");
+      _clients[url]!.deactivate();
     }
 
-    // Cập nhật URL hiện tại
-    _currentUrl = url;
+    debugPrint("🚀 [WS] Connecting to $url ...");
 
-    _client = StompClient(
+    final client = StompClient(
       config: StompConfig(
         url: url,
         onConnect: (StompFrame frame) {
           debugPrint("✅ [WS] Connected to $url");
         },
-        onWebSocketError: (dynamic error) => debugPrint("❌ [WS] Error: $error"),
-        onDisconnect: (f) => debugPrint("🔌 [WS] Disconnected"),
-        // [QUAN TRỌNG] Tăng thời gian chờ và delay kết nối lại
+        onWebSocketError: (dynamic error) =>
+            debugPrint("❌ [WS] Error $url: $error"),
+        onDisconnect: (f) => debugPrint("🔌 [WS] Disconnected $url"),
+        // Tự động kết nối lại sau 5s nếu mất mạng
         connectionTimeout: const Duration(seconds: 10),
         reconnectDelay: const Duration(seconds: 5),
       ),
     );
 
-    _client?.activate();
+    client.activate();
+
+    // Lưu vào Map và set làm URL mặc định
+    _clients[url] = client;
+    _lastConnectedUrl = url;
   }
 
-  // 2. Ngắt kết nối (Gọi khi Logout)
-  void disconnect() {
-    _client?.deactivate();
-    _client = null;
-    _currentUrl = null; // Reset URL
-    debugPrint("🛑 [WS] Deactivated Global");
+  // 2. Ngắt kết nối (Cụ thể hoặc Tất cả)
+  void disconnect({String? url}) {
+    if (url != null) {
+      // Ngắt 1 kết nối cụ thể (Ví dụ khi rời màn hình Chấm công)
+      _clients[url]?.deactivate();
+      _clients.remove(url);
+      if (_lastConnectedUrl == url) _lastConnectedUrl = null;
+      debugPrint("🛑 [WS] Deactivated connection: $url");
+    } else {
+      // Ngắt HẾT (Dùng khi Logout)
+      _clients.forEach((key, client) => client.deactivate());
+      _clients.clear();
+      _lastConnectedUrl = null;
+      debugPrint("🛑 [WS] Deactivated ALL connections");
+    }
   }
 
-  // 3. Hàm đăng ký nhận tin (Giữ nguyên logic FIX LỖI CRASH của bạn)
-  dynamic subscribe(String destination, Function(dynamic) callback) async {
+  // 3. Hàm Subscribe thông minh (Nâng cấp)
+  // [THAY ĐỔI LỚN 2] Thêm tham số `forceUrl`
+  dynamic subscribe(
+    String destination,
+    Function(dynamic) callback, {
+    String? forceUrl,
+  }) async {
+    // Xác định URL cần dùng:
+    // - Nếu truyền forceUrl (Dùng cho SecurityService) -> Dùng nó
+    // - Nếu không (Dùng cho UI cũ) -> Dùng URL gần nhất
+    String? targetUrl = forceUrl ?? _lastConnectedUrl;
+
     // Bước 1: Kiểm tra URL
-    if (_currentUrl == null) {
-      debugPrint("⚠️ [WS] Chưa có URL. Vui lòng gọi connect(url) trước!");
+    if (targetUrl == null) {
+      debugPrint("⚠️ [WS] Chưa có kết nối nào. Gọi connect(url) trước!");
       return null;
     }
 
-    // Bước 2: Đảm bảo đã gọi kết nối
-    if (_client == null || !_client!.isActive) {
-      connect(_currentUrl!); // Sử dụng URL đã lưu
-      // [FIX LỖI] Chờ nhẹ 500ms để StompClient kịp khởi tạo Handler
+    // Bước 2: Đảm bảo kết nối tới URL đích tồn tại
+    if (!_clients.containsKey(targetUrl) || !_clients[targetUrl]!.isActive) {
+      connect(targetUrl);
+      // Chờ nhẹ 500ms
       await Future.delayed(const Duration(milliseconds: 500));
     }
 
-    // Bước 3: Thử subscribe và bắt lỗi
+    // Bước 3: Thử subscribe trên đúng Client của URL đó
     try {
-      return _client?.subscribe(
+      final client = _clients[targetUrl];
+      return client?.subscribe(
         destination: destination,
         callback: (StompFrame frame) {
           if (frame.body != null) {
@@ -90,26 +118,18 @@ class WebSocketService {
         },
       );
     } catch (e) {
-      // [FIX LỖI HÌNH ẢNH] Logic Retry thông minh của bạn
-      debugPrint(
-        "⚠️ [WS] Subscribe error: $e. Attempting to force reconnect to $_currentUrl...",
-      );
+      // Logic Retry thông minh (đã sửa để support đa URL)
+      debugPrint("⚠️ [WS] Subscribe error on $targetUrl: $e. Retrying...");
 
-      _client = null; // Xóa client lỗi
-
-      // [SỬA] Reconnect lại vào đúng URL hiện tại
-      if (_currentUrl != null) {
-        connect(_currentUrl!);
-      }
-
-      // Chờ 1 giây cho chắc chắn kết nối xong
+      // Reconnect đúng URL bị lỗi
+      connect(targetUrl);
       await Future.delayed(const Duration(seconds: 1));
 
-      // Thử subscribe lại lần 2
       try {
-        return _client?.subscribe(
+        return _clients[targetUrl]?.subscribe(
           destination: destination,
           callback: (StompFrame frame) {
+            // ... (callback logic như trên) ...
             if (frame.body != null) {
               try {
                 final data = jsonDecode(frame.body!);
@@ -121,8 +141,8 @@ class WebSocketService {
           },
         );
       } catch (e2) {
-        debugPrint("❌ [WS] Retry failed: $e2");
-        return null; // Trả về null để App không bị Crash
+        debugPrint("❌ [WS] Retry failed on $targetUrl: $e2");
+        return null;
       }
     }
   }
