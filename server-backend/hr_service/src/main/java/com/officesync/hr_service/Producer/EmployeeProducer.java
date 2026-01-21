@@ -146,4 +146,48 @@ public class EmployeeProducer {
             e.printStackTrace();
         }
     }
+
+    //task
+    // 1. Gửi TẠO MỚI (Dạng Object trực tiếp)
+    public void sendEmployeeCreatedEventDirect(EmployeeSyncEvent event) {
+        try {
+            log.info("--> [RabbitMQ-Sync] Gửi Object tạo User: {}", event.getEmail());
+            // Gửi trực tiếp Object thay vì String JSON
+            rabbitTemplate.convertAndSend(
+                RabbitMQConfig.EMPLOYEE_EXCHANGE,
+                RabbitMQConfig.EMPLOYEE_ROUTING_KEY,
+                event 
+            );
+        } catch (Exception e) {
+            log.error("Lỗi gửi Object Create: {}", e.getMessage());
+        }
+    }
+
+    // 2. Gửi CẬP NHẬT (Dạng Object trực tiếp)
+    public void sendEmployeeUpdatedEventDirect(EmployeeSyncEvent event) {
+        try {
+            log.info("--> [RabbitMQ-Sync] Gửi Object cập nhật User: {}", event.getEmail());
+            rabbitTemplate.convertAndSend(
+                RabbitMQConfig.EMPLOYEE_EXCHANGE,
+                RabbitMQConfig.EMPLOYEE_UPDATE_ROUTING_KEY,
+                event
+            );
+        } catch (Exception e) {
+            log.error("Lỗi gửi Object Update: {}", e.getMessage());
+        }
+    }
+
+    // 3. Gửi PHÒNG BAN (Dạng Object trực tiếp cho Chat & Task)
+    public void sendDepartmentEventDirect(DepartmentSyncEvent event) {
+        try {
+            log.info("--> [RabbitMQ-Sync] Gửi Object Department: {}", event.getEvent());
+            rabbitTemplate.convertAndSend(
+                RabbitMQConfig.HR_EXCHANGE,
+                RabbitMQConfig.HR_ROUTING_KEY,
+                event 
+            );
+        } catch (Exception e) {
+            log.error("Lỗi gửi Object Department: {}", e.getMessage());
+        }
+    }
 }

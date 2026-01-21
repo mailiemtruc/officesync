@@ -405,7 +405,8 @@ public class DepartmentService {
             EmployeeSyncEvent event = new EmployeeSyncEvent(
                 emp.getId(), emp.getEmail(), emp.getFullName(), emp.getPhone(),
                 emp.getDateOfBirth(), emp.getCompanyId(), emp.getRole().name(),
-                emp.getStatus().name(), null, deptName
+                emp.getStatus().name(), null, deptName,
+                emp.getDepartment() != null ? emp.getDepartment().getId() : null //task
             );
             employeeProducer.sendEmployeeUpdatedEvent(event);
         } catch (Exception e) {

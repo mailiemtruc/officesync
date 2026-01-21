@@ -73,8 +73,30 @@ public class RabbitMQConfig {
     // cau hinh chat
     public static final String HR_EXCHANGE = "hr_exchange";
     public static final String HR_ROUTING_KEY = "hr_routing_key";
-    
 
+    //task
+    public static final String SYNC_REQUEST_QUEUE = "sync.request.queue";
+    public static final String SYNC_REQUEST_EXCHANGE = "sync.request.exchange";
+    public static final String SYNC_REQUEST_ROUTING_KEY = "sync.request.key";
+    
+    // Khai báo Queue
+    @Bean
+    public Queue syncRequestQueue() {
+        return new Queue(SYNC_REQUEST_QUEUE, true);
+    }
+
+    // Khai báo Exchange
+    @Bean
+    public TopicExchange syncRequestExchange() {
+        return new TopicExchange(SYNC_REQUEST_EXCHANGE);
+    }
+
+    // Thiết lập Binding (nối Queue vào Exchange)
+    @Bean
+    public Binding syncRequestBinding(Queue syncRequestQueue, TopicExchange syncRequestExchange) {
+        return BindingBuilder.bind(syncRequestQueue).to(syncRequestExchange).with(SYNC_REQUEST_ROUTING_KEY);
+    }
+    //task
 
 
 

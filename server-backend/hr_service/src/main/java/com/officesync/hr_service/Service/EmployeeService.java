@@ -218,10 +218,14 @@ public class EmployeeService {
                 String deptName = (savedEmployee.getDepartment() != null) ? savedEmployee.getDepartment().getName() : "N/A";
 
                 EmployeeSyncEvent event = new EmployeeSyncEvent(
-                    null, savedEmployee.getEmail(), savedEmployee.getFullName(),
+                    // null,
+                    savedEmployee.getId(),
+                    savedEmployee.getEmail(), savedEmployee.getFullName(),
                     savedEmployee.getPhone(), savedEmployee.getDateOfBirth(),
                     savedEmployee.getCompanyId(), savedEmployee.getRole().name(),
-                    savedEmployee.getStatus().name(), passwordToSend, deptName
+                    savedEmployee.getStatus().name(), passwordToSend, deptName,
+                    savedEmployee.getDepartment() != null ? savedEmployee.getDepartment().getId() : null 
+                    //task
                 );
                 employeeProducer.sendEmployeeCreatedEvent(event);
                 log.info("--> Đã gửi yêu cầu tạo User sang Core (Email: {}).", savedEmployee.getEmail());
@@ -413,7 +417,8 @@ public class EmployeeService {
             EmployeeSyncEvent event = new EmployeeSyncEvent(
                 savedEmployee.getId(), savedEmployee.getEmail(), savedEmployee.getFullName(),
                 savedEmployee.getPhone(), savedEmployee.getDateOfBirth(), savedEmployee.getCompanyId(),
-                savedEmployee.getRole().name(), savedEmployee.getStatus().name(), null, deptName
+                savedEmployee.getRole().name(), savedEmployee.getStatus().name(), null, deptName,
+                savedEmployee.getDepartment() != null ? savedEmployee.getDepartment().getId() : null
             );
             employeeProducer.sendEmployeeUpdatedEvent(event);
             employeeProducer.sendToAttendance(event);
@@ -816,7 +821,8 @@ public class EmployeeService {
                 emp.getId(), emp.getEmail(), emp.getFullName(),
                 emp.getPhone(), emp.getDateOfBirth(),
                 emp.getCompanyId(), emp.getRole().name(),
-                emp.getStatus().name(), null, deptName
+                emp.getStatus().name(), null, deptName,
+                emp.getDepartment() != null ? emp.getDepartment().getId() : null    //task
             );
             
             employeeProducer.sendToAttendance(syncEvent);
@@ -824,5 +830,34 @@ public class EmployeeService {
         } catch (Exception e) {
             log.error("Lỗi đồng bộ sang Attendance: {}", e.getMessage());
         }
+    }
+
+    //task
+    public void forceSyncAllDataToMQ() {
+        log.info("🚀 [HR Service] Khởi động đồng bộ toàn diện (Dạng Object)...");
+        
+        departmentRepository.findAll().forEach(dept -> {
+            DepartmentSyncEvent event = new DepartmentSyncEvent();
+            event.setEvent("DEPT_CREATED");
+            event.setDeptId(dept.getId());
+            event.setDeptName(dept.getName()); // Đảm bảo field này là deptName
+            event.setCompanyId(dept.getCompanyId());
+            event.setManagerId(dept.getManager() != null ? dept.getManager().getId() : null);
+            
+            employeeProducer.sendDepartmentEventDirect(event); // DÙNG HÀM DIRECT
+        });
+
+        employeeRepository.findAll().forEach(emp -> {
+            EmployeeSyncEvent syncEvent = new EmployeeSyncEvent(
+                emp.getId(), emp.getEmail(), emp.getFullName(),
+                emp.getPhone(), emp.getDateOfBirth(),
+                emp.getCompanyId(), emp.getRole().name(),
+                emp.getStatus().name(), 
+                null, 
+                emp.getDepartment() != null ? emp.getDepartment().getName() : "N/A",
+                emp.getDepartment() != null ? emp.getDepartment().getId() : null
+            );
+            employeeProducer.sendEmployeeCreatedEventDirect(syncEvent); // DÙNG HÀM DIRECT
+        });
     }
 }
