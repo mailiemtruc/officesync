@@ -89,9 +89,10 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         title: const Text(
           "Create Post",
           style: TextStyle(
-            color: Colors.black,
+            color: Color(0xFF2260FF),
+            fontSize: 24,
+            fontFamily: 'Inter',
             fontWeight: FontWeight.bold,
-            fontSize: 17,
           ),
         ),
         actions: [

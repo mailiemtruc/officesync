@@ -69,11 +69,14 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
           "New Group",
           style: TextStyle(
             color: Color(0xFF2260FF), // [SỬA] Màu xanh 2260FF
+            fontSize: 24,
+            fontFamily: 'Inter',
             fontWeight: FontWeight.bold,
           ),
         ),
         backgroundColor: Colors.white,
         elevation: 0,
+        centerTitle: true,
         // [SỬA] Nút Back màu 2260FF
         iconTheme: const IconThemeData(color: Color(0xFF2260FF)),
       ),

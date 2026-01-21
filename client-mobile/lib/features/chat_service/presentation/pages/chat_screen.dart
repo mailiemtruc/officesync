@@ -155,17 +155,19 @@ class _ChatScreenState extends State<ChatScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
+        iconTheme: const IconThemeData(color: Color(0xFF2260FF)),
         title: const Text(
           "Messages",
           style: TextStyle(
             color: Color(0xFF2260FF),
             fontSize: 24,
+            fontFamily: 'Inter',
             fontWeight: FontWeight.bold,
           ),
         ),
         backgroundColor: Colors.white,
         elevation: 0,
-        centerTitle: false,
+        centerTitle: true,
         actions: [
           IconButton(
             icon: Container(

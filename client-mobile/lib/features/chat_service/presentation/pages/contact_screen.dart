@@ -113,7 +113,8 @@ class _ContactScreenState extends State<ContactScreen> {
         iconTheme: const IconThemeData(color: Color(0xFF2260FF)),
         titleTextStyle: const TextStyle(
           color: Color(0xFF2260FF),
-          fontSize: 20,
+          fontSize: 24,
+          fontFamily: 'Inter',
           fontWeight: FontWeight.bold,
         ),
       ),

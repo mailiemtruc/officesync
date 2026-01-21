@@ -148,9 +148,10 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
         title: const Text(
           "Post Details",
           style: TextStyle(
-            color: AppColors.primary,
+            color: Color(0xFF2260FF),
+            fontSize: 24,
+            fontFamily: 'Inter',
             fontWeight: FontWeight.bold,
-            fontSize: 18,
           ),
         ),
       ),
