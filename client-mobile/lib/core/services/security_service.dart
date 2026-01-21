@@ -58,6 +58,17 @@ class SecurityService {
     }
   }
 
+  // 🔴 [MỚI] Hàm ngắt kết nối chủ động (Gọi khi Logout)
+  void disconnect() {
+    if (_isListening) {
+      print("🛡️ Security Service: Stopping...");
+      // Ngắt kết nối socket cụ thể của Core Service
+      WebSocketService().disconnect(url: _coreUrl);
+      // Reset cờ trạng thái để lần sau đăng nhập có thể kết nối lại
+      _isListening = false;
+    }
+  }
+
   // Hàm Logout cưỡng chế
   void _triggerGlobalLock(String message) {
     print("🔒 SECURITY ALERT: $message");
@@ -74,9 +85,11 @@ class SecurityService {
       // 1. Xóa Token
       await _storage.deleteAll();
 
-      // 2. Ngắt mọi kết nối socket
+      // 2. Gọi hàm disconnect mới để reset trạng thái
+      disconnect();
+
+      // Ngắt toàn bộ các socket khác (như HR Service, Chat...) để sạch sẽ
       WebSocketService().disconnect();
-      _isListening = false;
 
       // 3. Chuyển hướng về Login (xoá sạch history cũ)
       final navigator = navigatorKey.currentState;

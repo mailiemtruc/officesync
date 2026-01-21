@@ -19,6 +19,7 @@ import '../../data/models/employee_model.dart';
 import '../../../../core/services/websocket_service.dart';
 import 'package:shimmer/shimmer.dart';
 import '../../../../core/utils/user_update_event.dart';
+import '../../../../core/services/security_service.dart';
 
 class UserProfilePage extends StatefulWidget {
   final Map<String, dynamic> userInfo;
@@ -315,29 +316,31 @@ class _UserProfilePageState extends State<UserProfilePage> {
   // --- UI & DIALOGS ---
   Future<void> _handleLogout() async {
     try {
-      // -----------------------------------------------------------
-      // 👇 SỬA ĐOẠN NÀY: BỎ TỪ KHÓA 'await'
-      // -----------------------------------------------------------
+      // --- GIỮ NGUYÊN PHẦN XÓA TOKEN NOTIFICATION (Fire-and-forget) ---
       String? userIdStr = await _getUserIdSafe();
       if (userIdStr != null) {
         int uid = int.tryParse(userIdStr) ?? 0;
         if (uid > 0) {
-          // CÁCH MỚI: Gọi API nhưng KHÔNG CHỜ (Fire-and-forget)
-          // Nếu server sống -> Xóa tốt.
-          // Nếu server chết -> Kệ nó, in lỗi ra log thôi, không chặn đăng xuất.
           NotificationService().unregisterDevice(uid).catchError((e) {
             print("⚠️ Server Notification đang tắt, không xóa được Token: $e");
           });
-
           print("--> Đã gửi lệnh hủy Token (Không chờ phản hồi)");
         }
       }
       // -----------------------------------------------------------
 
-      // Các lệnh dưới này sẽ chạy NGAY LẬP TỨC mà không bị server làm phiền
+      // 1. Xóa Token đăng nhập trong Storage
       await _storage.deleteAll();
+
+      // 🔴 [QUAN TRỌNG - CẦN THÊM DÒNG NÀY]
+      // Gọi hàm này để reset biến _isListening = false bên trong SecurityService.
+      // Nếu thiếu, lần đăng nhập sau Socket 8080 sẽ từ chối kết nối lại!
+      SecurityService().disconnect();
+
+      // 2. Ngắt kết nối các socket khác (HR, Chat...)
       WebSocketService().disconnect();
 
+      // 3. Chuyển về màn hình Login
       if (mounted) {
         Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
       }

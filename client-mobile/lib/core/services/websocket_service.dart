@@ -62,14 +62,25 @@ class WebSocketService {
   // 2. Ngắt kết nối (Cụ thể hoặc Tất cả)
   void disconnect({String? url}) {
     if (url != null) {
-      // Ngắt 1 kết nối cụ thể (Ví dụ khi rời màn hình Chấm công)
-      _clients[url]?.deactivate();
-      _clients.remove(url);
-      if (_lastConnectedUrl == url) _lastConnectedUrl = null;
-      debugPrint("🛑 [WS] Deactivated connection: $url");
+      if (_clients.containsKey(url)) {
+        try {
+          _clients[url]?.deactivate();
+        } catch (e) {
+          debugPrint("⚠️ [WS] Error deactivating $url: $e");
+        }
+        _clients.remove(url);
+        if (_lastConnectedUrl == url) _lastConnectedUrl = null;
+        debugPrint("🛑 [WS] Deactivated connection: $url");
+      }
     } else {
       // Ngắt HẾT (Dùng khi Logout)
-      _clients.forEach((key, client) => client.deactivate());
+      _clients.forEach((url, client) {
+        try {
+          client.deactivate();
+        } catch (e) {
+          debugPrint("⚠️ [WS] Error deactivating $url: $e");
+        }
+      });
       _clients.clear();
       _lastConnectedUrl = null;
       debugPrint("🛑 [WS] Deactivated ALL connections");
