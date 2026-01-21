@@ -5,11 +5,14 @@ import '../../../../core/config/app_colors.dart';
 import 'package:officesync/features/notification_service/presentation/pages/notification_list_screen.dart';
 import 'package:officesync/features/communication_service/presentation/pages/newsfeed_screen.dart';
 import 'package:officesync/features/chat_service/presentation/pages/chat_screen.dart';
-
 import '../../../../core/api/api_client.dart';
 import '../../../task_service/data/models/task_model.dart';
 import '../../../task_service/widgets/task_detail_dialog.dart';
-import '../../../task_service/data/task_session.dart';
+import '../../../hr_service/data/datasources/employee_remote_data_source.dart';
+import '../../../hr_service/data/models/employee_model.dart';
+import '../../../../core/utils/user_update_event.dart';
+import 'dart:convert';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class StaffHomeView extends StatefulWidget {
   final int currentUserId;
@@ -19,29 +22,107 @@ class StaffHomeView extends StatefulWidget {
   State<StaffHomeView> createState() => _StaffHomeViewState();
 }
 
-class _StaffHomeViewState extends State<StaffHomeView> {
+// [MỚI] Thêm WidgetsBindingObserver để phát hiện khi app quay lại
+class _StaffHomeViewState extends State<StaffHomeView>
+    with WidgetsBindingObserver {
   bool _animate = false;
-
-  // 1. Khai báo biến quản lý dữ liệu Task
   final ApiClient api = ApiClient();
+  final EmployeeRemoteDataSource _employeeDataSource =
+      EmployeeRemoteDataSource(); // [MỚI]
+
   List<TaskModel> tasks = [];
   bool loadingTasks = true;
+  StreamSubscription? _updateSubscription;
+  // Biến lưu thông tin user
+  String _fullName = 'Loading...';
+  String _jobTitle = 'Staff';
+  String? _avatarUrl;
+
+  // [MỚI] Biến để xử lý trạng thái đang tải user info
+  bool _loadingUserInfo = true;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this); // [MỚI] Đăng ký lắng nghe
+
     Future.delayed(const Duration(milliseconds: 100), () {
       if (mounted) setState(() => _animate = true);
     });
 
-    // 2. Gọi hàm lấy dữ liệu Task khi khởi tạo
+    _fetchLatestUserInfo(); // [MỚI] Gọi hàm lấy dữ liệu từ API
     fetchTasks();
+    // [QUAN TRỌNG - MỚI] Đăng ký lắng nghe: Hễ ai gọi notify() là tôi reload ngay
+    _updateSubscription = UserUpdateEvent().onUserUpdated.listen((_) {
+      print("--> StaffHomeView: Received update signal. Reloading info...");
+      _fetchLatestUserInfo();
+    });
   }
 
-  // 3. Hàm lấy dữ liệu Task được giao cho Staff (Endpoint /mine)
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this); // [MỚI] Hủy lắng nghe
+    _updateSubscription?.cancel(); // [MỚI] Nhớ hủy lắng nghe để tránh lỗi
+    super.dispose();
+  }
+
+  // [MỚI] Hàm này chạy khi App được resume hoặc quay lại (để update Avatar nếu vừa sửa)
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _fetchLatestUserInfo();
+    }
+  }
+
+  // [QUAN TRỌNG] Hàm lấy thông tin mới nhất từ API thay vì Storage cũ
+  Future<void> _fetchLatestUserInfo() async {
+    try {
+      // 1. Lấy Tên công ty từ Storage (Login đã lưu)
+      final storage = const FlutterSecureStorage();
+      String companyName = "OfficeSync"; // Giá trị mặc định
+
+      String? userInfoStr = await storage.read(key: 'user_info');
+      if (userInfoStr != null) {
+        final data = jsonDecode(userInfoStr);
+        if (data['companyName'] != null) {
+          companyName = data['companyName'];
+        }
+      }
+
+      // 2. Lấy thông tin Avatar/Tên mới nhất từ API
+      final employees = await _employeeDataSource.getEmployees(
+        widget.currentUserId.toString(),
+      );
+
+      final currentUser = employees.firstWhere(
+        (e) => e.id == widget.currentUserId.toString(),
+        orElse: () => EmployeeModel(
+          id: widget.currentUserId.toString(),
+          fullName: 'Staff Member',
+          email: '',
+          phone: '',
+          dateOfBirth: '',
+          role: 'STAFF',
+        ),
+      );
+
+      if (mounted) {
+        setState(() {
+          _fullName = currentUser.fullName;
+          _avatarUrl = currentUser.avatarUrl;
+          _loadingUserInfo = false;
+
+          // [QUAN TRỌNG] Thay thế hiển thị Role/Dept bằng Tên công ty
+          _jobTitle = companyName;
+        });
+      }
+    } catch (e) {
+      debugPrint("Error fetching user info in Home: $e");
+    }
+  }
+
   Future<void> fetchTasks() async {
     try {
-      // Lấy danh sách task mà nhân viên này được giao thực hiện
       final resp = await api.get('${ApiClient.taskUrl}/tasks/mine');
       final List data = resp.data as List;
 
@@ -50,8 +131,6 @@ class _StaffHomeViewState extends State<StaffHomeView> {
           tasks = data
               .map((e) => TaskModel.fromJson(Map<String, dynamic>.from(e)))
               .toList();
-
-          // Sắp xếp Task mới nhất lên đầu (createdAt giảm dần)
           tasks.sort((a, b) => b.createdAt.compareTo(a.createdAt));
           loadingTasks = false;
         });
@@ -67,20 +146,25 @@ class _StaffHomeViewState extends State<StaffHomeView> {
     final width = MediaQuery.of(context).size.width;
     final isDesktop = width > 900;
 
-    return Container(
-      color: const Color(0xFFF3F5F9), // Giữ màu nền full màn hình
-      child: SafeArea(
-        // <--- THÊM WIDGET NÀY
-        bottom:
-            false, // (Tuỳ chọn) Đặt false nếu muốn nội dung tràn xuống đáy màn hình
-        child: isDesktop ? _buildDesktopLayout() : _buildMobileLayout(),
+    // [MỚI] Bọc RefreshIndicator để người dùng có thể kéo xuống cập nhật thủ công
+    return RefreshIndicator(
+      onRefresh: () async {
+        await Future.wait([_fetchLatestUserInfo(), fetchTasks()]);
+      },
+      color: AppColors.primary,
+      child: Container(
+        color: const Color(0xFFF3F5F9),
+        child: SafeArea(
+          bottom: false,
+          child: isDesktop ? _buildDesktopLayout() : _buildMobileLayout(),
+        ),
       ),
     );
   }
 
   Widget _buildMobileLayout() {
     return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
+      physics: const BouncingScrollPhysics(), // Giúp UX mượt hơn
       padding: const EdgeInsets.fromLTRB(24, 10, 24, 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -101,6 +185,7 @@ class _StaffHomeViewState extends State<StaffHomeView> {
 
   Widget _buildDesktopLayout() {
     return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(40.0),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -149,68 +234,105 @@ class _StaffHomeViewState extends State<StaffHomeView> {
     );
   }
 
+  // [SỬA] Cập nhật widget Header để hiện Avatar chuẩn và fallback đẹp
   Widget _buildHeader() {
+    final placeholderBgColor = Colors.grey[200];
+    final placeholderIconColor = Colors.grey[400];
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Row(
-          children: [
-            Container(
-              width: 55,
-              height: 55,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(18),
-                image: const DecorationImage(
-                  image: NetworkImage("https://i.pravatar.cc/150?img=11"),
-                  fit: BoxFit.cover,
+        Expanded(
+          child: Row(
+            children: [
+              // --- AVATAR SECTION ĐÃ SỬA ---
+              Container(
+                width: 55,
+                height: 55,
+                decoration: BoxDecoration(
+                  color: placeholderBgColor, // Nền xám mặc định
+                  borderRadius: BorderRadius.circular(18),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.08),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.08),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(18),
+                  child: (_avatarUrl != null && _avatarUrl!.isNotEmpty)
+                      ? Image.network(
+                          _avatarUrl!,
+                          fit: BoxFit.cover,
+                          width: 55,
+                          height: 55,
+                          // Xử lý khi link ảnh bị lỗi -> hiện icon
+                          errorBuilder: (context, error, stackTrace) {
+                            return Center(
+                              child: Icon(
+                                PhosphorIcons.user(PhosphorIconsStyle.fill),
+                                color: placeholderIconColor,
+                                size: 28,
+                              ),
+                            );
+                          },
+                        )
+                      : Center(
+                          // Khi không có avatar -> hiện icon
+                          child: Icon(
+                            PhosphorIcons.user(PhosphorIconsStyle.fill),
+                            color: placeholderIconColor,
+                            size: 28,
+                          ),
+                        ),
+                ),
               ),
-            ),
-            const SizedBox(width: 15),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
-                Text(
-                  'Hi, Nguyen Van A',
-                  style: TextStyle(
-                    color: AppColors.primary,
-                    fontSize: 18,
-                    fontFamily: 'Inter',
-                    fontWeight: FontWeight.bold,
-                  ),
+              // -----------------------------
+              const SizedBox(width: 15),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _loadingUserInfo ? 'Loading...' : 'Hi, $_fullName',
+                      style: const TextStyle(
+                        color: AppColors.primary,
+                        fontSize: 18,
+                        fontFamily: 'Inter',
+                        fontWeight: FontWeight.bold,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    // Hiển thị Phòng ban đã fix
+                    Text(
+                      _jobTitle,
+                      style: const TextStyle(
+                        color: Color(0xFF64748B),
+                        fontSize: 14,
+                        fontFamily: 'Inter',
+                        fontWeight: FontWeight.w500,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
                 ),
-                SizedBox(height: 4),
-                Text(
-                  'ABC Tech Company',
-                  style: TextStyle(
-                    color: Color(0xFF64748B),
-                    fontSize: 14,
-                    fontFamily: 'Inter',
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
         Row(
           children: [
             _buildCircleIcon(PhosphorIconsBold.bell, () {
-              // 👈 Sửa hàm bên trong này
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => NotificationListScreen(
-                    userId: widget.currentUserId, // Truyền ID vào
-                  ),
+                  builder: (context) =>
+                      NotificationListScreen(userId: widget.currentUserId),
                 ),
               );
             }),
@@ -226,6 +348,8 @@ class _StaffHomeViewState extends State<StaffHomeView> {
       ],
     );
   }
+
+  // ... (Các widget còn lại giữ nguyên code cũ của bạn) ...
 
   Widget _buildBlueCard() {
     return Container(
@@ -332,7 +456,6 @@ class _StaffHomeViewState extends State<StaffHomeView> {
         ),
         TextButton(
           onPressed: () {
-            // ✅ Điều hướng sang StaffPage
             Navigator.pushNamed(context, '/tasks', arguments: 'STAFF');
           },
           child: const Text(
@@ -379,14 +502,12 @@ class _StaffHomeViewState extends State<StaffHomeView> {
     );
   }
 
-  // 4. HIỂN THỊ 3 TASK MỚI NHẤT
   Widget _buildTaskList() {
     if (loadingTasks) {
       return const Center(
         child: CircularProgressIndicator(color: Color(0xFF2260FF)),
       );
     }
-
     if (tasks.isEmpty) {
       return const Center(
         child: Text(
@@ -395,13 +516,9 @@ class _StaffHomeViewState extends State<StaffHomeView> {
         ),
       );
     }
-
-    // LẤY 3 TASK MỚI NHẤT
     final latestTasks = tasks.take(3).toList();
-
     return Column(
       children: latestTasks.map((task) {
-        // Màu sắc theo yêu cầu của bạn
         Color statusBgColor;
         switch (task.status) {
           case TaskStatus.TODO:
@@ -411,7 +528,7 @@ class _StaffHomeViewState extends State<StaffHomeView> {
             statusBgColor = const Color(0xFFFFA322);
             break;
           default:
-            statusBgColor = const Color(0xFF4EE375); // Done / Review
+            statusBgColor = const Color(0xFF4EE375);
         }
 
         return Padding(
@@ -442,7 +559,6 @@ class _StaffHomeViewState extends State<StaffHomeView> {
     );
   }
 
-  // 5. GIAO DIỆN SLIM VỚI MÀU SẮC CHUẨN (GIỐNG ADMIN/MANAGER)
   Widget _buildTaskItem({
     required String title,
     required String status,
@@ -489,7 +605,6 @@ class _StaffHomeViewState extends State<StaffHomeView> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    // Status tag: Nền màu trạng thái, chữ trắng ffffff
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 10,

@@ -18,6 +18,7 @@ import '../../data/datasources/employee_remote_data_source.dart';
 import '../../data/models/employee_model.dart';
 import '../../../../core/services/websocket_service.dart';
 import 'package:shimmer/shimmer.dart';
+import '../../../../core/utils/user_update_event.dart';
 
 class UserProfilePage extends StatefulWidget {
   final Map<String, dynamic> userInfo;
@@ -52,18 +53,25 @@ class _UserProfilePageState extends State<UserProfilePage> {
   }
 
   // [SỬA LỖI 1] Thêm hàm này để lắng nghe thay đổi từ Dashboard (Cha) truyền xuống
+  // Tìm hàm didUpdateWidget và sửa thành như sau:
+
   @override
   void didUpdateWidget(covariant UserProfilePage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Nếu userInfo từ cha truyền vào khác với cái cũ -> Reload lại dữ liệu
+
+    // Kiểm tra xem dữ liệu từ cha (Realtime) có thay đổi không
     if (widget.userInfo != oldWidget.userInfo) {
-      print(
-        "--> UserProfilePage: Detected update from Dashboard. Reloading...",
-      );
-      setState(() {
-        // Reset lại loading để UI cập nhật
-        _isLoadingProfile = true;
-      });
+      print("--> Realtime update detected! Silently updating...");
+
+      // [FIX] XÓA HOẶC COMMENT DÒNG NÀY:
+      // setState(() {
+      //   _detailedEmployee = null;
+      // });
+
+      // Chỉ cần gọi hàm này chạy ngầm.
+      // Hàm _fetchEmployeeDetail của bạn đã có logic:
+      // "if (_detailedEmployee == null) loading = true".
+      // Vì ta không set nó về null nữa, nên loading sẽ không bật -> Không hiện Skeleton.
       _fetchEmployeeDetail();
     }
   }
@@ -243,12 +251,29 @@ class _UserProfilePageState extends State<UserProfilePage> {
         print("--> Update HR Profile success!");
         await _updateLocalUserStorage(avatarUrl);
 
-        _newsfeedApi.syncUserAvatar(avatarUrl).catchError((e) {
-          print("⚠️ Sync Newsfeed error (background): $e");
-        });
-
+        // [QUAN TRỌNG] Cập nhật ngay lập tức vào biến _detailedEmployee
+        // Để UI đổi ngay mà không cần chờ fetch lại từ server
         if (mounted) {
-          // [SỬA] Dùng CustomSnackBar báo thành công
+          setState(() {
+            // Tạo một bản sao mới của employee với avatar mới
+            // (Giả sử model của bạn không có copyWith, ta gán thủ công các trường)
+            _detailedEmployee = EmployeeModel(
+              id: _detailedEmployee!.id,
+              fullName: _detailedEmployee!.fullName,
+              email: _detailedEmployee!.email,
+              phone: _detailedEmployee!.phone,
+              dateOfBirth: _detailedEmployee!.dateOfBirth,
+              role: _detailedEmployee!.role,
+              employeeCode: _detailedEmployee!.employeeCode,
+              departmentName: _detailedEmployee!.departmentName,
+              avatarUrl: avatarUrl, // <--- CẬP NHẬT URL MỚI TẠI ĐÂY
+            );
+
+            // Xóa file local và tắt loading upload
+            _localAvatarFile = null;
+            _isUploading = false;
+          });
+
           CustomSnackBar.show(
             context,
             title: "Success",
@@ -257,15 +282,14 @@ class _UserProfilePageState extends State<UserProfilePage> {
           );
         }
 
-        // Reload data
-        await _fetchEmployeeDetail();
+        // [UPDATE] Gọi các tác vụ đồng bộ chạy NGẦM (không await để chặn UI)
+        UserUpdateEvent().notify();
+        _newsfeedApi.syncUserAvatar(avatarUrl).catchError((e) {
+          print("⚠️ Sync Newsfeed error: $e");
+        });
 
-        if (mounted) {
-          setState(() {
-            _localAvatarFile = null;
-            _isUploading = false;
-          });
-        }
+        // Vẫn gọi fetch lại để đảm bảo đồng bộ server, nhưng chạy sau và không hiện loading
+        _fetchEmployeeDetail();
       }
     } catch (e) {
       print("Error saving profile: $e");
@@ -596,17 +620,36 @@ class _HeaderSection extends StatelessWidget {
                     offset: const Offset(0, 4),
                   ),
                 ],
-                // [SỬA 1] Đổi màu nền container thành xám nhạt chuẩn
                 color: placeholderBgColor,
               ),
               child: ClipOval(
-                // Chỉ hiển thị ảnh, bỏ hoàn toàn phần loading đè lên
                 child: localImage != null
                     ? Image.file(
                         localImage!,
                         fit: BoxFit.cover,
                         width: 110,
                         height: 110,
+                        // [FIX] Thêm errorBuilder tương tự
+                        errorBuilder: (context, error, stackTrace) {
+                          if (avatarUrl != null && avatarUrl!.isNotEmpty) {
+                            return Image.network(
+                              avatarUrl!,
+                              fit: BoxFit.cover,
+                              width: 110,
+                              height: 110,
+                              errorBuilder: (_, __, ___) => Icon(
+                                PhosphorIcons.user(PhosphorIconsStyle.fill),
+                                size: 60,
+                                color: placeholderIconColor,
+                              ),
+                            );
+                          }
+                          return Icon(
+                            PhosphorIcons.user(PhosphorIconsStyle.fill),
+                            size: 60,
+                            color: placeholderIconColor,
+                          );
+                        },
                       )
                     : (avatarUrl != null && avatarUrl!.isNotEmpty)
                     ? Image.network(
@@ -614,14 +657,12 @@ class _HeaderSection extends StatelessWidget {
                         fit: BoxFit.cover,
                         width: 110,
                         height: 110,
-                        // [SỬA 1] Khi lỗi tải ảnh -> Dùng Phosphor Icon
                         errorBuilder: (ctx, err, stack) => Icon(
                           PhosphorIcons.user(PhosphorIconsStyle.fill),
                           size: 60,
                           color: placeholderIconColor,
                         ),
                       )
-                    // [SỬA 2] Khi chưa có ảnh -> Dùng Phosphor Icon
                     : Icon(
                         PhosphorIcons.user(PhosphorIconsStyle.fill),
                         size: 60,

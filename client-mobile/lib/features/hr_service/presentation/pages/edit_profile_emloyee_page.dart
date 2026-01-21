@@ -132,7 +132,19 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
   void _showDepartmentSelector() {
     if (_isCurrentUserManager) return;
 
-    if (_realDepartments.isEmpty) return;
+    // [SỬA] Thay vì return im lặng, hãy hiển thị thông báo
+    if (_realDepartments.isEmpty) {
+      CustomSnackBar.show(
+        context,
+        title: 'Missing Department',
+        message: 'No departments found. Please create a department first!',
+        isError: true,
+      );
+
+      // Thử tải lại danh sách ngầm
+      _fetchDepartments();
+      return;
+    }
 
     final items = _realDepartments
         .map(

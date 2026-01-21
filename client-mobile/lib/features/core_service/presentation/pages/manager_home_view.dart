@@ -5,42 +5,118 @@ import '../../../../core/config/app_colors.dart';
 import 'package:officesync/features/notification_service/presentation/pages/notification_list_screen.dart';
 import 'package:officesync/features/communication_service/presentation/pages/newsfeed_screen.dart';
 import 'package:officesync/features/chat_service/presentation/pages/chat_screen.dart';
-
+import 'dart:convert';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../../../core/api/api_client.dart';
 import '../../../task_service/data/models/task_model.dart';
 import '../../../task_service/widgets/task_detail_dialog.dart';
-import '../../../task_service/data/task_session.dart';
+import '../../../hr_service/data/datasources/employee_remote_data_source.dart';
+import '../../../hr_service/data/models/employee_model.dart';
+import '../../../../core/utils/user_update_event.dart';
 
 class ManagerHomeView extends StatefulWidget {
-  final int currentUserId; // 👈 Thêm dòng này
+  final int currentUserId;
   const ManagerHomeView({super.key, required this.currentUserId});
 
   @override
   State<ManagerHomeView> createState() => _ManagerHomeViewState();
 }
 
-class _ManagerHomeViewState extends State<ManagerHomeView> {
+class _ManagerHomeViewState extends State<ManagerHomeView>
+    with WidgetsBindingObserver {
   bool _animate = false;
-
-  // 1. Khai báo biến quản lý dữ liệu Task
+  StreamSubscription? _updateSubscription;
   final ApiClient api = ApiClient();
   List<TaskModel> tasks = [];
   bool loadingTasks = true;
 
+  // [MỚI] Biến User Info
+  final EmployeeRemoteDataSource _employeeDataSource =
+      EmployeeRemoteDataSource();
+  String _fullName = 'Manager';
+  String _jobTitle = 'Manager';
+  String? _avatarUrl;
+  bool _loadingUserInfo = true;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+
     Future.delayed(const Duration(milliseconds: 100), () {
       if (mounted) setState(() => _animate = true);
     });
-    // 2. Gọi hàm lấy dữ liệu Task khi khởi tạo
+
+    _fetchLatestUserInfo();
     fetchTasks();
+
+    _updateSubscription = UserUpdateEvent().onUserUpdated.listen((_) {
+      print("--> ManagerHomeView: Received update signal. Reloading info...");
+      _fetchLatestUserInfo();
+    });
   }
 
-  // 3. Hàm lấy dữ liệu Task được giao cho Manager (Endpoint /mine)
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _updateSubscription?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _fetchLatestUserInfo(); // [MỚI]
+    }
+  }
+
+  Future<void> _fetchLatestUserInfo() async {
+    try {
+      // 1. Lấy Tên công ty từ Storage
+      final storage = const FlutterSecureStorage();
+      String companyName = "OfficeSync";
+
+      String? userInfoStr = await storage.read(key: 'user_info');
+      if (userInfoStr != null) {
+        final data = jsonDecode(userInfoStr);
+        if (data['companyName'] != null) {
+          companyName = data['companyName'];
+        }
+      }
+
+      // 2. Gọi API lấy thông tin cá nhân
+      final employees = await _employeeDataSource.getEmployees(
+        widget.currentUserId.toString(),
+      );
+      final currentUser = employees.firstWhere(
+        (e) => e.id == widget.currentUserId.toString(),
+        orElse: () => EmployeeModel(
+          id: widget.currentUserId.toString(),
+          fullName: 'Manager',
+          email: '',
+          phone: '',
+          dateOfBirth: '',
+          role: 'MANAGER',
+        ),
+      );
+
+      if (mounted) {
+        setState(() {
+          _fullName = currentUser.fullName;
+          _avatarUrl = currentUser.avatarUrl;
+
+          _jobTitle = companyName;
+
+          _loadingUserInfo = false;
+        });
+      }
+    } catch (e) {
+      debugPrint("Error fetching manager info: $e");
+    }
+  }
+
   Future<void> fetchTasks() async {
     try {
-      // Lấy danh sách task mà Manager này được giao thực hiện
       final resp = await api.get('${ApiClient.taskUrl}/tasks/mine');
       final List data = resp.data as List;
 
@@ -49,8 +125,6 @@ class _ManagerHomeViewState extends State<ManagerHomeView> {
           tasks = data
               .map((e) => TaskModel.fromJson(Map<String, dynamic>.from(e)))
               .toList();
-
-          // Sắp xếp Task mới nhất lên đầu
           tasks.sort((a, b) => b.createdAt.compareTo(a.createdAt));
           loadingTasks = false;
         });
@@ -66,17 +140,23 @@ class _ManagerHomeViewState extends State<ManagerHomeView> {
     final width = MediaQuery.of(context).size.width;
     final isDesktop = width > 900;
 
-    return Container(
-      color: const Color(0xFFF3F5F9), // Giữ màu nền full màn hình
-      child: SafeArea(
-        // <--- THÊM WIDGET NÀY
-        bottom:
-            false, // (Tuỳ chọn) Đặt false nếu muốn nội dung tràn xuống đáy màn hình
-        child: isDesktop ? _buildDesktopLayout() : _buildMobileLayout(),
+    // [MỚI]
+    return RefreshIndicator(
+      onRefresh: () async {
+        await Future.wait([_fetchLatestUserInfo(), fetchTasks()]);
+      },
+      color: AppColors.primary,
+      child: Container(
+        color: const Color(0xFFF3F5F9),
+        child: SafeArea(
+          bottom: false,
+          child: isDesktop ? _buildDesktopLayout() : _buildMobileLayout(),
+        ),
       ),
     );
   }
 
+  // ... (Giữ nguyên các layout)
   Widget _buildMobileLayout() {
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
@@ -100,6 +180,7 @@ class _ManagerHomeViewState extends State<ManagerHomeView> {
 
   Widget _buildDesktopLayout() {
     return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(40.0),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -148,57 +229,87 @@ class _ManagerHomeViewState extends State<ManagerHomeView> {
     );
   }
 
+  // [SỬA] Header hiển thị thông tin thật + Avatar chuẩn
   Widget _buildHeader() {
+    final placeholderBgColor = Colors.grey[200];
+    final placeholderIconColor = Colors.grey[400];
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Row(
-          children: [
-            Container(
-              width: 55,
-              height: 55,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(18),
-                image: const DecorationImage(
-                  image: NetworkImage("https://i.pravatar.cc/150?img=60"),
-                  fit: BoxFit.cover,
+        Expanded(
+          child: Row(
+            children: [
+              Container(
+                width: 55,
+                height: 55,
+                decoration: BoxDecoration(
+                  color: placeholderBgColor,
+                  borderRadius: BorderRadius.circular(18),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.08),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.08),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(18),
+                  child: (_avatarUrl != null && _avatarUrl!.isNotEmpty)
+                      ? Image.network(
+                          _avatarUrl!,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Center(
+                            child: Icon(
+                              PhosphorIcons.user(PhosphorIconsStyle.fill),
+                              color: placeholderIconColor,
+                              size: 28,
+                            ),
+                          ),
+                        )
+                      : Center(
+                          child: Icon(
+                            PhosphorIcons.user(PhosphorIconsStyle.fill),
+                            color: placeholderIconColor,
+                            size: 28,
+                          ),
+                        ),
+                ),
               ),
-            ),
-            const SizedBox(width: 15),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
-                Text(
-                  'Hi, Nguyen Van B',
-                  style: TextStyle(
-                    color: AppColors.primary,
-                    fontSize: 18,
-                    fontFamily: 'Inter',
-                    fontWeight: FontWeight.bold,
-                  ),
+              const SizedBox(width: 15),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _loadingUserInfo ? 'Loading...' : 'Hi, $_fullName',
+                      style: const TextStyle(
+                        color: AppColors.primary,
+                        fontSize: 18,
+                        fontFamily: 'Inter',
+                        fontWeight: FontWeight.bold,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _jobTitle,
+                      style: const TextStyle(
+                        color: Color(0xFF64748B),
+                        fontSize: 14,
+                        fontFamily: 'Inter',
+                        fontWeight: FontWeight.w500,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
                 ),
-                SizedBox(height: 4),
-                Text(
-                  'Manager - ABC Tech',
-                  style: TextStyle(
-                    color: Color(0xFF64748B),
-                    fontSize: 14,
-                    fontFamily: 'Inter',
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
         Row(
           children: [
@@ -224,6 +335,7 @@ class _ManagerHomeViewState extends State<ManagerHomeView> {
     );
   }
 
+  // ... (Giữ nguyên các widget còn lại: _buildBlueCard, _buildQuickActions, _buildMyJobHeader, _buildTaskList...)
   Widget _buildBlueCard() {
     return Container(
       width: double.infinity,
@@ -321,7 +433,7 @@ class _ManagerHomeViewState extends State<ManagerHomeView> {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         const Text(
-          'Assigned Tasks', // Đã đổi tên tiêu đề cho phù hợp Manager
+          'Assigned Tasks',
           style: TextStyle(
             color: Color(0xFF1E293B),
             fontSize: 24,
@@ -331,7 +443,6 @@ class _ManagerHomeViewState extends State<ManagerHomeView> {
         ),
         TextButton(
           onPressed: () {
-            // ✅ Điều hướng sang ManagerPage
             Navigator.pushNamed(context, '/tasks', arguments: 'MANAGER');
           },
           child: const Text(
@@ -348,28 +459,21 @@ class _ManagerHomeViewState extends State<ManagerHomeView> {
     );
   }
 
-  // 4. CẬP NHẬT HIỂN THỊ 3 TASK MỚI NHẤT
   Widget _buildTaskList() {
-    if (loadingTasks) {
+    if (loadingTasks)
       return const Center(
         child: CircularProgressIndicator(color: Color(0xFF2260FF)),
       );
-    }
-
-    if (tasks.isEmpty) {
+    if (tasks.isEmpty)
       return const Center(
         child: Text(
           "No tasks assigned to you.",
           style: TextStyle(color: Colors.grey),
         ),
       );
-    }
-
     final latestTasks = tasks.take(3).toList();
-
     return Column(
       children: latestTasks.map((task) {
-        // Màu sắc theo yêu cầu
         Color statusBgColor;
         switch (task.status) {
           case TaskStatus.TODO:
@@ -379,9 +483,8 @@ class _ManagerHomeViewState extends State<ManagerHomeView> {
             statusBgColor = const Color(0xFFFFA322);
             break;
           default:
-            statusBgColor = const Color(0xFF4EE375); // Done
+            statusBgColor = const Color(0xFF4EE375);
         }
-
         return Padding(
           padding: const EdgeInsets.only(bottom: 12),
           child: _buildTaskItem(
@@ -410,7 +513,6 @@ class _ManagerHomeViewState extends State<ManagerHomeView> {
     );
   }
 
-  // 5. GIAO DIỆN SLIM VỚI MÀU SẮC CHUẨN
   Widget _buildTaskItem({
     required String title,
     required String status,

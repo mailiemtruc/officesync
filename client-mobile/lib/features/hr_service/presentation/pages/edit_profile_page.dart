@@ -11,6 +11,7 @@ import '../../domain/repositories/employee_repository_impl.dart';
 import '../../domain/repositories/employee_repository.dart';
 import '../../data/datasources/employee_remote_data_source.dart';
 import '../../../../core/utils/custom_snackbar.dart';
+import '../../../../core/utils/user_update_event.dart';
 
 class EditProfilePage extends StatefulWidget {
   final EmployeeModel user;
@@ -136,7 +137,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
           _hasUpdates = true; // Đánh dấu để reload khi back về
           _isUploadingAvatar = false; // Tắt loading
         });
-
+        UserUpdateEvent().notify();
         CustomSnackBar.show(
           context,
           title: 'Success',
@@ -190,6 +191,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
       );
 
       if (success && mounted) {
+        UserUpdateEvent().notify();
         CustomSnackBar.show(
           context,
           title: 'Success',
@@ -566,7 +568,7 @@ class _AvatarEditSection extends StatelessWidget {
           height: 110,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: placeholderBgColor, // [SỬA] Đổi từ màu xanh sang xám
+            color: placeholderBgColor,
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withOpacity(0.1),
@@ -576,13 +578,34 @@ class _AvatarEditSection extends StatelessWidget {
             ],
           ),
           child: ClipOval(
-            // [LOGIC MỚI] Ưu tiên: Local Image -> Network Image -> Icon
             child: localImage != null
                 ? Image.file(
                     localImage!,
                     fit: BoxFit.cover,
                     width: 110,
                     height: 110,
+                    // [FIX] Thêm errorBuilder để bắt lỗi khi file chưa load được
+                    errorBuilder: (context, error, stackTrace) {
+                      // Nếu lỗi load file local, thử hiển thị ảnh mạng cũ, nếu không có thì hiện Icon
+                      if (avatarUrl != null && avatarUrl!.isNotEmpty) {
+                        return Image.network(
+                          avatarUrl!,
+                          fit: BoxFit.cover,
+                          width: 110,
+                          height: 110,
+                          errorBuilder: (_, __, ___) => Icon(
+                            PhosphorIcons.user(PhosphorIconsStyle.fill),
+                            size: 60,
+                            color: placeholderIconColor,
+                          ),
+                        );
+                      }
+                      return Icon(
+                        PhosphorIcons.user(PhosphorIconsStyle.fill),
+                        size: 60,
+                        color: placeholderIconColor,
+                      );
+                    },
                   )
                 : (avatarUrl != null && avatarUrl!.isNotEmpty)
                 ? Image.network(
@@ -593,13 +616,13 @@ class _AvatarEditSection extends StatelessWidget {
                     errorBuilder: (ctx, err, stack) => Icon(
                       PhosphorIcons.user(PhosphorIconsStyle.fill),
                       size: 60,
-                      color: placeholderIconColor, // [SỬA]
+                      color: placeholderIconColor,
                     ),
                   )
                 : Icon(
                     PhosphorIcons.user(PhosphorIconsStyle.fill),
                     size: 60,
-                    color: placeholderIconColor, // [SỬA]
+                    color: placeholderIconColor,
                   ),
           ),
         ),

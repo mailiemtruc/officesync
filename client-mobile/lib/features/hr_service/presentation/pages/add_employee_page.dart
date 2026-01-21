@@ -417,13 +417,17 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
   void _showDepartmentSelector() {
     if (_isManager) return;
 
+    // [SỬA] Kiểm tra nếu danh sách rỗng thì báo lỗi rõ ràng
     if (_departments.isEmpty) {
       CustomSnackBar.show(
         context,
-        title: 'Data Unavailable',
-        message: 'Loading departments or no data available...',
-        isError: true,
+        title: 'Missing Department', // Tiêu đề rõ ràng
+        message:
+            'No departments found. Please create a department first!', // Thông báo hướng dẫn
+        isError: true, // Dùng màu đỏ cam báo động
       );
+
+      // Thử tải lại dữ liệu ngầm (phòng trường hợp mạng lag chưa tải xong)
       _initDataAndCheckPermissions();
       return;
     }
