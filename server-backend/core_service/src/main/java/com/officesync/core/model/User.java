@@ -51,7 +51,4 @@ public class User {
 
     @Column(columnDefinition = "ENUM('ACTIVE', 'LOCKED') DEFAULT 'ACTIVE'")
     private String status = "ACTIVE";
-
-    @Column(name = "current_session_id")
-    private String currentSessionId;
 }
