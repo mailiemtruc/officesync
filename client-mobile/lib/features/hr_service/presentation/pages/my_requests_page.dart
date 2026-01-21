@@ -78,13 +78,15 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
   void _initListener(String userId) {
     final topic = '/topic/user/$userId/requests';
 
+    // URL chuẩn của HR Service
+    final String hrSocketUrl = 'ws://10.0.2.2:8081/ws-hr';
+
     _unsubscribeFn = WebSocketService().subscribe(topic, (data) {
       if (!mounted) return;
 
       if (data is Map<String, dynamic>) {
         final updatedReq = RequestModel.fromJson(data);
         setState(() {
-          // Cập nhật hoặc thêm mới vào danh sách
           final index = _requests.indexWhere((r) => r.id == updatedReq.id);
           if (index != -1) {
             _requests[index] = updatedReq;
@@ -93,11 +95,11 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
           }
         });
       }
-      // Nếu là sự kiện xóa (data chỉ có id)
+      // Nếu là sự kiện xóa (data chỉ có id hoặc chuỗi "DELETE")
       else if (data is String && data == "DELETE") {
-        _fetchRequests(); // Reload lại cho chắc
+        _fetchRequests();
       }
-    });
+    }, forceUrl: hrSocketUrl);
   }
 
   void _onSearchChanged(String query) {

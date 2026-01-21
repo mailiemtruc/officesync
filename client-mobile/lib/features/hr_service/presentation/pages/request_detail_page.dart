@@ -8,15 +8,13 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
 import '../../../../core/utils/custom_snackbar.dart';
-import 'package:stomp_dart_client/stomp.dart';
-import 'package:stomp_dart_client/stomp_config.dart';
-import 'package:stomp_dart_client/stomp_frame.dart';
 import '../../../../core/config/app_colors.dart';
 import '../../data/models/request_model.dart';
 import '../../widgets/confirm_bottom_sheet.dart';
 import '../../domain/repositories/request_repository_impl.dart';
 import '../../domain/repositories/request_repository.dart';
 import '../../data/datasources/request_remote_data_source.dart';
+import '../../../../core/services/websocket_service.dart';
 
 class RequestDetailPage extends StatefulWidget {
   final RequestModel request;
@@ -34,69 +32,75 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
 
   // [LOGIC REALTIME]
   late RequestModel _currentRequest;
-  StompClient? stompClient;
+  dynamic _unsubscribeFn;
+
+  // [SỬA] Định nghĩa URL HR Service chuẩn (Raw WebSocket)
+  final String _hrSocketUrl = 'ws://10.0.2.2:8081/ws-hr';
 
   @override
   void initState() {
     super.initState();
-    _currentRequest = widget.request; // Khởi tạo dữ liệu
+    _currentRequest = widget.request;
     _repository = RequestRepositoryImpl(
       remoteDataSource: RequestRemoteDataSource(),
     );
-    _connectWebSocket(); // [MỚI]
+    _connectWebSocket();
   }
 
   void _connectWebSocket() {
-    final socketUrl = 'ws://10.0.2.2:8081/ws-hr/websocket';
+    final topic = '/topic/request/${widget.request.id}';
 
-    stompClient = StompClient(
-      config: StompConfig(
-        url: socketUrl,
-        onConnect: (StompFrame frame) {
-          print("--> [RequestDetail] Connected WS");
-          final topic = '/topic/request/${widget.request.id}';
+    // [LOGIC MỚI] Dùng WebSocketService chung
+    // forceUrl: Đảm bảo kết nối đúng tới HR Service (cổng 8081)
+    _unsubscribeFn = WebSocketService().subscribe(
+      topic,
+      (data) {
+        if (!mounted) return;
+        print("--> [RequestDetail] Received update via Shared Service");
 
-          stompClient!.subscribe(
-            destination: topic,
-            callback: (StompFrame frame) {
-              if (frame.body != null) {
-                print("--> [RequestDetail] Received: ${frame.body}");
-                final Map<String, dynamic> data = jsonDecode(frame.body!);
-                final updatedReq = RequestModel.fromJson(data);
-
-                if (mounted) {
-                  setState(() {
-                    _currentRequest = updatedReq;
-                  });
-                  if (updatedReq.status == RequestStatus.CANCELLED) {
-                    CustomSnackBar.show(
-                      context,
-                      title: "Request Cancelled",
-                      message: "This request has been cancelled.",
-                      isError: true, // Màu đỏ vì là hủy
-                    );
-                    Navigator.pop(context, true);
-                  } else {
-                    CustomSnackBar.show(
-                      context,
-                      title: "Status Updated",
-                      message: "Updated to: ${_currentRequest.status.name}",
-                      isError: _currentRequest.status == RequestStatus.REJECTED,
-                    );
-                  }
-                }
-              }
-            },
-          );
-        },
-      ),
+        // WebSocketService đã decode JSON sẵn rồi (nếu data là Map)
+        if (data is Map<String, dynamic>) {
+          final updatedReq = RequestModel.fromJson(data);
+          _handleRealtimeUpdate(updatedReq);
+        } else {
+          // Fallback nếu data chưa decode (tùy vào implement của service)
+          // Nhưng theo code service của bạn thì nó đã decode rồi.
+        }
+      },
+      forceUrl: _hrSocketUrl, // Kết nối tới HR Service
     );
-    stompClient!.activate();
+  }
+
+  void _handleRealtimeUpdate(RequestModel updatedReq) {
+    setState(() {
+      _currentRequest = updatedReq;
+    });
+
+    if (updatedReq.status == RequestStatus.CANCELLED) {
+      CustomSnackBar.show(
+        context,
+        title: "Request Cancelled",
+        message: "This request has been cancelled.",
+        isError: true,
+      );
+      Navigator.pop(context, true);
+    } else {
+      CustomSnackBar.show(
+        context,
+        title: "Status Updated",
+        message: "Updated to: ${_currentRequest.status.name}",
+        isError: _currentRequest.status == RequestStatus.REJECTED,
+      );
+    }
   }
 
   @override
   void dispose() {
-    stompClient?.deactivate(); // Ngắt kết nối khi thoát trang
+    // [QUAN TRỌNG] Hủy đăng ký khi thoát màn hình
+    if (_unsubscribeFn != null) {
+      // Gọi hàm unsubscribe trả về từ service
+      _unsubscribeFn(unsubscribeHeaders: const <String, String>{});
+    }
     super.dispose();
   }
 

@@ -18,10 +18,12 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         config.setApplicationDestinationPrefixes("/app");
     }
 
-    @Override
+   @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
-        // Flutter sẽ connect vào đường dẫn: ws://IP:8081/ws-hr
-        registry.addEndpoint("/ws-hr").setAllowedOriginPatterns("*").withSockJS();
-        registry.addEndpoint("/ws-hr").setAllowedOriginPatterns("*");
+        // [QUAN TRỌNG] Chỉ giữ lại dòng này.
+        // URL kết nối từ Flutter sẽ là: ws://IP:8081/ws-hr
+        // Đã bỏ .withSockJS()
+        registry.addEndpoint("/ws-hr")
+                .setAllowedOriginPatterns("*");
     }
 }

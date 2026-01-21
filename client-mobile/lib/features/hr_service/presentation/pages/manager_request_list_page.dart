@@ -67,7 +67,6 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
     });
   }
 
-  // Đăng ký lắng nghe từ Service chung
   Future<void> _setupSocketListener() async {
     String? userInfoStr = await _storage.read(key: 'user_info');
     if (userInfoStr != null) {
@@ -75,19 +74,19 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
       _currentCompanyId = userMap['companyId']?.toString();
     }
 
+    // URL chuẩn của HR Service
+    final String hrSocketUrl = 'ws://10.0.2.2:8081/ws-hr';
+
     if (_currentCompanyId != null) {
       final topic = '/topic/company/$_currentCompanyId/requests';
 
-      // Gọi service global
+      // [ĐÃ SỬA] Thêm tham số forceUrl
       _unsubscribeFn = WebSocketService().subscribe(topic, (data) {
         if (!mounted) return;
 
-        // [GIẢI PHÁP] Bất kể là tin nhắn NEW_REQUEST hay Update/Delete (JSON)
-        // Ta đều gọi reload lại API để đảm bảo danh sách chuẩn nhất.
-        // Việc này giúp đơn bị xóa (Deleted) tự động biến mất khỏi danh sách.
         print("--> Socket received update. Reloading list...");
         _fetchRequests(isBackgroundRefresh: true);
-      });
+      }, forceUrl: hrSocketUrl);
     }
   }
 

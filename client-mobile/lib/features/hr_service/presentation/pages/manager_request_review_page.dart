@@ -47,26 +47,33 @@ class _ManagerRequestReviewPageState extends State<ManagerRequestReviewPage> {
   void _initListener() {
     final topic = '/topic/request/${widget.request.id}';
 
-    _unsubscribeFn = WebSocketService().subscribe(topic, (data) {
-      if (!mounted) return;
+    // URL chuẩn của HR Service
+    final String hrSocketUrl = 'ws://10.0.2.2:8081/ws-hr';
 
-      if (data is Map<String, dynamic>) {
-        final updatedReq = RequestModel.fromJson(data);
-        setState(() {
-          _currentRequest = updatedReq;
-        });
+    // [ĐÃ SỬA] Thêm tham số forceUrl
+    _unsubscribeFn = WebSocketService().subscribe(
+      topic,
+      (data) {
+        if (!mounted) return;
 
-        if (updatedReq.status != RequestStatus.PENDING) {
-          // [SỬA] Dùng CustomSnackBar thông báo cập nhật trạng thái
-          CustomSnackBar.show(
-            context,
-            title: "Status Updated",
-            message: "Request status changed to ${updatedReq.status.name}",
-            isError: updatedReq.status == RequestStatus.REJECTED,
-          );
+        if (data is Map<String, dynamic>) {
+          final updatedReq = RequestModel.fromJson(data);
+          setState(() {
+            _currentRequest = updatedReq;
+          });
+
+          if (updatedReq.status != RequestStatus.PENDING) {
+            CustomSnackBar.show(
+              context,
+              title: "Status Updated",
+              message: "Request status changed to ${updatedReq.status.name}",
+              isError: updatedReq.status == RequestStatus.REJECTED,
+            );
+          }
         }
-      }
-    });
+      },
+      forceUrl: hrSocketUrl, // [QUAN TRỌNG]
+    );
   }
 
   @override

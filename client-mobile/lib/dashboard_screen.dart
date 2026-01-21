@@ -24,7 +24,7 @@ class DashboardScreen extends StatefulWidget {
 
   const DashboardScreen({super.key, required this.userInfo});
 
-  // [MỚI] Hàm static giúp các trang con có thể gọi để chuyển tab
+  // Hàm static giúp các trang con có thể gọi để chuyển tab
   static void switchTab(BuildContext context, int index) {
     final state = context.findAncestorStateOfType<_DashboardScreenState>();
     if (state != null) {
@@ -45,6 +45,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _canAccessHrAttendance = false;
   bool _isLoading = true;
 
+  // [QUAN TRỌNG] Biến lưu hàm hủy đăng ký Socket
+  dynamic _unsubscribeFn;
+
   late Map<String, dynamic> _currentUserInfo;
   final EmployeeRemoteDataSource _employeeDataSource =
       EmployeeRemoteDataSource();
@@ -55,7 +58,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _initDashboardData();
   }
 
-  // [MỚI] Hàm public để chuyển tab
+  // [SỬA LỖI] Phải hủy đăng ký khi thoát Dashboard (Logout)
+  @override
+  void dispose() {
+    if (_unsubscribeFn != null) {
+      _unsubscribeFn(unsubscribeHeaders: const <String, String>{});
+    }
+    super.dispose();
+  }
+
   void switchToTab(int index) {
     setState(() {
       _currentIndex = index;
@@ -86,11 +97,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
     } catch (_) {}
 
-    // [TỐI ƯU] Dựng khung trang ngay lập tức, không chờ check quyền
+    // Dựng khung trang ngay lập tức
     if (mounted) {
       setState(() {
         _updatePages(role);
-        // [QUAN TRỌNG] Tắt loading ngay để hiện khung UI
         _isLoading = false;
       });
     }
@@ -128,20 +138,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  // [SỬA LỖI] Logic WebSocket chuẩn: Dùng forceUrl
   void _setupRealtimePermissionListener() {
     final userId = _currentUserInfo['id'];
     if (userId == null) return;
-    final wsService = WebSocketService();
-    if (wsService.isConnected == false) {
-      wsService.connect('ws://10.0.2.2:8081/ws-hr');
-    }
 
-    wsService.subscribe('/topic/user/$userId/profile', (message) async {
-      if (message == "REFRESH_PROFILE") {
-        await Future.delayed(const Duration(milliseconds: 500));
-        _refreshUserProfileFromApi();
-      }
-    });
+    // URL chuẩn của HR Service (Port 8081)
+    final String hrSocketUrl = 'ws://10.0.2.2:8081/ws-hr';
+
+    // Dùng subscribe với forceUrl để Service tự quản lý kết nối
+    // Không cần check isConnected thủ công
+    _unsubscribeFn = WebSocketService().subscribe(
+      '/topic/user/$userId/profile',
+      (message) async {
+        // Backend gửi text: "REFRESH_PROFILE"
+        if (message.toString().contains("REFRESH_PROFILE")) {
+          print("--> [Dashboard] Received REFRESH_PROFILE signal");
+
+          // Delay nhỏ để DB phía Server kịp commit transaction
+          await Future.delayed(const Duration(milliseconds: 500));
+
+          // Gọi API lấy thông tin mới nhất
+          _refreshUserProfileFromApi();
+        }
+      },
+      forceUrl: hrSocketUrl, // [QUAN TRỌNG] Bắt buộc kết nối đúng cổng 8081
+    );
   }
 
   Future<void> _refreshUserProfileFromApi() async {
@@ -161,7 +183,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         'mobileNumber': myProfile.phone,
         'dateOfBirth': myProfile.dateOfBirth,
         'avatarUrl': myProfile.avatarUrl,
-        'token': _currentUserInfo['token'],
+        'token': _currentUserInfo['token'], // Giữ token cũ
       };
 
       await _storage.write(key: 'user_info', value: jsonEncode(newInfo));
@@ -169,8 +191,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (mounted) {
         setState(() {
           _currentUserInfo = newInfo;
+          // Rebuild lại các trang với quyền/role mới
           _updatePages(myProfile.role);
         });
+        // Check lại quyền HR (phòng khi bị tước quyền)
         _checkPermission();
       }
     } catch (e) {
@@ -182,11 +206,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _pages = [
       _buildHomeByRole(role),
       _buildMenuPage(role),
-      // [FIX] Profile Page là một phần của Stack, không phải trang push rời
+      // UserProfilePage sẽ nhận _currentUserInfo mới nhất khi hàm này được gọi
       UserProfilePage(
-        key: const PageStorageKey(
-          'UserProfilePage',
-        ), // [TỐI ƯU] Giữ trạng thái cuộn
+        key: const PageStorageKey('UserProfilePage'),
         userInfo: _currentUserInfo,
       ),
     ];
@@ -194,14 +216,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // [FIX LỖI MẤT DASHBOARD KHI LOAD]
-    // Thay vì return Scaffold loading riêng, ta return Scaffold chính
-    // và chỉ thay đổi phần body.
-
     return Scaffold(
       backgroundColor: const Color(0xFFF9F9F9),
-      // Nếu đang loading và chưa có pages -> Hiện loading
-      // Nếu đã có pages -> Hiện IndexedStack (Dù có đang loading ngầm hay không)
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : IndexedStack(index: _currentIndex, children: _pages),
@@ -215,7 +231,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         },
       ),
 
-      // [QUAN TRỌNG] Thanh điều hướng luôn hiển thị
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           boxShadow: [
@@ -283,7 +298,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildMenuPage(String role) {
-    // ... (Giữ nguyên code cũ của bạn) ...
     return SafeArea(
       child: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
@@ -332,15 +346,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 }
               },
             ),
+            const SizedBox(height: 80),
           ],
         ),
       ),
     );
   }
 
-  // ... (Giữ nguyên các hàm _buildMenuItem, _buildSuperAdminMenu, v.v.) ...
-
-  // Chỉ cần thêm đoạn code này vào chỗ nào bạn copy thiếu
   Widget _buildSuperAdminMenu(
     BuildContext context,
     BoxConstraints constraints,
@@ -535,7 +547,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   String _getDisplayRole(String rawRole) {
-    // ... (Giữ nguyên)
     switch (rawRole) {
       case 'SUPER_ADMIN':
         return 'ADMIN';
@@ -551,7 +562,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 }
 
-// ... (Giữ nguyên phần class SmartAiFab)
 class SmartAiFab extends StatefulWidget {
   final VoidCallback onPressed;
   const SmartAiFab({super.key, required this.onPressed});
@@ -593,7 +603,6 @@ class _SmartAiFabState extends State<SmartAiFab> with TickerProviderStateMixin {
   }
 
   void _scheduleMessageLoop() async {
-    // ... (Giữ nguyên logic animation AI của bạn)
     await Future.delayed(const Duration(seconds: 2));
     if (!mounted) return;
     setState(() {
@@ -627,7 +636,6 @@ class _SmartAiFabState extends State<SmartAiFab> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    // ... (Giữ nguyên UI SmartAiFab của bạn)
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.end,

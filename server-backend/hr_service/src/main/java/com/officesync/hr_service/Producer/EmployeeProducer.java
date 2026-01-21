@@ -147,44 +147,55 @@ public class EmployeeProducer {
         }
     }
 
-    //task
-    // 1. Gửi TẠO MỚI (Dạng Object trực tiếp)
+   // 1. Gửi TẠO MỚI (SỬA LẠI: Object -> String JSON)
     public void sendEmployeeCreatedEventDirect(EmployeeSyncEvent event) {
         try {
-            log.info("--> [RabbitMQ-Sync] Gửi Object tạo User: {}", event.getEmail());
-            // Gửi trực tiếp Object thay vì String JSON
+            log.info("--> [RabbitMQ-Sync] Gửi JSON tạo User: {}", event.getEmail());
+            
+            // [FIX] Convert sang String JSON
+            String jsonMessage = objectMapper.writeValueAsString(event);
+
             rabbitTemplate.convertAndSend(
                 RabbitMQConfig.EMPLOYEE_EXCHANGE,
                 RabbitMQConfig.EMPLOYEE_ROUTING_KEY,
-                event 
+                jsonMessage // Gửi String thay vì Object
             );
         } catch (Exception e) {
             log.error("Lỗi gửi Object Create: {}", e.getMessage());
         }
     }
 
-    // 2. Gửi CẬP NHẬT (Dạng Object trực tiếp)
+    // 2. Gửi CẬP NHẬT (SỬA LẠI: Object -> String JSON)
     public void sendEmployeeUpdatedEventDirect(EmployeeSyncEvent event) {
         try {
-            log.info("--> [RabbitMQ-Sync] Gửi Object cập nhật User: {}", event.getEmail());
+            log.info("--> [RabbitMQ-Sync] Gửi JSON cập nhật User: {}", event.getEmail());
+            
+            // [FIX] Convert sang String JSON
+            String jsonMessage = objectMapper.writeValueAsString(event);
+
             rabbitTemplate.convertAndSend(
                 RabbitMQConfig.EMPLOYEE_EXCHANGE,
                 RabbitMQConfig.EMPLOYEE_UPDATE_ROUTING_KEY,
-                event
+                jsonMessage // Gửi String thay vì Object
             );
         } catch (Exception e) {
             log.error("Lỗi gửi Object Update: {}", e.getMessage());
         }
     }
 
-    // 3. Gửi PHÒNG BAN (Dạng Object trực tiếp cho Chat & Task)
+    // 3. Gửi PHÒNG BAN (SỬA LẠI: Object -> String JSON cho đồng bộ)
     public void sendDepartmentEventDirect(DepartmentSyncEvent event) {
         try {
-            log.info("--> [RabbitMQ-Sync] Gửi Object Department: {}", event.getEvent());
+            log.info("--> [RabbitMQ-Sync] Gửi JSON Department: {}", event.getEvent());
+            
+            // [FIX] Nếu bên Chat/Task nhận String thì phải convert, nếu nhận Object thì giữ nguyên.
+            // Tuy nhiên để an toàn và đồng bộ với phong cách code trên, nên chuyển thành JSON String.
+            String jsonMessage = objectMapper.writeValueAsString(event);
+
             rabbitTemplate.convertAndSend(
                 RabbitMQConfig.HR_EXCHANGE,
                 RabbitMQConfig.HR_ROUTING_KEY,
-                event 
+                jsonMessage 
             );
         } catch (Exception e) {
             log.error("Lỗi gửi Object Department: {}", e.getMessage());

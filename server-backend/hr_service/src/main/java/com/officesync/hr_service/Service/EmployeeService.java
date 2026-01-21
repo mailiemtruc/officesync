@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.officesync.hr_service.Config.SnowflakeIdGenerator;
+import com.officesync.hr_service.DTO.DepartmentSyncEvent;
 import com.officesync.hr_service.DTO.EmployeeSyncEvent;
 import com.officesync.hr_service.DTO.NotificationEvent;
 import com.officesync.hr_service.DTO.UserCreatedEvent;
@@ -34,7 +35,6 @@ import com.officesync.hr_service.Repository.DepartmentRepository;
 import com.officesync.hr_service.Repository.EmployeeRepository;
 import com.officesync.hr_service.Repository.RequestAuditLogRepository;
 import com.officesync.hr_service.Repository.RequestRepository;
-import com.officesync.hr_service.DTO.DepartmentSyncEvent;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -249,14 +249,14 @@ public class EmployeeService {
                 .orElseThrow(() -> new RuntimeException("Employee not found"));
         
 
-        // Lấy thông tin cũ để xử lý cache
+        // Lấy thông tin cũ để xử lý cache và so sánh Role
         Long oldDeptId = (targetEmployee.getDepartment() != null) ? targetEmployee.getDepartment().getId() : null;
+        EmployeeRole oldRole = targetEmployee.getRole(); // <-- LƯU ROLE CŨ
         
         // [FIX] Xác định xem có phải tự sửa chính mình không
         boolean isSelfUpdate = updater.getId().equals(targetEmployee.getId());
 
         // 2. Permission Check
-        // [SỬA LẠI LOGIC CHẶN STAFF]
         if (updater.getRole() == EmployeeRole.STAFF && !isSelfUpdate) {
             throw new RuntimeException("Truy cập bị từ chối: Nhân viên không được phép sửa thông tin người khác.");
         }
@@ -277,7 +277,6 @@ public class EmployeeService {
             }
         }
 
-        EmployeeRole oldRole = targetEmployee.getRole();
         Department oldDepartment = targetEmployee.getDepartment();
 
         // 3. Update Fields
@@ -320,6 +319,7 @@ public class EmployeeService {
         }
 
         // 5. Logic Sync Manager
+        String previousManagedDeptName = null; // [FIX] Biến lưu tên phòng cũ nếu họ là quản lý
         EmployeeRole newRole = targetEmployee.getRole();
         Department newDepartment = targetEmployee.getDepartment();
 
@@ -331,6 +331,7 @@ public class EmployeeService {
             if (isDemoted || isTransferred || isLeftDept) {
                 if (oldDepartment != null && oldDepartment.getManager() != null 
                         && oldDepartment.getManager().getId().equals(targetEmployee.getId())) {
+                    previousManagedDeptName = oldDepartment.getName(); // [FIX] Lưu tên phòng cũ
                     oldDepartment.setManager(null);
                     departmentRepository.save(oldDepartment);
                 }
@@ -348,13 +349,11 @@ public class EmployeeService {
         Employee savedEmployee = employeeRepository.save(targetEmployee);
 
         // [FIX] Xử lý xóa Cache Thủ Công
-        // Xóa cache chi tiết nhân viên
         try {
             var detailCache = cacheManager.getCache("employee_detail");
             if (detailCache != null) detailCache.evict(id);
         } catch (Exception e) {}
 
-        // Xóa cache phòng cũ và mới
         evictDepartmentCache(oldDeptId);
         if (savedEmployee.getDepartment() != null) {
             Long newDeptId = savedEmployee.getDepartment().getId();
@@ -362,25 +361,51 @@ public class EmployeeService {
                 evictDepartmentCache(newDeptId);
             }
         }
-        
-        // [QUAN TRỌNG] Xóa cache list công ty (nếu đổi status/tên/role...)
         evictCompanyCache(savedEmployee.getCompanyId());
 
         // 7. Thông báo & Event
         Long currentDeptId = (savedEmployee.getDepartment() != null) ? savedEmployee.getDepartment().getId() : null;
         String currentDeptName = (savedEmployee.getDepartment() != null) ? savedEmployee.getDepartment().getName() : "Unassigned";
          
-        if (!Objects.equals(oldDeptId, currentDeptId)) {
-            String title = "Department Transfer";
-            String body = "You have been transferred to department: " + currentDeptName;
-            if (currentDeptId == null) {
-                body = "You have been removed from department " + ((oldDepartment != null) ? oldDepartment.getName() : "Unassigned");
+        // --- [NEW] NOTIFICATION CHO ROLE CHANGE (Thăng chức / Giáng chức) ---
+        if (oldRole != savedEmployee.getRole()) {
+            String title = "Role Update";
+            String body = "Your role has been updated to: " + savedEmployee.getRole().name();
+            String deptNameForNoti = (savedEmployee.getDepartment() != null) ? savedEmployee.getDepartment().getName() : "your department";
+
+            // Trường hợp 1: Được thăng chức lên Manager
+            if (savedEmployee.getRole() == EmployeeRole.MANAGER) {
+                title = "Manager Appointment";
+                body = "Congratulations! You have been appointed as the Manager of " + deptNameForNoti;
+            } 
+            // Trường hợp 2: Bị bãi nhiệm Manager (Xuống chức)
+            else if (oldRole == EmployeeRole.MANAGER) {
+                title = "Manager Role Ended";
+                body = "You are no longer the Manager of " + deptNameForNoti + ". Current role: " + savedEmployee.getRole().name() + ".";
             }
+
+            // Gửi thông báo
             sendNotification(savedEmployee, title, body);
-            // --- [BẮT ĐẦU ĐOẠN CẦN THÊM] ---
-            // Đồng bộ sang Chat Service (Rời nhóm cũ -> Vào nhóm mới)
+        }
+        // -------------------------------------------------------------------
+
+        if (!Objects.equals(oldDeptId, currentDeptId)) {
+            // [FIX] Kiểm tra nếu là Manager chuyển phòng -> Gửi thông báo Reassignment
+            if (savedEmployee.getRole() == EmployeeRole.MANAGER && previousManagedDeptName != null) {
+                sendNotification(savedEmployee, "Manager Reassignment", 
+                    "You have been reassigned from Manager of " + previousManagedDeptName + " to Manager of " + currentDeptName + ".");
+            } else {
+                // Logic cũ: Thông báo chuyển phòng bình thường
+                String title = "Department Transfer";
+                String body = "You have been transferred to department: " + currentDeptName;
+                if (currentDeptId == null) {
+                    body = "You have been removed from department " + ((oldDepartment != null) ? oldDepartment.getName() : "Unassigned");
+                }
+                sendNotification(savedEmployee, title, body);
+            }
+
+            // Đồng bộ Chat Service
             try {
-                // A. Nếu trước đó CÓ phòng -> Bắn lệnh RỜI nhóm cũ
                 if (oldDeptId != null) {
                     DepartmentSyncEvent removeEvent = new DepartmentSyncEvent();
                     removeEvent.setEvent(DepartmentSyncEvent.ACTION_REMOVE_MEMBER);
@@ -390,7 +415,6 @@ public class EmployeeService {
                     employeeProducer.sendDepartmentEvent(removeEvent);
                 }
 
-                // B. Nếu bây giờ CÓ phòng -> Bắn lệnh VÀO nhóm mới
                 if (currentDeptId != null) {
                     DepartmentSyncEvent addEvent = new DepartmentSyncEvent();
                     addEvent.setEvent(DepartmentSyncEvent.ACTION_ADD_MEMBER);
@@ -402,7 +426,6 @@ public class EmployeeService {
             } catch (Exception e) {
                 log.error("⚠️ Lỗi đồng bộ Chat: {}", e.getMessage());
             }
-            // --- [KẾT THÚC ĐOẠN CẦN THÊM] ---
         }
         
         // Socket Refresh Profile
@@ -428,7 +451,6 @@ public class EmployeeService {
 
         return savedEmployee;
     }
-
     // =================================================================
     // 3. DELETE EMPLOYEE
     // =================================================================

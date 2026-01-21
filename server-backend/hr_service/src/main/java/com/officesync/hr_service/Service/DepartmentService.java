@@ -122,10 +122,13 @@ public class DepartmentService {
                 throw new RuntimeException("LỖI BẢO MẬT: Nhân viên này không thuộc công ty của bạn!");
             }
 
+            // [FIX LOGIC THÔNG BÁO] Lưu tên phòng ban cũ nếu họ đang làm quản lý ở đó
+            String previousManagedDeptName = null;
             Optional<Department> oldManagedDeptOpt = departmentRepository.findByManagerId(managerId);
             if (oldManagedDeptOpt.isPresent()) {
                 Department oldDept = oldManagedDeptOpt.get();
                 if (!oldDept.getId().equals(savedDept.getId())) {
+                    previousManagedDeptName = oldDept.getName(); // <-- Lưu tên phòng cũ
                     oldDept.setManager(null);
                     departmentRepository.saveAndFlush(oldDept);
                 }
@@ -141,8 +144,16 @@ public class DepartmentService {
             syncEmployeeToCore(newManager);
             savedDept.setManager(newManager);
             
-            sendNotification(newManager, "Manager Appointment", 
-                "Congratulations! You have been appointed as the Manager of " + savedDept.getName());
+            // [FIX] Kiểm tra để gửi thông báo phù hợp
+            if (previousManagedDeptName != null) {
+                // Trường hợp chuyển từ quản lý phòng này sang phòng khác
+                sendNotification(newManager, "Manager Reassignment", 
+                    "You have been reassigned from Manager of " + previousManagedDeptName + " to Manager of " + savedDept.getName() + ".");
+            } else {
+                // Trường hợp bổ nhiệm mới
+                sendNotification(newManager, "Manager Appointment", 
+                    "Congratulations! You have been appointed as the Manager of " + savedDept.getName());
+            }
         }
 
         // 4. Xử lý Members
@@ -184,22 +195,22 @@ public class DepartmentService {
         // [FIX] Xóa cache thủ công
         evictCompanyStructureCache(companyId);
         evictDepartmentMembersCache(finalDept.getId());
-//CHat ---------------------------------------------------
-        try {
-        DepartmentSyncEvent event = new DepartmentSyncEvent();
-        event.setEvent(DepartmentSyncEvent.ACTION_CREATE);
-        event.setDeptId(savedDept.getId());
-        event.setDeptName(savedDept.getName());
-        event.setManagerId(managerId);
-        event.setCompanyId(creator.getCompanyId());
-        event.setMemberIds(memberIds); // Gửi danh sách member ban đầu
 
-        // Gọi Producer bắn sự kiện
-        employeeProducer.sendDepartmentEvent(event);
-    } catch (Exception e) {
-        log.error("⚠️ Lỗi gửi sang Chat: {}", e.getMessage());
-    }
-    // ---------------------------------------------------
+        // CHat ---------------------------------------------------
+        try {
+            DepartmentSyncEvent event = new DepartmentSyncEvent();
+            event.setEvent(DepartmentSyncEvent.ACTION_CREATE);
+            event.setDeptId(savedDept.getId());
+            event.setDeptName(savedDept.getName());
+            event.setManagerId(managerId);
+            event.setCompanyId(creator.getCompanyId());
+            event.setMemberIds(memberIds); 
+
+            employeeProducer.sendDepartmentEvent(event);
+        } catch (Exception e) {
+            log.error("⚠️ Lỗi gửi sang Chat: {}", e.getMessage());
+        }
+        // ---------------------------------------------------
         return finalDept;
     }
 
@@ -227,7 +238,7 @@ public class DepartmentService {
             boolean isDifferentManager = currentDept.getManager() == null || !currentDept.getManager().getId().equals(managerId);
 
             if (isDifferentManager) {
-                // Manager cũ
+                // A. XỬ LÝ MANAGER CŨ CỦA PHÒNG NÀY (Bị bãi nhiệm/Xuống chức)
                 Employee oldManager = currentDept.getManager();
                 if (oldManager != null) {
                     oldManager.setRole(EmployeeRole.STAFF);
@@ -238,7 +249,7 @@ public class DepartmentService {
                         "You are no longer the Manager of " + currentDept.getName() + ". Current role: Staff.");
                 }
 
-                // Manager mới
+                // B. XỬ LÝ MANAGER MỚI (Được bổ nhiệm hoặc chuyển từ nơi khác sang)
                 Employee newManager = employeeRepository.findById(managerId)
                         .orElseThrow(() -> new RuntimeException("Manager not found"));
 
@@ -246,10 +257,13 @@ public class DepartmentService {
                     throw new RuntimeException("LỖI BẢO MẬT: Nhân viên được chọn không thuộc công ty này!");
                 }
 
+                // [FIX LOGIC THÔNG BÁO] Kiểm tra xem Manager mới này có đang quản lý phòng nào khác không
+                String previousManagedDeptName = null;
                 Optional<Department> oldManagedDeptOpt = departmentRepository.findByManagerId(managerId);
                 if (oldManagedDeptOpt.isPresent()) {
                     Department oldDept = oldManagedDeptOpt.get();
                     if (!oldDept.getId().equals(deptId)) {
+                        previousManagedDeptName = oldDept.getName(); // <-- Lưu tên phòng cũ
                         oldDept.setManager(null);
                         departmentRepository.saveAndFlush(oldDept);
                     }
@@ -265,11 +279,19 @@ public class DepartmentService {
                 sendProfileRefreshSocket(newManager.getId());
                 currentDept.setManager(newManager);
                 
-                sendNotification(newManager, "Manager Appointment", 
-                    "Congratulations! You have been appointed as the Manager of " + currentDept.getName());
+                // [FIX] Gửi thông báo theo ngữ cảnh
+                if (previousManagedDeptName != null) {
+                    // Nếu trước đó họ là quản lý phòng khác -> Thông báo điều chuyển
+                    sendNotification(newManager, "Manager Reassignment", 
+                        "You have been reassigned from Manager of " + previousManagedDeptName + " to Manager of " + currentDept.getName() + ".");
+                } else {
+                    // Nếu mới được bổ nhiệm -> Chúc mừng
+                    sendNotification(newManager, "Manager Appointment", 
+                        "Congratulations! You have been appointed as the Manager of " + currentDept.getName());
+                }
             }
         } else {
-            // Bãi nhiệm
+            // C. TRƯỜNG HỢP GỠ MANAGER (Không chọn ai làm quản lý)
             if (currentDept.getManager() != null) {
                 Employee oldManager = currentDept.getManager();
                 oldManager.setRole(EmployeeRole.STAFF);
