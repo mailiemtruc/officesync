@@ -7,6 +7,8 @@ import 'models/notification_model.dart';
 import '../../main.dart';
 // 👇 [THÊM 2] Import các màn hình bạn muốn nhảy tới
 import 'package:officesync/features/chat_service/presentation/pages/chat_detail_screen.dart';
+import 'package:officesync/features/communication_service/data/newsfeed_api.dart'; // ✅ Import API
+import 'package:officesync/features/communication_service/presentation/pages/post_detail_screen.dart'; // ✅ Import màn hình chi tiết
 // import '../task/presentation/pages/task_detail_screen.dart'; // Sau này mở cái này
 // import '../hr/presentation/pages/request_detail_screen.dart'; // Sau này mở cái này
 
@@ -73,37 +75,62 @@ class NotificationService {
   }
 
   // 👇 [THÊM 5] HÀM ĐIỀU HƯỚNG THÔNG MINH (SWITCH CASE)
-  void _handleMessageClick(RemoteMessage message) {
+  Future<void> _handleMessageClick(RemoteMessage message) async {
     final data = message.data;
     // Backend gửi: .putData("type", "CHAT") .putData("referenceId", "123")
     String? type = data['type'];
     String? idStr = data['referenceId'];
 
     // Tiêu đề thông báo (để làm tên màn hình nếu cần)
-    String title = message.notification?.title ?? "Chat";
+    String title = message.notification?.title ?? "Thông báo";
 
     print("👆 Người dùng bấm thông báo: Type=$type, ID=$idStr");
 
     if (type == null || idStr == null) return;
-    int id = int.parse(idStr);
+
+    // Parse ID an toàn (tránh lỗi crash nếu idStr không phải số)
+    int id = int.tryParse(idStr) ?? 0;
+    if (id == 0) return;
 
     // Dùng switch case để chia luồng
     switch (type) {
+      // --- TRƯỜNG HỢP 1: CHAT ---
       case 'CHAT':
-        // Dùng navigatorKey để đẩy màn hình mới vào
         navigatorKey.currentState?.push(
           MaterialPageRoute(
             builder: (_) => ChatDetailScreen(
               roomId: id,
-              chatName: title, // Lấy tạm title làm tên người chat
-              // Các tham số khác để mặc định hoặc null
+              chatName: title, // Lấy tên người gửi làm tên Chat
             ),
           ),
         );
         break;
 
+      // --- TRƯỜNG HỢP 2: NEWSFEED (Bài mới / Bình luận / Thả tim) ---
+      case 'ANNOUNCEMENT': // Sếp đăng bài
+      case 'COMMENT': // Có người bình luận
+      case 'REACTION': // Có người thả tim (nếu muốn)
+        print("➡️ Đang tải bài viết ID: $id để mở...");
+
+        try {
+          // 1. Gọi API lấy thông tin chi tiết bài viết
+          final post = await NewsfeedApi().getPostById(id);
+
+          // 2. Nếu lấy được thì mở màn hình Chi tiết
+          if (post != null) {
+            navigatorKey.currentState?.push(
+              MaterialPageRoute(builder: (_) => PostDetailScreen(post: post)),
+            );
+          } else {
+            print("❌ Không tìm thấy bài viết (có thể đã bị xóa)");
+          }
+        } catch (e) {
+          print("❌ Lỗi khi mở bài viết từ thông báo: $e");
+        }
+        break;
+
+      // --- CÁC TRƯỜNG HỢP KHÁC ---
       case 'TASK':
-        // Ví dụ cho tương lai
         print("➡️ Đang mở Task ID: $id");
         // navigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => TaskDetailScreen(taskId: id)));
         break;

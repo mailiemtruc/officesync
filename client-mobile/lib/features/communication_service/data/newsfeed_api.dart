@@ -154,4 +154,20 @@ class NewsfeedApi {
       print("Lỗi sync avatar: $e");
     }
   }
+
+  Future<PostModel?> getPostById(int postId) async {
+    try {
+      final headers = await _getHeaders();
+      final url = "$baseUrl/$postId";
+      final response = await http.get(Uri.parse(url), headers: headers);
+
+      if (response.statusCode == 200) {
+        final body = jsonDecode(utf8.decode(response.bodyBytes));
+        return PostModel.fromJson(body);
+      }
+    } catch (e) {
+      print("Lỗi lấy bài viết: $e");
+    }
+    return null;
+  }
 }

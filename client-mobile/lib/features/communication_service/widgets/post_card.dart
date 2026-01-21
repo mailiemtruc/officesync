@@ -17,6 +17,7 @@ class PostCard extends StatefulWidget {
 class _PostCardState extends State<PostCard> {
   late bool _isLiked;
   late int _reactionCount;
+  late int _commentCount;
   final _api = NewsfeedApi();
 
   @override
@@ -24,6 +25,19 @@ class _PostCardState extends State<PostCard> {
     super.initState();
     _isLiked = widget.post.myReaction != null;
     _reactionCount = widget.post.reactionCount;
+  }
+
+  @override
+  void didUpdateWidget(covariant PostCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Nếu ID bài viết thay đổi (tức là cell này đang hiển thị một bài khác)
+    // thì phải reset lại trạng thái Like/Count theo bài mới đó.
+    if (widget.post.id != oldWidget.post.id) {
+      setState(() {
+        _isLiked = widget.post.myReaction != null;
+        _reactionCount = widget.post.reactionCount;
+      });
+    }
   }
 
   void _handleLike() {

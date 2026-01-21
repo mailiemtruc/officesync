@@ -84,13 +84,12 @@ class _NewsfeedScreenState extends State<NewsfeedScreen> {
 
   // 🔴 THAY ĐỔI 2: Logic Socket Real-time
   void _connectSocket() async {
-    // Lấy companyId từ bộ nhớ
+    // 1. Lấy companyId từ bộ nhớ (giữ nguyên logic cũ)
     String? userInfoStr = await _storage.read(key: 'user_info');
     int myCompanyId = 1;
 
     if (userInfoStr != null) {
       final data = jsonDecode(userInfoStr);
-      // Parse an toàn: Đôi khi json trả về String, đôi khi Int
       myCompanyId = int.tryParse(data['companyId'].toString()) ?? 1;
     }
 
@@ -98,28 +97,120 @@ class _NewsfeedScreenState extends State<NewsfeedScreen> {
 
     SocketService().connect(
       onConnected: () {
-        // Subscribe kênh công ty
-        SocketService().subscribeToCompany(myCompanyId, (newPostJson) {
-          print("🔔 SOCKET NHẬN BÀI MỚI: ${newPostJson['content']}");
+        // 2. Subscribe kênh công ty
+        SocketService().subscribeToCompany(myCompanyId, (data) {
+          print("🔔 SOCKET DATA: $data");
 
-          // Convert JSON sang Model
-          PostModel newPost = PostModel.fromJson(newPostJson);
+          // ✅ TRƯỜNG HỢP 1: UPDATE SỐ LƯỢNG (Tim/Comment)
+          // Backend gửi: {type: "UPDATE_COUNTS", postId: 1, reactionCount: 5, ...}
+          if (data['type'] == 'UPDATE_COUNTS') {
+            int postId = data['postId'];
+            int rCount = data['reactionCount'];
+            int cCount = data['commentCount'];
 
-          if (mounted) {
-            setState(() {
-              // ✅ KỸ THUẬT QUAN TRỌNG: Chèn bài mới vào ĐẦU danh sách (index 0)
-              _posts.insert(0, newPost);
-            });
+            // Tìm bài viết trong list đang hiển thị để update số
+            int index = _posts.indexWhere((p) => p.id == postId);
+            if (index != -1) {
+              if (mounted) {
+                setState(() {
+                  // Copy bài viết cũ và thay số liệu mới vào
+                  _posts[index] = _posts[index].copyWith(
+                    reactionCount: rCount,
+                    commentCount: cCount,
+                  );
+                });
+              }
+            }
+          }
+          // ✅ TRƯỜNG HỢP 2: CÓ BÀI VIẾT MỚI
+          // Backend gửi: {id: 10, content: "Hello", ...}
+          else {
+            try {
+              PostModel newPost = PostModel.fromJson(data);
+              if (mounted) {
+                setState(() {
+                  _posts.insert(0, newPost);
+                });
 
-            // (Tùy chọn) Hiện thông báo nhỏ bên dưới
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text("${newPost.authorName} just posted a new post"),
-                backgroundColor: Colors.blueAccent,
-                behavior: SnackBarBehavior.floating,
-                duration: const Duration(seconds: 2),
-              ),
-            );
+                // 👇👇👇 THAY TOÀN BỘ ĐOẠN ScaffoldMessenger CŨ BẰNG ĐOẠN NÀY 👇👇👇
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF10B981), // Màu xanh Emerald đẹp
+                        borderRadius: BorderRadius.circular(16), // Bo tròn góc
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 8,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          // Icon Check tròn
+                          Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 2),
+                            ),
+                            child: const Icon(
+                              Icons.check,
+                              color: Colors.white,
+                              size: 16,
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+
+                          // Nội dung chữ
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Text(
+                                  "New Post",
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  "From ${newPost.authorName}",
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 13,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    behavior: SnackBarBehavior.floating, // Nổi lên trên
+                    backgroundColor:
+                        Colors.transparent, // Nền trong suốt để hiện bo góc
+                    elevation: 0, // Tắt bóng mặc định
+                    margin: const EdgeInsets.all(20), // Cách lề màn hình
+                    duration: const Duration(seconds: 3),
+                  ),
+                );
+                // 👆👆👆 KẾT THÚC ĐOẠN CODE MỚI 👆👆👆
+              }
+            } catch (e) {
+              print("Lỗi parse bài viết socket: $e");
+            }
           }
         });
       },
@@ -225,6 +316,7 @@ class _NewsfeedScreenState extends State<NewsfeedScreen> {
                       itemCount: _posts.length,
                       itemBuilder: (context, index) {
                         return PostCard(
+                          key: ValueKey(_posts[index].id),
                           post: _posts[index],
                           onTap: () async {
                             final result = await Navigator.push(

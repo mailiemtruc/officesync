@@ -8,9 +8,12 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+
+import java.util.HashMap;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import java.util.Map;
 
 @Service
 public class NewsfeedService {
@@ -107,6 +110,8 @@ public class NewsfeedService {
     }
 
     // 3. Thả tim
+    public record FeedUpdatePayload(String type, Long postId, int reactionCount, int commentCount) {}
+    public record ReactionUpdatePayload(String type, Long postId, int reactionCount) {}
     public void reactToPost(Long postId, Long userId, ReactionType type) {
         Optional<PostReaction> existing = reactionRepository.findByPostIdAndUserId(postId, userId);
 
@@ -125,8 +130,24 @@ public class NewsfeedService {
             newReaction.setReactionType(type);
             reactionRepository.save(newReaction);
         }
-    }
+ try {
+            int newReactionCount = reactionRepository.countByPostId(postId);
+            int newCommentCount = commentRepository.countByPostId(postId);
+            
+            // 1. Bắn tin cập nhật vào trang Chi tiết (Detail)
+            ReactionUpdatePayload detailPayload = new ReactionUpdatePayload("REACTION_UPDATE", postId, newReactionCount);
+            messagingTemplate.convertAndSend("/topic/post/" + postId, detailPayload);
 
+            // 2. Bắn tin cập nhật ra trang Danh sách (Newsfeed)
+            Post post = postRepository.findById(postId).orElse(null);
+            if (post != null) {
+                FeedUpdatePayload listPayload = new FeedUpdatePayload("UPDATE_COUNTS", postId, newReactionCount, newCommentCount);
+                messagingTemplate.convertAndSend("/topic/company/" + post.getCompanyId(), listPayload);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
 
 // 1. Lấy danh sách comment (Đã sửa để luôn hiện Avatar mới nhất)
     public List<CommentResponseDTO> getComments(Long postId) {
@@ -177,18 +198,23 @@ public class NewsfeedService {
 
         // ✅ [MỚI] BẮN SOCKET REAL-TIME
         // Gửi comment mới vào kênh: /topic/post/{postId}
-        try {
+       try {
+            // 1. Bắn comment mới vào trang Chi tiết
             CommentResponseDTO commentDTO = convertToCommentResponseDTO(savedComment, user);
-            String destination = "/topic/post/" + postId;
-            messagingTemplate.convertAndSend(destination, commentDTO);
-            System.out.println("--> [WebSocket] Đã bắn comment mới vào kênh: " + destination);
-            
-            // Trả về DTO này luôn để Controller trả về Frontend (đỡ phải convert 2 lần)
-            // (Nhưng logic dưới vẫn cần chạy Notification nên ta cứ để nó chạy tiếp)
+            messagingTemplate.convertAndSend("/topic/post/" + postId, commentDTO);
+
+            // 2. Bắn tin cập nhật số lượng ra trang Danh sách
+            Post post = postRepository.findById(postId).orElse(null);
+            if (post != null) {
+                int rCount = reactionRepository.countByPostId(postId);
+                int cCount = commentRepository.countByPostId(postId);
+                
+                FeedUpdatePayload listPayload = new FeedUpdatePayload("UPDATE_COUNTS", postId, rCount, cCount);
+                messagingTemplate.convertAndSend("/topic/company/" + post.getCompanyId(), listPayload);
+            }
         } catch (Exception e) {
              System.err.println("Lỗi gửi WebSocket: " + e.getMessage());
         }
-
         // C. LOGIC THÔNG BÁO (NOTIFICATION SERVICE) - Giữ nguyên logic cũ
         Post post = postRepository.findById(postId).orElse(null);
         String commenterName = (user != null) ? user.getFullName() : "Someone";
@@ -276,5 +302,29 @@ public class NewsfeedService {
                 .createdAt(comment.getCreatedAt())
                 .build();
     }
+    public PostResponseDTO getPostById(Long postId, Long currentUserId) {
+        Post post = postRepository.findById(postId)
+                .orElseThrow(() -> new RuntimeException("Post not found"));
+
+        Optional<PostReaction> reaction = reactionRepository.findByPostIdAndUserId(post.getId(), currentUserId);
+        ReactionType myReaction = reaction.map(PostReaction::getReactionType).orElse(null);
+
+        User author = userRepository.findById(post.getAuthorId()).orElse(null);
+        String latestAvatar = (author != null) ? author.getAvatarUrl() : post.getAuthorAvatar();
+        String latestName = (author != null) ? author.getFullName() : post.getAuthorName();
+
+        return PostResponseDTO.builder()
+                .id(post.getId())
+                .content(post.getContent())
+                .imageUrl(post.getImageUrl())
+                .authorId(post.getAuthorId())
+                .authorName(latestName)
+                .authorAvatar(latestAvatar)
+                .createdAt(post.getCreatedAt())
+                .reactionCount(reactionRepository.countByPostId(post.getId()))
+                .commentCount(commentRepository.countByPostId(post.getId()))
+                .myReaction(myReaction)
+                .build();
+    }
 }
-    
+        

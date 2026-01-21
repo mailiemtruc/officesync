@@ -75,4 +75,8 @@ public ResponseEntity<?> getPosts(@AuthenticationPrincipal User currentUser) {
         newsfeedService.syncUserAvatar(currentUser.getId(), newAvatar);
         return ResponseEntity.ok("Synced successfully");
     }
+    @GetMapping("/{postId}")
+    public ResponseEntity<?> getPostDetail(@PathVariable Long postId, @AuthenticationPrincipal User currentUser) {
+        return ResponseEntity.ok(newsfeedService.getPostById(postId, currentUser.getId()));
+    }
 }

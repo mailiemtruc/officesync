@@ -4,6 +4,8 @@ import 'package:officesync/features/notification_service/notification_service.da
 import '../../models/notification_model.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:officesync/features/chat_service/presentation/pages/chat_detail_screen.dart';
+import 'package:officesync/features/communication_service/data/newsfeed_api.dart'; // ✅ Import API
+import 'package:officesync/features/communication_service/presentation/pages/post_detail_screen.dart'; // ✅ Import màn hình chi tiết
 
 class NotificationListScreen extends StatefulWidget {
   final int userId;
@@ -54,7 +56,7 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
   }
 
   // 👇 [THÊM HÀM NÀY] Xử lý bấm vào thông báo
-  void _handleNotificationTap(NotificationModel noti) {
+  void _handleNotificationTap(NotificationModel noti) async {
     // Lấy thông tin từ model
     String type = noti.type;
     int id = noti.referenceId;
@@ -71,6 +73,19 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
             ),
           ),
         );
+        break;
+
+      case 'ANNOUNCEMENT':
+      case 'COMMENT':
+      case 'REACTION':
+        // Hiển thị loading nhẹ nếu cần
+        final post = await NewsfeedApi().getPostById(id);
+        if (post != null && mounted) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => PostDetailScreen(post: post)),
+          );
+        }
         break;
 
       case 'TASK':
@@ -208,18 +223,18 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
                   final index = _notifications.indexWhere(
                     (e) => e.id == noti.id,
                   );
-                 if (index != -1) {
-  // ✅ Tạo cái mới đè lên cái cũ
-  _notifications[index] = NotificationModel(
-    id: noti.id,
-    title: noti.title,
-    body: noti.body,
-    type: noti.type,
-    referenceId: noti.referenceId,
-    isRead: true, // <--- Chỉ thay đổi đúng chỗ này thành true
-    createdAt: noti.createdAt,
-  );
-}
+                  if (index != -1) {
+                    // ✅ Tạo cái mới đè lên cái cũ
+                    _notifications[index] = NotificationModel(
+                      id: noti.id,
+                      title: noti.title,
+                      body: noti.body,
+                      type: noti.type,
+                      referenceId: noti.referenceId,
+                      isRead: true, // <--- Chỉ thay đổi đúng chỗ này thành true
+                      createdAt: noti.createdAt,
+                    );
+                  }
                 });
               }
               _handleNotificationTap(noti); // Gọi hàm chuyển trang
@@ -342,6 +357,10 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
     switch (type) {
       case 'CHAT':
         return const Color(0xFFE3F2FD);
+      case 'ANNOUNCEMENT':
+      case 'COMMENT':
+      case 'REACTION':
+        return const Color(0xFFE8F5E9);
       case 'TASK':
         return const Color(0xFFFFF3E0);
       case 'LEAVE_REQUEST':
@@ -356,6 +375,12 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
     switch (type) {
       case 'CHAT':
         return Icons.chat_bubble_outline;
+      case 'ANNOUNCEMENT':
+        return Icons.campaign_outlined;
+      case 'COMMENT':
+        return Icons.forum_outlined;
+      case 'REACTION':
+        return Icons.favorite_border;
       case 'TASK':
         return Icons.assignment_outlined;
       case 'LEAVE_REQUEST':
@@ -370,6 +395,9 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
     switch (type) {
       case 'CHAT':
         return Colors.blue;
+      case 'ANNOUNCEMENT':
+      case 'COMMENT':
+      case 'REACTION':
       case 'TASK':
         return Colors.orange;
       case 'LEAVE_REQUEST':

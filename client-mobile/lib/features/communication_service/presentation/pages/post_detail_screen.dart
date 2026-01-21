@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'dart:convert';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
 import '../../data/newsfeed_api.dart';
 import '../../data/models/post_model.dart';
 import '../../data/models/comment_model.dart';
 import '../../../../core/config/app_colors.dart';
 import '../../../../core/utils/date_formatter.dart';
-import 'dart:convert';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../../data/socket_service.dart';
 
 class PostDetailScreen extends StatefulWidget {
   final PostModel post;
@@ -24,18 +26,23 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   final FocusNode _focusNode = FocusNode();
 
   CommentModel? _replyingTo;
-  late Future<List<CommentModel>> _commentsFuture;
 
-  // Biến này chỉ dùng để cập nhật số lượng ảo khi comment xong,
-  // không cần hiển thị số tổng nữa nên có thể bỏ hoặc giữ để logic không lỗi
+  List<CommentModel> _comments = [];
+  bool _isLoading = true;
+
+  // Vẫn giữ biến này để sync dữ liệu khi back về, nhưng không hiển thị lên UI
+  late int _currentReactionCount;
   late int _currentCommentCount;
 
   @override
   void initState() {
     super.initState();
+    _currentReactionCount = widget.post.reactionCount;
     _currentCommentCount = widget.post.commentCount;
-    _refreshComments();
+
     _api.viewPost(widget.post.id);
+    _loadComments();
+    _listenSocket();
   }
 
   @override
@@ -45,10 +52,44 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     super.dispose();
   }
 
-  void _refreshComments() {
-    setState(() {
-      _commentsFuture = _api.fetchComments(widget.post.id);
+  void _listenSocket() {
+    SocketService().subscribeToPost(widget.post.id, (data) {
+      if (!mounted) return;
+
+      if (data['type'] == 'REACTION_UPDATE') {
+        setState(() {
+          _currentReactionCount = int.parse(data['reactionCount'].toString());
+        });
+      } else if (data['content'] != null) {
+        try {
+          CommentModel newComment = CommentModel.fromJson(data);
+          bool exists = _comments.any((c) => c.id == newComment.id);
+
+          if (!exists) {
+            setState(() {
+              _comments.add(newComment);
+              _currentCommentCount++;
+            });
+          }
+        } catch (e) {
+          print("Lỗi parse comment socket: $e");
+        }
+      }
     });
+  }
+
+  Future<void> _loadComments() async {
+    try {
+      final comments = await _api.fetchComments(widget.post.id);
+      if (mounted) {
+        setState(() {
+          _comments = comments;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   Future<String> _getMyAvatar() async {
@@ -77,9 +118,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       _commentCtrl.clear();
       setState(() {
         _replyingTo = null;
-        _currentCommentCount++;
       });
-      _refreshComments();
     } else {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -98,7 +137,12 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios, color: AppColors.primary),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () {
+            Navigator.pop(context, {
+              'reactionCount': _currentReactionCount,
+              'commentCount': _currentCommentCount,
+            });
+          },
         ),
         centerTitle: true,
         title: const Text(
@@ -117,7 +161,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // --- HEADER POST ---
+                  // --- HEADER ---
                   Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 20,
@@ -177,9 +221,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                   if (widget.post.imageUrl != null &&
                       widget.post.imageUrl!.isNotEmpty)
                     Padding(
-                      padding: const EdgeInsets.only(
-                        bottom: 20,
-                      ), // Thêm chút khoảng cách dưới ảnh
+                      padding: const EdgeInsets.only(bottom: 20),
                       child: Image.network(
                         widget.post.imageUrl!,
                         width: double.infinity,
@@ -187,7 +229,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                       ),
                     ),
 
-                  // ❌ ĐÃ XÓA PHẦN THỐNG KÊ (Tim/Comment) Ở ĐÂY ❌
+                  // ❌ ĐÃ XÓA PHẦN THỐNG KÊ (Tim/Comment) TẠI ĐÂY THEO YÊU CẦU
                   const Divider(height: 1, color: Color(0xFFF1F5F9)),
 
                   // --- COMMENT LIST ---
@@ -196,46 +238,37 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
               ),
             ),
           ),
+
+          // --- INPUT AREA ---
           _buildInputArea(),
         ],
       ),
     );
   }
 
-  // ... (Phần dưới giữ nguyên như cũ: _buildCommentList, _buildCommentItem, _buildInputArea)
-  // Để code gọn, bạn giữ nguyên phần Widget _buildCommentList trở xuống ở file trước nhé.
-  // Nếu bạn cần tôi paste lại cả phần dưới thì bảo tôi, nhưng nó y hệt file trước, chỉ khác phần build() ở trên.
-
-  // 👇 ĐÂY LÀ PHẦN DƯỚI (Copy lại để bạn đỡ phải tìm)
   Widget _buildCommentList() {
-    return FutureBuilder<List<CommentModel>>(
-      future: _commentsFuture,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Padding(
-            padding: EdgeInsets.all(20),
-            child: Center(child: CircularProgressIndicator()),
-          );
-        }
-        final comments = snapshot.data ?? [];
-        if (comments.isEmpty) {
-          return Container(
-            padding: const EdgeInsets.all(30),
-            alignment: Alignment.center,
-            child: const Text(
-              "No comments yet.",
-              style: TextStyle(color: Colors.grey),
-            ),
-          );
-        }
-        return ListView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: comments.length,
-          padding: const EdgeInsets.only(bottom: 20),
-          itemBuilder: (context, index) => _buildCommentItem(comments[index]),
-        );
-      },
+    if (_isLoading) {
+      return const Padding(
+        padding: EdgeInsets.all(20),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_comments.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(30),
+        alignment: Alignment.center,
+        child: const Text(
+          "No comments yet. Be the first to say something!",
+          style: TextStyle(color: Colors.grey),
+        ),
+      );
+    }
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: _comments.length,
+      padding: const EdgeInsets.only(bottom: 20, top: 10),
+      itemBuilder: (context, index) => _buildCommentItem(_comments[index]),
     );
   }
 
@@ -259,12 +292,14 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
               ),
             ),
           ],
+
           CircleAvatar(
             radius: isReply ? 16 : 20,
             backgroundImage: NetworkImage(comment.authorAvatar),
             backgroundColor: const Color(0xFFF1F5F9),
           ),
           const SizedBox(width: 10),
+
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -302,6 +337,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                     ],
                   ),
                 ),
+
                 Padding(
                   padding: const EdgeInsets.only(left: 12, top: 4),
                   child: Row(
@@ -378,6 +414,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                 ],
               ),
             ),
+
           Row(
             children: [
               Expanded(
