@@ -44,6 +44,7 @@ public class AuthService {
     
     // 🔴 INJECT RABBITMQ PRODUCER
     @Autowired private RabbitMQProducer rabbitMQProducer;
+    @Autowired private SecurityNotificationService securityNotificationService;
 
     
 
@@ -89,6 +90,8 @@ public class AuthService {
         if ("LOCKED".equals(user.getStatus())) {
             throw new RuntimeException("Your account has been locked by Administrator.");
         }
+
+        securityNotificationService.notifyLoginConflict(user.getId());
 
         // 5. Tạo Token và trả về Response (kèm companyName)
         String token = tokenProvider.generateToken(user);

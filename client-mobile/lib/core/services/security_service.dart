@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'websocket_service.dart';
 import '../../main.dart'; // Import để lấy navigatorKey
-import '../utils/custom_snackbar.dart'; // [QUAN TRỌNG] Import file CustomSnackBar
+import '../utils/custom_snackbar.dart'; // Import CustomSnackBar
 
 class SecurityService {
   static final SecurityService _instance = SecurityService._internal();
@@ -14,7 +14,6 @@ class SecurityService {
   bool _isListening = false;
 
   // URL của Core Service (Port 8080)
-  // Lưu ý: Đã bỏ đuôi /websocket vì Backend không dùng SockJS nữa
   final String _coreUrl = 'ws://10.0.2.2:8080/ws-core';
 
   // Hàm kích hoạt bảo mật
@@ -28,12 +27,22 @@ class SecurityService {
     print("🛡️ Security Service: Connecting to $_coreUrl...");
     _isListening = true;
 
-    // 2. Lắng nghe sự kiện KHOÁ TÀI KHOẢN
+    // 2. Lắng nghe các sự kiện bảo mật CÁ NHÂN (Khoá nick, Login nơi khác)
     wsService.subscribe(
       '/topic/user/$userId/security',
       (data) {
-        if (data is Map && data['type'] == 'ACCOUNT_LOCKED') {
-          _triggerGlobalLock(data['message'] ?? "Tài khoản đã bị khoá.");
+        if (data is Map) {
+          // --- CASE 1: Bị Admin khoá tài khoản ---
+          if (data['type'] == 'ACCOUNT_LOCKED') {
+            _triggerGlobalLock(data['message'] ?? "Tài khoản đã bị khoá.");
+          }
+
+          // --- CASE 2: [MỚI] Có thiết bị khác đăng nhập ---
+          if (data['type'] == 'LOGIN_CONFLICT') {
+            _triggerGlobalLock(
+              data['message'] ?? "Tài khoản đã đăng nhập ở nơi khác.",
+            );
+          }
         }
       },
       forceUrl: _coreUrl, // QUAN TRỌNG: Chỉ nghe từ cổng 8080
@@ -53,8 +62,7 @@ class SecurityService {
   void _triggerGlobalLock(String message) {
     print("🔒 SECURITY ALERT: $message");
 
-    // [ĐÃ SỬA] Sử dụng CustomSnackBar.showGlobal thay cho SnackBar thủ công
-    // Hàm này sẽ dùng rootScaffoldMessengerKey để hiện thông báo đè lên mọi màn hình
+    // A. Hiện thông báo ĐỎ đè lên tất cả màn hình
     CustomSnackBar.showGlobal(
       title: "ACCESS DENIED",
       message: message,

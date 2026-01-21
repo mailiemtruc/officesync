@@ -39,4 +39,16 @@ public class SecurityNotificationService {
         messagingTemplate.convertAndSend(destination, payload);
         System.out.println("--> [WS-CORE] Sent LOCK signal to Company ID: " + companyId);
     }
+
+    public void notifyLoginConflict(Long userId) {
+        String destination = "/topic/user/" + userId + "/security";
+        
+        Map<String, String> payload = Map.of(
+            "type", "LOGIN_CONFLICT", // Loại tin nhắn mới
+            "message", "Your account was just logged in on a different device."
+        );
+        
+        messagingTemplate.convertAndSend(destination, payload);
+        System.out.println("--> [WS-CORE] Đã đá thiết bị cũ của User ID: " + userId);
+    }
 }
