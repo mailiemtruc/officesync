@@ -13,6 +13,7 @@ import 'dart:async';
 import 'create_request_page.dart';
 import 'request_detail_page.dart';
 import '../../widgets/skeleton_request_card.dart';
+import '../../../../core/utils/custom_snackbar.dart';
 
 enum FilterType { none, date, month, year }
 
@@ -215,6 +216,7 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
                           TextButton(
                             onPressed: () {
                               Navigator.pop(context);
+                              // [UX] Delay nhỏ để modal đóng mượt rồi mới clear
                               Future.delayed(
                                 const Duration(milliseconds: 200),
                                 () {
@@ -590,11 +592,8 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
       ),
       child: TextField(
         controller: _searchController,
-        // [MỚI] Cập nhật UI để hiện/ẩn nút X khi gõ
-        onChanged: (val) {
-          _onSearchChanged(val);
-          setState(() {});
-        },
+        // [UX FIX] Không gọi setState ở đây để tránh rebuild toàn bộ màn hình
+        onChanged: (val) => _onSearchChanged(val),
         decoration: InputDecoration(
           hintText: 'Search requests...',
           hintStyle: const TextStyle(
@@ -607,33 +606,35 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
             color: const Color(0xFF757575),
             size: 20,
           ),
-          // [MỚI] Nút Xóa hình tròn (Đồng bộ giao diện)
-          suffixIcon: _searchController.text.isNotEmpty
-              ? Padding(
-                  padding: const EdgeInsets.all(10.0),
-                  child: GestureDetector(
-                    onTap: () {
-                      _searchController.clear();
-                      setState(() {}); // Cập nhật UI ẩn nút X
-
-                      // Hủy debounce cũ và load lại danh sách gốc ngay lập tức
-                      if (_debounce?.isActive ?? false) _debounce!.cancel();
-                      _fetchRequests();
-                    },
-                    child: Container(
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFC4C4C4), // Màu nền xám
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        PhosphorIcons.x(PhosphorIconsStyle.bold),
-                        size: 12,
-                        color: Colors.white,
-                      ),
+          // [UX FIX] Dùng ValueListenableBuilder chỉ để rebuild nút X
+          suffixIcon: ValueListenableBuilder<TextEditingValue>(
+            valueListenable: _searchController,
+            builder: (context, value, child) {
+              if (value.text.isEmpty) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.all(10.0),
+                child: GestureDetector(
+                  onTap: () {
+                    _searchController.clear();
+                    // Gọi hàm search rỗng để reset list
+                    if (_debounce?.isActive ?? false) _debounce!.cancel();
+                    _fetchRequests();
+                  },
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFC4C4C4),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      PhosphorIcons.x(PhosphorIconsStyle.bold),
+                      size: 12,
+                      color: Colors.white,
                     ),
                   ),
-                )
-              : null,
+                ),
+              );
+            },
+          ),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(vertical: 10),
         ),
@@ -1024,10 +1025,18 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
                       ),
                     );
                   },
+                  // Tìm đoạn Dismissible trong hàm _buildListContent và thay thế phần onDismissed:
                   onDismissed: (direction) async {
+                    // 1. Lưu lại item và vị trí để restore nếu lỗi
+                    final deletedItem = request;
+                    final deletedIndex = _requests.indexOf(request);
+
+                    // 2. Xóa khỏi UI ngay lập tức (Optimistic UI)
                     setState(() {
-                      _requests.removeWhere((item) => item.id == request.id);
+                      _requests.removeAt(deletedIndex);
                     });
+
+                    // 3. Gọi API
                     try {
                       final userId = await _getUserIdFromStorage();
                       if (userId != null) {
@@ -1037,7 +1046,19 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
                         );
                       }
                     } catch (e) {
-                      print("Lỗi xóa đơn: $e");
+                      // 4. [UX FIX] Nếu lỗi -> Khôi phục lại item vào danh sách
+                      if (mounted) {
+                        setState(() {
+                          _requests.insert(deletedIndex, deletedItem);
+                        });
+                        CustomSnackBar.show(
+                          context,
+                          title: 'Error',
+                          message:
+                              'Failed to cancel request. Please try again.',
+                          isError: true,
+                        );
+                      }
                     }
                   },
                   child: _buildRequestCard(request),

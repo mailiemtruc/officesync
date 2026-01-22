@@ -383,6 +383,9 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
     // Bắt đầu xử lý
     setState(() => _isSubmitting = true);
 
+    // Danh sách URL đã upload thành công (Dùng để rollback nếu cần)
+    List<String> uploadedUrls = [];
+
     try {
       final userId = await _getUserIdFromStorage();
       if (userId == null) throw Exception("User session not found.");
@@ -398,7 +401,6 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
         if (_fromDate == null || _toDate == null) {
           throw Exception("Please select From & To Date");
         }
-        // Mặc định giờ hành chính 08:00 - 17:00
         startDateTime = DateTime(
           _fromDate!.year,
           _fromDate!.month,
@@ -425,16 +427,10 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
           _startTime!.hour,
           _startTime!.minute,
         );
-        // Xử lý trường hợp làm qua đêm (nếu cần), ở đây giả sử trong ngày hoặc user chọn ngày kết thúc
-        // Theo UI hiện tại chỉ có 1 Date, nên giả định OT trong ngày hoặc qua đêm ngắn
         DateTime endDateBase = _fromDate!;
-
-        // Logic phụ: Nếu giờ kết thúc nhỏ hơn giờ bắt đầu -> hiểu là sang ngày hôm sau
-        int endHour = _endTime!.hour;
-        if (endHour < _startTime!.hour) {
+        if (_endTime!.hour < _startTime!.hour) {
           endDateBase = endDateBase.add(const Duration(days: 1));
         }
-
         endDateTime = DateTime(
           endDateBase.year,
           endDateBase.month,
@@ -443,7 +439,7 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
           _endTime!.minute,
         );
       } else {
-        // --- LATE/EARLY (Đi muộn/Về sớm) ---
+        // --- LATE/EARLY ---
         if (_fromDate == null) throw Exception("Please select Date");
         if (_startTime == null)
           throw Exception("Please select First Time field");
@@ -466,41 +462,31 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
         );
       }
 
-      // --- VALIDATE LOGIC THỜI GIAN ---
-      // Kiểm tra 1: Thời gian kết thúc phải sau thời gian bắt đầu
+      // Check Logic Thời gian
       if (endDateTime.isBefore(startDateTime)) {
         throw Exception("End time cannot be before Start time.");
       }
-
-      // Kiểm tra 2: Thời gian bằng nhau
       if (endDateTime.isAtSameMomentAs(startDateTime)) {
         throw Exception("Start time and End time cannot be the same.");
       }
-
-      // Kiểm tra 3: Logic riêng cho Late/Early (Nếu cần duration > 0)
       if (_selectedTypeIndex == 2 &&
           endDateTime.difference(startDateTime).inMinutes <= 0) {
         throw Exception("Invalid duration. Please check your time input.");
       }
 
-      // Tính Duration trước để chắc chắn mọi thứ hợp lệ
       final durationDiff = endDateTime.difference(startDateTime);
       double durationVal = durationDiff.inMinutes / 60.0;
       String durationUnit = "HOURS";
       if (_selectedTypeIndex == 0 && durationVal >= 24) {
-        // Nếu nghỉ phép tính theo ngày (Logic này tùy thuộc business của bạn)
-        // Ví dụ: tính số ngày dựa trên working days, ở đây tính đơn giản
         durationVal = (durationDiff.inDays + 1).toDouble();
         durationUnit = "DAYS";
       }
 
       // ============================================================
-      // BƯỚC 2: UPLOAD FILES (Chỉ chạy khi logic trên đã OK)
+      // BƯỚC 2: UPLOAD FILES
       // ============================================================
-      List<String> uploadedUrls = [];
       if (_selectedFiles.isNotEmpty) {
         for (var file in _selectedFiles) {
-          // Kiểm tra file tồn tại (Safety Check)
           if (!await file.exists()) {
             throw Exception(
               "File không tồn tại hoặc đã bị xóa. Vui lòng chọn lại.",
@@ -509,6 +495,13 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
 
           // Gọi API upload
           String url = await _repository.uploadFile(file);
+
+          // [FIX QUAN TRỌNG] Kiểm tra kỹ URL trả về
+          // Nếu URL rỗng hoặc null, tức là upload thất bại -> Dừng ngay lập tức!
+          if (url.isEmpty || url.toLowerCase() == 'null') {
+            throw Exception("Upload thất bại. Vui lòng thử lại.");
+          }
+
           uploadedUrls.add(url);
         }
       }
@@ -538,6 +531,7 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
         durationUnit: durationUnit,
       );
 
+      // Nếu createRequest thất bại, nó sẽ nhảy xuống catch
       await _repository.createRequest(
         userId: userId,
         request: requestModel,
@@ -554,6 +548,21 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
         Navigator.pop(context, true);
       }
     } catch (e) {
+      // ============================================================
+      // [XỬ LÝ LỖI TRANSACTION]
+      // Nếu Bước 3 (Tạo Request) lỗi, nhưng Bước 2 (Upload) đã xong
+      // -> File bị treo trên server (Orphaned Files).
+      // ============================================================
+      if (uploadedUrls.isNotEmpty) {
+        print(
+          "⚠️ CẢNH BÁO: Request lỗi nhưng đã upload ${uploadedUrls.length} files.",
+        );
+        // TODO: Nếu backend có API xóa file, hãy gọi vòng lặp xóa file tại đây để dọn rác
+        // for (var url in uploadedUrls) {
+        //    _repository.deleteFile(url);
+        // }
+      }
+
       _showErrorSnackBar(e.toString().replaceAll("Exception: ", ""));
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
@@ -805,32 +814,57 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
                       color: const Color(0xFFA1ACCC),
                       strokeWidth: 1,
                       child: Material(
-                        color: const Color(0xFFF9FAFB),
+                        color: const Color(
+                          0xFFF9FAFB,
+                        ), // Giữ màu nền xám nhạt cho vùng upload
                         borderRadius: BorderRadius.circular(12),
                         child: InkWell(
                           borderRadius: BorderRadius.circular(12),
-                          // [ĐÃ SỬA] Chỉ disable khi đang submit
                           onTap: _isSubmitting ? null : _showUploadBottomSheet,
                           child: SizedBox(
-                            height: 80,
+                            height: 100,
                             width: double.infinity,
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(
-                                  PhosphorIcons.uploadSimple(
-                                    PhosphorIconsStyle.bold,
+                                // --- [START] UI GIỐNG HÌNH ẢNH YÊU CẦU ---
+                                Container(
+                                  padding: const EdgeInsets.all(
+                                    12,
+                                  ), // Padding tạo độ lớn cho nút tròn
+                                  decoration: BoxDecoration(
+                                    color: Colors.white, // Nền trắng
+                                    shape: BoxShape.circle, // Hình tròn
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: const Color(0xFF2563EB)
+                                            .withOpacity(
+                                              0.15,
+                                            ), // Bóng mờ màu xanh nhẹ
+                                        blurRadius: 10,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ],
                                   ),
-                                  color: AppColors.primary,
-                                  size: 24,
+                                  child: Icon(
+                                    PhosphorIcons.uploadSimple(
+                                      PhosphorIconsStyle.bold,
+                                    ),
+                                    // Dùng màu xanh giống trong ảnh (hoặc dùng AppColors.primary nếu trùng)
+                                    color: const Color(0xFF2563EB),
+                                    size: 24,
+                                  ),
                                 ),
-                                const SizedBox(height: 8),
+
+                                // --- [END] ---
+                                const SizedBox(height: 12),
                                 const Text(
                                   'Tap to upload Photo/Video',
                                   style: TextStyle(
                                     fontWeight: FontWeight.w600,
-                                    fontSize: 14,
-                                    color: Colors.black,
+                                    fontSize: 13,
+                                    color: Color(0xFF6B7280),
+                                    fontFamily: 'Inter',
                                   ),
                                 ),
                               ],

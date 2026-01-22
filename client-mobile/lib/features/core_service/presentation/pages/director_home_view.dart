@@ -96,16 +96,24 @@ class _DirectorHomeViewState extends State<DirectorHomeView>
   }
 
   Future<void> _fetchLatestUserInfo() async {
-    try {
-      // 1. Lấy Tên công ty từ Storage
-      final storage = const FlutterSecureStorage();
-      String companyName = "OfficeSync";
+    final storage = const FlutterSecureStorage();
+    String companyName = "OfficeSync";
 
+    try {
+      // 1. Ưu tiên Local Storage
       String? userInfoStr = await storage.read(key: 'user_info');
       if (userInfoStr != null) {
         final data = jsonDecode(userInfoStr);
         if (data['companyName'] != null) {
           companyName = data['companyName'];
+        }
+        if (mounted) {
+          setState(() {
+            _fullName = data['fullName'] ?? _fullName;
+            _avatarUrl = data['avatarUrl'] ?? _avatarUrl;
+            _jobTitle = "Director • $companyName";
+            _loadingUserInfo = false;
+          });
         }
       }
 
@@ -125,18 +133,24 @@ class _DirectorHomeViewState extends State<DirectorHomeView>
         ),
       );
 
+      try {
+        final userJson = currentUser.toJson();
+        if (userJson['companyName'] != null) {
+          companyName = userJson['companyName'];
+        }
+      } catch (_) {}
+
       if (mounted) {
         setState(() {
           _fullName = currentUser.fullName;
           _avatarUrl = currentUser.avatarUrl;
-
-          _jobTitle = companyName;
-
+          _jobTitle = "Director • $companyName";
           _loadingUserInfo = false;
         });
       }
     } catch (e) {
       debugPrint("Error fetching director info: $e");
+      if (mounted) setState(() => _loadingUserInfo = false);
     }
   }
 

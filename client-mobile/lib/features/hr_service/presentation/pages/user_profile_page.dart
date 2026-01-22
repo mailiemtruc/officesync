@@ -61,21 +61,49 @@ class _UserProfilePageState extends State<UserProfilePage> {
   void didUpdateWidget(covariant UserProfilePage oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    // Kiểm tra xem dữ liệu từ cha (Realtime) có thay đổi không
+    // Nếu dữ liệu từ Dashboard thay đổi (do Socket cập nhật)
     if (widget.userInfo != oldWidget.userInfo) {
-      print("--> Realtime update detected! Silently updating...");
+      print("--> [Profile] Updating UI from Parent Data (No API Call)");
 
-      // [FIX] XÓA HOẶC COMMENT DÒNG NÀY:
-      // setState(() {
-      //   _detailedEmployee = null;
-      // });
-
-      // Chỉ cần gọi hàm này chạy ngầm.
-      // Hàm _fetchEmployeeDetail của bạn đã có logic:
-      // "if (_detailedEmployee == null) loading = true".
-      // Vì ta không set nó về null nữa, nên loading sẽ không bật -> Không hiện Skeleton.
-      _fetchEmployeeDetail();
+      // [QUAN TRỌNG] Update thẳng vào State, KHÔNG gọi API, KHÔNG hiện loading
+      _updateLocalStateFromUserInfo();
     }
+  }
+
+  // [THÊM MỚI] Hàm helper để convert Map -> Model
+  void _updateLocalStateFromUserInfo() {
+    if (widget.userInfo.isEmpty) return;
+
+    setState(() {
+      // Cập nhật hoặc tạo mới model từ dữ liệu mới nhất
+      _detailedEmployee = EmployeeModel(
+        id: widget.userInfo['id']?.toString() ?? _detailedEmployee?.id ?? '',
+        fullName:
+            widget.userInfo['fullName'] ?? _detailedEmployee?.fullName ?? '',
+        email: widget.userInfo['email'] ?? _detailedEmployee?.email ?? '',
+        phone:
+            widget.userInfo['phone'] ??
+            widget.userInfo['mobileNumber'] ??
+            _detailedEmployee?.phone ??
+            '',
+        dateOfBirth:
+            widget.userInfo['dateOfBirth'] ??
+            _detailedEmployee?.dateOfBirth ??
+            '',
+        role: widget.userInfo['role'] ?? _detailedEmployee?.role ?? 'STAFF',
+        avatarUrl: widget.userInfo['avatarUrl'] ?? _detailedEmployee?.avatarUrl,
+
+        // Lấy dữ liệu mới được Dashboard truyền xuống
+        employeeCode:
+            widget.userInfo['employeeCode'] ?? _detailedEmployee?.employeeCode,
+        departmentName:
+            widget.userInfo['departmentName'] ??
+            _detailedEmployee?.departmentName,
+      );
+
+      // Đảm bảo tắt loading nếu nó đang bật
+      _isLoadingProfile = false;
+    });
   }
 
   // [THÊM MỚI] Hàm chuyển đổi Role sang tên hiển thị đẹp (giống Dashboard)
@@ -253,12 +281,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
         print("--> Update HR Profile success!");
         await _updateLocalUserStorage(avatarUrl);
 
-        // [QUAN TRỌNG] Cập nhật ngay lập tức vào biến _detailedEmployee
-        // Để UI đổi ngay mà không cần chờ fetch lại từ server
+        // [QUAN TRỌNG] Cập nhật ngay lập tức vào UI (Optimistic Update)
         if (mounted) {
           setState(() {
-            // Tạo một bản sao mới của employee với avatar mới
-            // (Giả sử model của bạn không có copyWith, ta gán thủ công các trường)
             _detailedEmployee = EmployeeModel(
               id: _detailedEmployee!.id,
               fullName: _detailedEmployee!.fullName,
@@ -268,7 +293,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
               role: _detailedEmployee!.role,
               employeeCode: _detailedEmployee!.employeeCode,
               departmentName: _detailedEmployee!.departmentName,
-              avatarUrl: avatarUrl, // <--- CẬP NHẬT URL MỚI TẠI ĐÂY
+              avatarUrl: avatarUrl, // <--- UI đã cập nhật ảnh mới ở đây rồi
             );
 
             // Xóa file local và tắt loading upload
@@ -283,25 +308,17 @@ class _UserProfilePageState extends State<UserProfilePage> {
             isError: false,
           );
         }
-        // [THÊM ĐOẠN NÀY VÀO ĐÂY]
-        // Gọi Chat Service cập nhật Avatar (Chạy ngầm, không await)
-        _chatApi
-            .updateChatProfile(avatarUrl: avatarUrl)
-            .then((_) {
-              print("--> Chat Service đã được báo tin cập nhật Avatar.");
-            })
-            .catchError((e) {
-              print("--> Lỗi khi báo tin cho Chat Service: $e");
-            });
-        // ======================================================
-        // [UPDATE] Gọi các tác vụ đồng bộ chạy NGẦM (không await để chặn UI)
+
+        // --- CÁC TÁC VỤ NGẦM (GIỮ NGUYÊN) ---
+        _chatApi.updateChatProfile(avatarUrl: avatarUrl).catchError((e) {
+          print("--> Lỗi Chat Service: $e");
+        });
+
         UserUpdateEvent().notify();
+
         _newsfeedApi.syncUserAvatar(avatarUrl).catchError((e) {
           print("⚠️ Sync Newsfeed error: $e");
         });
-
-        // Vẫn gọi fetch lại để đảm bảo đồng bộ server, nhưng chạy sau và không hiện loading
-        _fetchEmployeeDetail();
       }
     } catch (e) {
       print("Error saving profile: $e");
@@ -343,7 +360,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
       // 1. Xóa Token đăng nhập trong Storage
       await _storage.deleteAll();
 
-      // 🔴 [QUAN TRỌNG - CẦN THÊM DÒNG NÀY]
       // Gọi hàm này để reset biến _isListening = false bên trong SecurityService.
       // Nếu thiếu, lần đăng nhập sau Socket 8080 sẽ từ chối kết nối lại!
       SecurityService().disconnect();

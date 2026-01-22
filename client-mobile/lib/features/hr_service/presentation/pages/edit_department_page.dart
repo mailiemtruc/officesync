@@ -29,7 +29,9 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
   EmployeeModel? _selectedManager;
   bool _isLoading = false;
   bool _isHr = false;
-
+  late String _initialName;
+  late bool _initialIsHr;
+  EmployeeModel? _initialManager;
   // [QUAN TRỌNG] Biến lưu danh sách thành viên hiện tại (Đang chỉnh sửa)
   List<EmployeeModel> _departmentMembers = [];
   // [QUAN TRỌNG] Biến lưu danh sách ban đầu để so sánh sự thay đổi khi bấm Save
@@ -47,6 +49,11 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
     _nameController = TextEditingController(text: widget.department.name);
     _selectedManager = widget.department.manager;
 
+    // [MỚI] Lưu trạng thái ban đầu
+    _initialName = widget.department.name;
+    _initialIsHr = widget.department.isHr;
+    _initialManager = widget.department.manager;
+
     _deptRepo = DepartmentRepositoryImpl(
       remoteDataSource: DepartmentRemoteDataSource(),
     );
@@ -54,7 +61,17 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
       remoteDataSource: EmployeeRemoteDataSource(),
     );
 
-    _fetchData();
+    _fetchData(); // Hàm này sẽ set _initialMembers bên trong (code cũ đã có)
+  }
+
+  bool _hasMemberChanges() {
+    if (_departmentMembers.length != _initialMembers.length) return true;
+
+    final oldIds = _initialMembers.map((e) => e.id).toSet();
+    final newIds = _departmentMembers.map((e) => e.id).toSet();
+
+    // Nếu set mới không chứa đủ các ID cũ (hoặc ngược lại) nghĩa là có thay đổi
+    return !oldIds.containsAll(newIds);
   }
 
   Color _parseColor(String? hexColor) {
@@ -134,6 +151,29 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
   Future<void> _handleSave() async {
     if (_nameController.text.isEmpty) return;
 
+    // [CHECK THAY ĐỔI]
+    final bool nameChanged = _nameController.text.trim() != _initialName;
+    final bool hrChanged = _isHr != _initialIsHr;
+
+    // So sánh Manager (xử lý null safety)
+    final String oldManagerId = _initialManager?.id ?? "";
+    final String newManagerId = _selectedManager?.id ?? "";
+    final bool managerChanged = oldManagerId != newManagerId;
+
+    // So sánh danh sách thành viên
+    final bool membersChanged = _hasMemberChanges();
+
+    if (!nameChanged && !hrChanged && !managerChanged && !membersChanged) {
+      CustomSnackBar.show(
+        context,
+        title: 'Info',
+        message: 'No changes detected.',
+        isError: false,
+        backgroundColor: const Color(0xFF6B7280),
+      );
+      return;
+    }
+
     if (_currentUserId == null) {
       CustomSnackBar.show(
         context,
@@ -146,7 +186,7 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
 
     setState(() => _isLoading = true);
     try {
-      // 1. Cập nhật thông tin Phòng ban (Backend sẽ lo việc set Manager và Old Manager)
+      // 1. Cập nhật thông tin Phòng ban
       final success = await _deptRepo.updateDepartment(
         _currentUserId!,
         widget.department.id!,
@@ -155,10 +195,7 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
         _isHr,
       );
 
-      // 2. Cập nhật danh sách thành viên
-
-      // [FIX 1] Tìm người mới thêm vào
-      // Phải loại trừ Manager mới ra nếu lỡ có trong list, vì Backend đã xử lý người này rồi
+      // 2. Cập nhật danh sách thành viên (Logic thông minh giữ nguyên từ trước)
       final addedMembers = _departmentMembers
           .where(
             (newItem) =>
@@ -167,9 +204,6 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
           )
           .toList();
 
-      // [FIX 2 - QUAN TRỌNG NHẤT] Tìm người bị xóa ra
-      // Nếu người bị xóa khỏi list member là Manager mới (_selectedManager),
-      // thì BỎ QUA (đừng xóa họ khỏi phòng), vì họ đã được thăng chức chứ không phải bị đuổi.
       final removedMembers = _initialMembers
           .where(
             (oldItem) =>
@@ -180,17 +214,11 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
           )
           .toList();
 
-      // a. Gán phòng ban cho người mới (thường là Manager cũ bị hạ chức)
+      // a. Gán phòng ban cho người mới
       for (var emp in addedMembers) {
         if (emp.id != null) {
-          // [FIX 3 - LOGIC ROLE]
-          // Nếu nhân viên này trong UI đang hiển thị là MANAGER (do là manager cũ vừa bị hạ bệ),
-          // Ta phải ép gửi role = 'STAFF' xuống Backend.
-          // Nếu không, ta sẽ gửi role='MANAGER', Backend nhận được sẽ lại thăng chức cho họ lần nữa!
           String roleToSend = emp.role;
-          if (emp.role == 'MANAGER') {
-            roleToSend = 'STAFF';
-          }
+          if (emp.role == 'MANAGER') roleToSend = 'STAFF'; // Hạ chức nếu cần
 
           await _empRepo.updateEmployee(
             _currentUserId!,
@@ -198,13 +226,13 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
             emp.fullName,
             emp.phone,
             emp.dateOfBirth,
-            role: roleToSend, // Dùng role đã xử lý
-            departmentId: widget.department.id, // Gán vào phòng hiện tại
+            role: roleToSend,
+            departmentId: widget.department.id,
           );
         }
       }
 
-      // b. Gỡ phòng ban cho người bị xóa (Gán về 0 hoặc null)
+      // b. Gỡ phòng ban cho người bị xóa
       for (var emp in removedMembers) {
         if (emp.id != null) {
           await _empRepo.updateEmployee(
@@ -213,8 +241,8 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
             emp.fullName,
             emp.phone,
             emp.dateOfBirth,
-            role: emp.role, // Giữ nguyên role
-            departmentId: 0, // Gán về "Unassigned"
+            role: emp.role,
+            departmentId: 0, // Unassigned
           );
         }
       }
@@ -244,7 +272,6 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
   }
 
   Future<void> _handleDelete() async {
-    // ... (Giữ nguyên logic xóa)
     if (_currentUserId == null) return;
 
     setState(() => _isLoading = true);

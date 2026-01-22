@@ -944,10 +944,8 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
       ),
       child: TextField(
         controller: _searchController,
-        onChanged: (val) {
-          _onSearchChanged(val);
-          setState(() {});
-        },
+        // [FIX] Bỏ setState ở đây
+        onChanged: (val) => _onSearchChanged(val),
         decoration: InputDecoration(
           hintText: 'Search requests...',
           hintStyle: const TextStyle(
@@ -961,30 +959,34 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
             color: const Color(0xFF757575),
             size: 20,
           ),
-          suffixIcon: _searchController.text.isNotEmpty
-              ? Padding(
-                  padding: const EdgeInsets.all(10.0),
-                  child: GestureDetector(
-                    onTap: () {
-                      _searchController.clear();
-                      setState(() {});
-                      if (_debounce?.isActive ?? false) _debounce!.cancel();
-                      _fetchRequests();
-                    },
-                    child: Container(
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFC4C4C4),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        PhosphorIcons.x(PhosphorIconsStyle.bold),
-                        size: 12,
-                        color: Colors.white,
-                      ),
+          // [FIX] Dùng ValueListenableBuilder cho nút X
+          suffixIcon: ValueListenableBuilder<TextEditingValue>(
+            valueListenable: _searchController,
+            builder: (context, value, child) {
+              if (value.text.isEmpty) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.all(10.0),
+                child: GestureDetector(
+                  onTap: () {
+                    _searchController.clear();
+                    if (_debounce?.isActive ?? false) _debounce!.cancel();
+                    _fetchRequests();
+                  },
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFC4C4C4),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      PhosphorIcons.x(PhosphorIconsStyle.bold),
+                      size: 12,
+                      color: Colors.white,
                     ),
                   ),
-                )
-              : null,
+                ),
+              );
+            },
+          ),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(vertical: 10),
         ),

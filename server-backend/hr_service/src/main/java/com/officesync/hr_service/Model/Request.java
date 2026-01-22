@@ -72,8 +72,9 @@ public class Request extends BaseEntity {
     @Column(columnDefinition = "TEXT")
     private String reason; 
 
-    @Column(name = "evidence_url")
-    private String evidenceUrl; 
+   
+    @Column(name = "evidence_url", columnDefinition = "TEXT")
+    private String evidenceUrl;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "requests"}) // Thêm ignore cho approver

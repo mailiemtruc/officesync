@@ -1,16 +1,27 @@
+// File: lib/features/notification_service/notification_service.dart
+
 import 'dart:convert';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
+// Import Models & Main
 import 'models/notification_model.dart';
 import '../../main.dart';
-// 👇 [THÊM 2] Import các màn hình bạn muốn nhảy tới
+
+// Import Data Sources & APIs
+import 'package:officesync/features/hr_service/data/datasources/request_remote_data_source.dart';
+import 'package:officesync/features/communication_service/data/newsfeed_api.dart';
+
+// Import Screens (Đã import đầy đủ)
 import 'package:officesync/features/chat_service/presentation/pages/chat_detail_screen.dart';
-import 'package:officesync/features/communication_service/data/newsfeed_api.dart'; // ✅ Import API
-import 'package:officesync/features/communication_service/presentation/pages/post_detail_screen.dart'; // ✅ Import màn hình chi tiết
-// import '../task/presentation/pages/task_detail_screen.dart'; // Sau này mở cái này
-// import '../hr/presentation/pages/request_detail_screen.dart'; // Sau này mở cái này
+import 'package:officesync/features/communication_service/presentation/pages/post_detail_screen.dart';
+import 'package:officesync/features/hr_service/presentation/pages/request_detail_page.dart';
+import 'package:officesync/features/hr_service/presentation/pages/manager_request_review_page.dart';
+
+import 'package:officesync/dashboard_screen.dart';
 
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
@@ -19,15 +30,14 @@ class NotificationService {
 
   final _firebaseMessaging = FirebaseMessaging.instance;
   final _localNotifications = FlutterLocalNotificationsPlugin();
+  final _storage = const FlutterSecureStorage();
+  final _requestDataSource = RequestRemoteDataSource();
 
-  // ⚠️ QUAN TRỌNG:
-  // - Máy ảo Android: dùng 10.0.2.2
-  // - Máy thật / iOS: dùng IP LAN của máy tính (VD: http://192.168.1.5:8089...)
   final String _backendUrl =
       "http://10.0.2.2:8089/api/notifications/register-device";
+  final String _notiBaseUrl = "http://10.0.2.2:8089/api/notifications";
 
   Future<void> initNotifications(int userId) async {
-    // 1. Xin quyền
     NotificationSettings settings = await _firebaseMessaging.requestPermission(
       alert: true,
       badge: true,
@@ -36,132 +46,152 @@ class NotificationService {
 
     if (settings.authorizationStatus == AuthorizationStatus.authorized) {
       print('✅ Người dùng đã cấp quyền thông báo');
-
-      // 2. Lấy Token
       final fcmToken = await _firebaseMessaging.getToken();
-      print("👉 FCM Token: $fcmToken");
-
       if (fcmToken != null) {
         await _registerDeviceToken(userId, fcmToken);
       }
-
-      // 3. Cấu hình Local Notification (để hiện thông báo khi App đang mở)
       await _initLocalNotifications();
 
-      // 👇 [THÊM 3] Xử lý khi App đang TẮT hẳn mà bấm thông báo
       _firebaseMessaging.getInitialMessage().then((message) {
         if (message != null) {
           _handleMessageClick(message);
         }
       });
 
-      // 👇 [THÊM 4] Xử lý khi App đang CHẠY NGẦM mà bấm thông báo
       FirebaseMessaging.onMessageOpenedApp.listen((message) {
         _handleMessageClick(message);
       });
 
-      // 4. Lắng nghe khi App đang mở (Foreground)
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
         print("🔔 Nhận tin khi đang mở App: ${message.notification?.title}");
-
-        // Hiện thông báo ngay lập tức
         if (message.notification != null) {
           _showLocalNotification(message);
         }
       });
-    } else {
-      print('❌ Người dùng từ chối quyền thông báo');
     }
   }
 
-  // 👇 [THÊM 5] HÀM ĐIỀU HƯỚNG THÔNG MINH (SWITCH CASE)
+  // HÀM XỬ LÝ CLICK THÔNG BÁO TỪ SYSTEM TRAY
   Future<void> _handleMessageClick(RemoteMessage message) async {
     final data = message.data;
-    // Backend gửi: .putData("type", "CHAT") .putData("referenceId", "123")
     String? type = data['type'];
     String? idStr = data['referenceId'];
-
-    // Tiêu đề thông báo (để làm tên màn hình nếu cần)
     String title = message.notification?.title ?? "Thông báo";
 
     print("👆 Người dùng bấm thông báo: Type=$type, ID=$idStr");
 
-    if (type == null || idStr == null) return;
+    if (type == null) return;
+    int id = int.tryParse(idStr ?? "0") ?? 0;
+    String? currentUserId = await _getCurrentUserId();
 
-    // Parse ID an toàn (tránh lỗi crash nếu idStr không phải số)
-    int id = int.tryParse(idStr) ?? 0;
-    if (id == 0) return;
-
-    // Dùng switch case để chia luồng
     switch (type) {
-      // --- TRƯỜNG HỢP 1: CHAT ---
-      case 'CHAT':
-        navigatorKey.currentState?.push(
-          MaterialPageRoute(
-            builder: (_) => ChatDetailScreen(
-              roomId: id,
-              chatName: title, // Lấy tên người gửi làm tên Chat
-            ),
-          ),
-        );
-        break;
-
-      // --- TRƯỜNG HỢP 2: NEWSFEED (Bài mới / Bình luận / Thả tim) ---
-      case 'ANNOUNCEMENT': // Sếp đăng bài
-      case 'COMMENT': // Có người bình luận
-      case 'REACTION': // Có người thả tim (nếu muốn)
-        print("➡️ Đang tải bài viết ID: $id để mở...");
-
+      case 'REQUEST':
+        if (id == 0 || currentUserId == null) return;
         try {
-          // 1. Gọi API lấy thông tin chi tiết bài viết
-          final post = await NewsfeedApi().getPostById(id);
+          final requestModel = await _requestDataSource.getRequestById(
+            id.toString(),
+            currentUserId,
+          );
 
-          // 2. Nếu lấy được thì mở màn hình Chi tiết
-          if (post != null) {
-            navigatorKey.currentState?.push(
-              MaterialPageRoute(builder: (_) => PostDetailScreen(post: post)),
-            );
-          } else {
-            print("❌ Không tìm thấy bài viết (có thể đã bị xóa)");
+          if (requestModel != null) {
+            bool isMyRequest = requestModel.requesterId == currentUserId;
+            if (isMyRequest) {
+              navigatorKey.currentState?.push(
+                MaterialPageRoute(
+                  builder: (_) => RequestDetailPage(request: requestModel),
+                ),
+              );
+            } else {
+              navigatorKey.currentState?.push(
+                MaterialPageRoute(
+                  builder: (_) =>
+                      ManagerRequestReviewPage(request: requestModel),
+                ),
+              );
+            }
           }
         } catch (e) {
-          print("❌ Lỗi khi mở bài viết từ thông báo: $e");
+          print("❌ Lỗi điều hướng Request: $e");
         }
         break;
 
-      // --- CÁC TRƯỜNG HỢP KHÁC ---
-      case 'TASK':
-        print("➡️ Đang mở Task ID: $id");
-        // navigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => TaskDetailScreen(taskId: id)));
+      case 'CHAT':
+        if (id != 0) {
+          navigatorKey.currentState?.push(
+            MaterialPageRoute(
+              builder: (_) => ChatDetailScreen(roomId: id, chatName: title),
+            ),
+          );
+        }
         break;
 
-      case 'LEAVE_REQUEST':
-        print("➡️ Đang mở Đơn nghỉ phép ID: $id");
+      case 'ANNOUNCEMENT':
+      case 'COMMENT':
+      case 'REACTION':
+        if (id != 0) {
+          try {
+            final post = await NewsfeedApi().getPostById(id);
+            if (post != null) {
+              navigatorKey.currentState?.push(
+                MaterialPageRoute(builder: (_) => PostDetailScreen(post: post)),
+              );
+            }
+          } catch (e) {
+            print("❌ Lỗi mở bài viết: $e");
+          }
+        }
         break;
+
+      // [FIX] Điều hướng tới UserProfilePage trực tiếp
+      case 'SYSTEM':
+      case 'ROLE_UPDATE':
+      case 'DEPARTMENT_UPDATE':
+        navigatorKey.currentState?.pushAndRemoveUntil(
+          MaterialPageRoute(
+            builder: (_) => const DashboardScreen(
+              userInfo: {}, // Truyền rỗng để Dashboard tự load lại từ Storage
+              initialIndex: 2, // <--- Mở ngay tab Profile (Index 2)
+            ),
+          ),
+          (route) => false, // Xóa sạch các trang cũ để tránh lỗi chồng chéo
+        );
 
       default:
         print("⚠️ Loại thông báo chưa hỗ trợ: $type");
     }
   }
 
-  // Cấu hình hiển thị thông báo nội bộ
+  Future<String?> _getCurrentUserId() async {
+    try {
+      String? userInfoStr = await _storage.read(key: 'user_info');
+      if (userInfoStr != null) {
+        final data = jsonDecode(userInfoStr);
+        return data['id'].toString();
+      }
+      return await _storage.read(key: 'user_id');
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // CÁC HÀM KHÁC GIỮ NGUYÊN...
   Future<void> _initLocalNotifications() async {
     const androidSettings = AndroidInitializationSettings(
       '@mipmap/ic_launcher',
     );
     const iosSettings = DarwinInitializationSettings();
-
     const initSettings = InitializationSettings(
       android: androidSettings,
       iOS: iosSettings,
     );
 
     await _localNotifications.initialize(initSettings);
+
     const AndroidNotificationChannel channel = AndroidNotificationChannel(
-      'high_importance_channel', // id (Phải trùng với Backend)
-      'High Importance Notifications', // name
+      'high_importance_channel',
+      'High Importance Notifications',
       description: 'This channel is used for important notifications.',
-      importance: Importance.max, // ✅ Mức độ cao nhất (Banner + Âm thanh)
+      importance: Importance.max,
     );
 
     await _localNotifications
@@ -169,19 +199,15 @@ class NotificationService {
           AndroidFlutterLocalNotificationsPlugin
         >()
         ?.createNotificationChannel(channel);
-
-    print("✅ Đã tạo kênh thông báo: high_importance_channel");
   }
 
-  // Hàm hiển thị thông báo dạng Banner
   Future<void> _showLocalNotification(RemoteMessage message) async {
     const androidDetails = AndroidNotificationDetails(
-      'high_importance_channel', // Id channel
-      'High Importance Notifications', // Tên channel
+      'high_importance_channel',
+      'High Importance Notifications',
       importance: Importance.max,
       priority: Priority.high,
     );
-
     const notificationDetails = NotificationDetails(android: androidDetails);
 
     await _localNotifications.show(
@@ -205,22 +231,16 @@ class NotificationService {
     } catch (e) {
       print("❌ Lỗi kết nối Backend: $e");
     }
-  } // 1. Hàm gọi API lấy danh sách thông báo
+  }
 
   Future<List<NotificationModel>> fetchNotifications(int userId) async {
-    final url = Uri.parse(
-      "http://10.0.2.2:8089/api/notifications/user/$userId",
-    );
+    final url = Uri.parse("$_notiBaseUrl/user/$userId");
     try {
       final response = await http.get(url);
-
       if (response.statusCode == 200) {
-        // Decode JSON
         final List<dynamic> rawList = jsonDecode(
           utf8.decode(response.bodyBytes),
         );
-
-        // 3. Map từ JSON sang Model
         return rawList.map((e) => NotificationModel.fromJson(e)).toList();
       }
       return [];
@@ -230,21 +250,15 @@ class NotificationService {
     }
   }
 
-  // 2. Hàm hủy đăng ký (Dùng cho nút Logout)
   Future<void> unregisterDevice(int userId) async {
     try {
-      final url = Uri.parse(
-        "http://10.0.2.2:8089/api/notifications/unregister-device",
-      );
+      final url = Uri.parse("$_notiBaseUrl/unregister-device");
       await http.post(
         url,
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({"userId": userId}),
       );
-
-      // Xóa token phía Client luôn cho sạch
       await _firebaseMessaging.deleteToken();
-      print("👋 Đã hủy đăng ký thiết bị (Logout thành công)");
     } catch (e) {
       print("⚠️ Lỗi hủy đăng ký: $e");
     }
@@ -252,12 +266,7 @@ class NotificationService {
 
   Future<void> markAsRead(int notificationId) async {
     try {
-      // Gọi API báo Server là đã đọc tin này
-      final url = Uri.parse(
-        "http://10.0.2.2:8089/api/notifications/$notificationId/read",
-      );
-
-      // Gửi request PUT (không cần body)
+      final url = Uri.parse("$_notiBaseUrl/$notificationId/read");
       await http.put(url);
     } catch (e) {
       print("⚠️ Lỗi đánh dấu đã đọc: $e");
@@ -266,7 +275,7 @@ class NotificationService {
 
   Future<void> deleteNotification(int id) async {
     try {
-      final url = Uri.parse("http://10.0.2.2:8089/api/notifications/$id");
+      final url = Uri.parse("$_notiBaseUrl/$id");
       await http.delete(url);
     } catch (e) {
       print("⚠️ Lỗi xóa: $e");

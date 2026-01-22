@@ -179,6 +179,32 @@ class RequestRemoteDataSource {
     }
   }
 
+  // [THÊM MỚI] Lấy chi tiết 1 request theo ID để phục vụ Notification
+  Future<RequestModel?> getRequestById(String requestId, String userId) async {
+    try {
+      final url = Uri.parse(
+        '$baseUrl/$requestId',
+      ); // Giả sử Backend có endpoint GET /api/requests/{id}
+      print("--> Fetching Request Detail: $url");
+
+      final response = await http.get(
+        url,
+        headers: {"Content-Type": "application/json", "X-User-Id": userId},
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return RequestModel.fromJson(data);
+      } else {
+        print("Failed to load request detail: ${response.body}");
+        return null;
+      }
+    } catch (e) {
+      print("Error fetching request detail: $e");
+      return null;
+    }
+  }
+
   // [CẬP NHẬT] LẤY DANH SÁCH DUYỆT (Manager) (Có lọc)
   Future<List<RequestModel>> getManagerRequests(
     String managerId, {

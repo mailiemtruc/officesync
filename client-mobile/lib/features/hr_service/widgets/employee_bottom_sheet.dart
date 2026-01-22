@@ -138,18 +138,9 @@ class EmployeeBottomSheet extends StatelessWidget {
               icon: PhosphorIcons.pencilSimple(),
               text: 'Edit Information',
               color: const Color(0xFF374151),
-              onTap: () async {
-                final result = await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) =>
-                        EditProfileEmployeePage(employee: employee),
-                  ),
-                );
-
-                if (context.mounted) {
-                  Navigator.pop(context, result);
-                }
+              onTap: () {
+                // [SỬA] Đóng BottomSheet ngay lập tức và gửi tín hiệu 'OPEN_EDIT' về trang List
+                Navigator.pop(context, 'OPEN_EDIT');
               },
             ),
             const Divider(height: 1, color: Color(0xFFE5E7EB)),
@@ -168,7 +159,7 @@ class EmployeeBottomSheet extends StatelessWidget {
               onTap: () {
                 Navigator.pop(context);
                 if (employee.status == "LOCKED") {
-                  onToggleLock(); // Unlock ngay
+                  onToggleLock();
                 } else {
                   // Xác nhận Lock
                   showModalBottomSheet(
@@ -177,6 +168,7 @@ class EmployeeBottomSheet extends StatelessWidget {
                     isScrollControlled: true,
                     builder: (context) => ConfirmBottomSheet(
                       title: 'Suspend Access?',
+                      // [SỬA NỘI DUNG] Đồng bộ với Edit Page
                       message:
                           'Employee ${employee.fullName} will not be able to log in to the system.',
                       confirmText: 'Suspend',
@@ -203,15 +195,15 @@ class EmployeeBottomSheet extends StatelessWidget {
                   backgroundColor: Colors.transparent,
                   isScrollControlled: true,
                   builder: (context) => ConfirmBottomSheet(
-                    title: 'Delete Employee?',
-                    message: 'This action cannot be undone...',
+                    title: 'Delete this account?', // Sửa title cho giống ảnh
+                    // [SỬA NỘI DUNG] Đồng bộ với Edit Page
+                    message:
+                        'This action cannot be undone. All data associated with employee ${employee.fullName} will be permanently deleted.',
                     confirmText: 'Delete',
                     confirmColor: const Color(0xFFDC2626),
                     onConfirm: () async {
-                      // [SỬA] Thêm async
-                      // Gọi hàm xóa và đóng dialog
                       Navigator.pop(context);
-                      onDelete(); // Logic thực tế nằm ở trang EmployeePage
+                      onDelete();
                     },
                   ),
                 );

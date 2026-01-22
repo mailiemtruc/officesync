@@ -27,7 +27,9 @@ class _EditProfilePageState extends State<EditProfilePage> {
   late TextEditingController _emailController;
   late TextEditingController _phoneController;
   late TextEditingController _dobController;
-
+  late String _initialFullName;
+  late String _initialPhone;
+  late String _initialDob;
   bool _isLoading = false;
   bool _isUploadingAvatar = false;
   String? _currentAvatarUrl; // Lưu URL avatar hiện tại
@@ -50,6 +52,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
     _emailController = TextEditingController(text: widget.user.email);
     _phoneController = TextEditingController(text: widget.user.phone);
 
+    // Logic parse ngày sinh (giữ nguyên từ code cũ)
     String dobDisplay = "";
     if (widget.user.dateOfBirth.isNotEmpty &&
         widget.user.dateOfBirth != 'N/A') {
@@ -76,6 +79,11 @@ class _EditProfilePageState extends State<EditProfilePage> {
       }
     }
     _dobController = TextEditingController(text: dobDisplay);
+
+    // [MỚI] Lưu lại giá trị ban đầu sau khi đã format xong
+    _initialFullName = widget.user.fullName;
+    _initialPhone = widget.user.phone;
+    _initialDob = dobDisplay;
   }
 
   @override
@@ -168,10 +176,32 @@ class _EditProfilePageState extends State<EditProfilePage> {
   // --- LOGIC 2: BẤM NÚT SAVE MỚI LƯU TEXT ---
 
   Future<void> _handleSaveChanges() async {
+    // [CHECK THAY ĐỔI] Kiểm tra xem có gì khác so với ban đầu không
+    final currentName = _fullNameController.text.trim();
+    final currentPhone = _phoneController.text.trim();
+    final currentDob = _dobController.text.trim();
+
+    // Lưu ý: Avatar được xử lý riêng (upload ngay khi chọn), nên ở đây chỉ check text
+    final bool hasChanges =
+        (currentName != _initialFullName) ||
+        (currentPhone != _initialPhone) ||
+        (currentDob != _initialDob);
+
+    if (!hasChanges) {
+      CustomSnackBar.show(
+        context,
+        title: 'No Changes',
+        message: 'No changes detected to save.',
+        isError: false, // Màu xanh hoặc xám báo info
+        backgroundColor: const Color(0xFF6B7280),
+      );
+      return; // Dừng lại, không gọi API
+    }
+
+    // Nếu có thay đổi -> Tiếp tục gọi API như cũ
     setState(() => _isLoading = true);
 
     try {
-      // Chuẩn bị ngày sinh từ Input
       String dbDob = "";
       if (_dobController.text.isNotEmpty) {
         try {
@@ -180,13 +210,12 @@ class _EditProfilePageState extends State<EditProfilePage> {
         } catch (_) {}
       }
 
-      // Trong _handleSaveChanges
       final success = await _repository.updateEmployee(
-        widget.user.id ?? "", // [MỚI] Tham số 1: Updater ID
-        widget.user.id ?? "", // Tham số 2: Target ID
-        _fullNameController.text.trim(), // Tham số 3
-        _phoneController.text.trim(), // Tham số 4
-        dbDob, // Tham số 5
+        widget.user.id ?? "",
+        widget.user.id ?? "",
+        _fullNameController.text.trim(),
+        _phoneController.text.trim(),
+        dbDob,
         avatarUrl: _currentAvatarUrl,
       );
 
@@ -198,30 +227,16 @@ class _EditProfilePageState extends State<EditProfilePage> {
           message: 'Profile details updated successfully!',
           isError: false,
         );
-        Navigator.pop(context, true); // Quay lại và refresh
+        Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) {
         String msg = e.toString().replaceAll("Exception: ", "");
-        if (msg.contains("Failed to update:")) {
-          try {
-            String rawJson = msg.replaceAll("Failed to update:", "").trim();
-            final decoded = jsonDecode(rawJson);
-            if (decoded is Map && decoded.containsKey('message')) {
-              msg = decoded['message'];
-            }
-          } catch (_) {}
-        }
-        if (msg.contains("No changes detected")) {
-          msg = "No changes detected.";
-        }
         CustomSnackBar.show(
           context,
-          title: msg.contains("No changes") ? 'Info' : 'Error',
+          title: 'Error',
           message: msg,
-          isError: !msg.contains(
-            "No changes",
-          ), // Nếu không thay đổi thì ko tính là lỗi nghiêm trọng
+          isError: true,
         );
       }
     } finally {

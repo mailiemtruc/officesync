@@ -88,20 +88,29 @@ class _ManagerHomeViewState extends State<ManagerHomeView>
   }
 
   Future<void> _fetchLatestUserInfo() async {
-    try {
-      // 1. Lấy Tên công ty từ Storage
-      final storage = const FlutterSecureStorage();
-      String companyName = "OfficeSync";
+    final storage = const FlutterSecureStorage();
+    String companyName = "OfficeSync";
 
+    try {
+      // 1. Đọc từ Storage và update ngay
       String? userInfoStr = await storage.read(key: 'user_info');
       if (userInfoStr != null) {
         final data = jsonDecode(userInfoStr);
         if (data['companyName'] != null) {
           companyName = data['companyName'];
         }
+        // Update UI ngay
+        if (mounted) {
+          setState(() {
+            _fullName = data['fullName'] ?? _fullName;
+            _avatarUrl = data['avatarUrl'] ?? _avatarUrl;
+            _jobTitle = "Manager • $companyName";
+            _loadingUserInfo = false;
+          });
+        }
       }
 
-      // 2. Gọi API lấy thông tin cá nhân
+      // 2. Gọi API
       final employees = await _employeeDataSource.getEmployees(
         widget.currentUserId.toString(),
       );
@@ -117,18 +126,26 @@ class _ManagerHomeViewState extends State<ManagerHomeView>
         ),
       );
 
+      // Thử lấy companyName từ object currentUser
+      try {
+        final userJson = currentUser.toJson();
+        if (userJson['companyName'] != null) {
+          companyName = userJson['companyName'];
+        }
+      } catch (_) {}
+
+      // 3. Update UI lần cuối với data từ API
       if (mounted) {
         setState(() {
           _fullName = currentUser.fullName;
           _avatarUrl = currentUser.avatarUrl;
-
-          _jobTitle = companyName;
-
+          _jobTitle = "Manager • $companyName";
           _loadingUserInfo = false;
         });
       }
     } catch (e) {
       debugPrint("Error fetching manager info: $e");
+      if (mounted) setState(() => _loadingUserInfo = false);
     }
   }
 

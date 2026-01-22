@@ -23,6 +23,7 @@ import 'department_details_page.dart';
 import '../../../../core/utils/custom_snackbar.dart';
 import 'employee_profile_page.dart';
 import '../../widgets/skeleton_department_card.dart';
+import 'edit_profile_emloyee_page.dart';
 
 class EmployeeListPage extends StatefulWidget {
   const EmployeeListPage({super.key});
@@ -202,8 +203,8 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
     }
   }
 
-  // Menu tùy chọn nhân viên
   void _showOptions(BuildContext context, EmployeeModel employee) async {
+    // 1. Mở BottomSheet và đợi nhận tín hiệu hành động
     final result = await showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -215,8 +216,25 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
       ),
     );
 
-    if (result == true) {
-      // Tải lại ngầm khi có thay đổi từ BottomSheet
+    // 2. Xử lý dựa trên tín hiệu trả về
+    if (result == 'OPEN_EDIT') {
+      if (!mounted) return;
+
+      // Điều hướng sang trang Edit sau khi BottomSheet đã đóng hoàn toàn
+      final editResult = await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => EditProfileEmployeePage(employee: employee),
+        ),
+      );
+
+      // Nếu sửa thành công (trả về true), tải lại dữ liệu ở chế độ ngầm (Silent)
+      if (editResult == true && mounted) {
+        _fetchData(keyword: _searchController.text, isSilent: true);
+      }
+    }
+    // Xử lý trường hợp Lock/Delete từ các hàm callback bên trong BottomSheet
+    else if (result == true && mounted) {
       _fetchData(keyword: _searchController.text, isSilent: true);
     }
   }
@@ -237,13 +255,28 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
   }
 
   Future<void> _handleDeleteEmployee(String targetId) async {
+    // [UX FIX] 1. Hiện Loading toàn màn hình
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const Center(
+        child: CircularProgressIndicator(color: AppColors.primary),
+      ),
+    );
+
     try {
-      if (_currentUserId == null) return;
+      if (_currentUserId == null) {
+        Navigator.pop(context); // Tắt loading
+        return;
+      }
 
       bool success = await _employeeRepository.deleteEmployee(
         _currentUserId!,
         targetId,
       );
+
+      // [UX FIX] 2. Tắt Loading
+      if (mounted) Navigator.pop(context);
 
       if (mounted) {
         if (success) {
@@ -253,7 +286,7 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
             message: 'Employee deleted successfully',
             isError: false,
           );
-          // Tải lại ngầm và giữ nguyên từ khóa tìm kiếm
+          // Tải lại ngầm
           _fetchData(keyword: _searchController.text, isSilent: true);
         } else {
           CustomSnackBar.show(
@@ -265,12 +298,23 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
         }
       }
     } catch (e) {
+      // Tắt loading nếu có Exception
+      if (mounted) Navigator.pop(context);
       debugPrint("Delete error: $e");
     }
   }
 
   Future<void> _handleToggleLock(EmployeeModel emp) async {
     if (_currentUserId == null) return;
+
+    // [UX FIX] 1. Hiện Loading
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const Center(
+        child: CircularProgressIndicator(color: AppColors.primary),
+      ),
+    );
 
     String newStatus = emp.status == 'ACTIVE' ? 'LOCKED' : 'ACTIVE';
     try {
@@ -286,6 +330,9 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
         departmentId: null,
       );
 
+      // [UX FIX] 2. Tắt Loading
+      if (mounted) Navigator.pop(context);
+
       if (mounted) {
         if (success) {
           CustomSnackBar.show(
@@ -299,6 +346,7 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
         }
       }
     } catch (e) {
+      if (mounted) Navigator.pop(context); // Tắt loading
       print("Status update error: $e");
       if (mounted) {
         CustomSnackBar.show(
@@ -323,7 +371,6 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF9F9F9),
-
       floatingActionButton: showFab
           ? FloatingActionButton(
               onPressed: _navigateToAddPage,
@@ -333,7 +380,6 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
               child: const Icon(Icons.add, color: Colors.white, size: 28),
             )
           : null,
-
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
@@ -347,16 +393,8 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
                 const SizedBox(height: 24),
                 _buildSearchAndFilter(),
                 const SizedBox(height: 20),
-
-                // [MAIN CONTENT] Đã được tách ra hàm riêng và bọc AnimatedSwitcher
-                Expanded(
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 300),
-                    transitionBuilder: (child, animation) =>
-                        FadeTransition(opacity: animation, child: child),
-                    child: _buildBodyContent(),
-                  ),
-                ),
+                // [SỬA] Gọi trực tiếp hàm Body, không bọc thêm AnimatedSwitcher ở đây
+                Expanded(child: _buildBodyContent()),
               ],
             ),
           ),
@@ -367,39 +405,36 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
 
   Widget _buildBodyContent() {
     Widget content;
-    Key contentKey;
+    // [MỚI] Tạo Key duy nhất cho mỗi trạng thái để tránh dính Card cũ
+    final String stateKey =
+        "${_isLoading ? 'loading' : 'content'}_${_isEmployeesTab ? 'emp' : 'dept'}";
 
-    // 1. Trạng thái Loading
     if (_isLoading) {
-      contentKey = ValueKey('loading_${_isEmployeesTab ? "emp" : "dept"}');
       content = ListView.builder(
+        key: ValueKey("skeleton_$stateKey"),
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
         itemCount: 8,
-        itemBuilder: (context, index) {
-          return _isEmployeesTab
-              ? const SkeletonEmployeeCard()
-              : const SkeletonDepartmentCard();
-        },
+        itemBuilder: (context, index) => _isEmployeesTab
+            ? const SkeletonEmployeeCard()
+            : const SkeletonDepartmentCard(),
       );
     } else {
-      // 2. Trạng thái Data / Empty (đã xử lý bên trong các hàm con)
-      contentKey = ValueKey('content_${_isEmployeesTab ? "emp" : "dept"}');
       content = RefreshIndicator(
-        onRefresh: () async {
-          await _fetchData(keyword: _searchController.text);
-        },
+        key: ValueKey("data_$stateKey"),
+        onRefresh: () => _fetchData(keyword: _searchController.text),
         child: _isEmployeesTab ? _buildEmployeeList() : _buildDepartmentList(),
       );
     }
 
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 300),
-      reverseDuration: const Duration(milliseconds: 50), // Fix dính hình
-      switchInCurve: Curves.easeIn,
-      switchOutCurve: Curves.easeOut,
-      transitionBuilder: (child, animation) =>
-          FadeTransition(opacity: animation, child: child),
-      child: KeyedSubtree(key: contentKey, child: content),
+      reverseDuration: const Duration(milliseconds: 150),
+      switchInCurve: Curves.easeInOut,
+      switchOutCurve: Curves.easeInOut,
+      transitionBuilder: (child, animation) {
+        return FadeTransition(opacity: animation, child: child);
+      },
+      child: content,
     );
   }
 
@@ -453,7 +488,12 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
                 MaterialPageRoute(
                   builder: (context) => EmployeeProfilePage(employee: emp),
                 ),
-              ).then((_) => _fetchData());
+              ).then((_) {
+                // [QUAN TRỌNG] Dùng isSilent: true để tránh hiện lại Skeleton khi quay về
+                if (mounted) {
+                  _fetchData(keyword: _searchController.text, isSilent: true);
+                }
+              });
             },
           ),
         );
@@ -571,7 +611,7 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
       padding: const EdgeInsets.all(4),
       height: 52,
       decoration: BoxDecoration(
-        color: const Color(0xFFEAEBEE),
+        color: const Color(0x72E6E5E5),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -591,16 +631,34 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
           if (_isEmployeesTab != isEmployeeTab) {
             setState(() {
               _isEmployeesTab = isEmployeeTab;
+
+              // 1. Reset ô tìm kiếm
               _searchController.clear();
-              _employees = [];
-              _departments = [];
+
+              // 2. Logic chuyển tab mượt mà
+              bool targetHasData = isEmployeeTab
+                  ? _employees.isNotEmpty
+                  : _departments.isNotEmpty;
+
+              if (targetHasData) {
+                _isLoading = false;
+                _fetchData(keyword: '', isSilent: true);
+              } else {
+                _isLoading = true;
+                if (isEmployeeTab) {
+                  _employees = [];
+                } else {
+                  _departments = [];
+                }
+                _fetchData(keyword: '');
+              }
             });
-            _fetchData();
           }
         },
         child: Container(
           decoration: BoxDecoration(
             color: isSelected ? Colors.white : Colors.transparent,
+            // [GIỮ NGUYÊN] Độ bo góc cũ
             borderRadius: BorderRadius.circular(10),
             boxShadow: isSelected
                 ? [
@@ -615,7 +673,10 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
           child: Text(
             title,
             style: TextStyle(
-              color: isSelected ? AppColors.primary : const Color(0xFFB2AEAE),
+              // [SỬA MÀU] Đổi sang màu xanh đậm chuẩn Manager Page
+              color: isSelected
+                  ? const Color(0xE52260FF)
+                  : const Color(0xFFB2AEAE),
               fontSize: 16,
               fontWeight: FontWeight.w600,
               fontFamily: 'Inter',
@@ -647,9 +708,9 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
       ),
       child: TextField(
         controller: _searchController,
-        // Cập nhật UI liên tục khi gõ để hiện/ẩn nút xóa
+        // [UX FIX] Tắt setState trong onChanged
         onChanged: (value) {
-          setState(() {});
+          // Chỉ cần logic debounce ở listener đã setup trong initState
         },
         decoration: InputDecoration(
           hintText: hint,
@@ -663,34 +724,34 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
             color: const Color(0xFF757575),
             size: 20,
           ),
-          // [ĐÃ SỬA] Nút xóa dùng PhosphorIcons + Giao diện hình tròn đẹp
-          suffixIcon: _searchController.text.isNotEmpty
-              ? Padding(
-                  padding: const EdgeInsets.all(10.0), // Padding để nút nhỏ gọn
-                  child: GestureDetector(
-                    onTap: () {
-                      _searchController.clear();
-                      setState(() {}); // Cập nhật UI để ẩn nút
-
-                      // Hủy debounce cũ và load lại danh sách gốc
-                      if (_debounce?.isActive ?? false) _debounce!.cancel();
-                      _fetchData(keyword: '');
-                    },
-                    child: Container(
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFC4C4C4), // Màu nền xám bo tròn
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        // Nếu ".x" báo lỗi, hãy thử đổi thành ".x_" hoặc ".close"
-                        PhosphorIcons.x(PhosphorIconsStyle.bold),
-                        size: 12,
-                        color: Colors.white,
-                      ),
+          // [UX FIX] Sử dụng ValueListenableBuilder
+          suffixIcon: ValueListenableBuilder<TextEditingValue>(
+            valueListenable: _searchController,
+            builder: (context, value, child) {
+              if (value.text.isEmpty) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.all(10.0),
+                child: GestureDetector(
+                  onTap: () {
+                    _searchController.clear();
+                    if (_debounce?.isActive ?? false) _debounce!.cancel();
+                    _fetchData(keyword: '');
+                  },
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFC4C4C4),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      PhosphorIcons.x(PhosphorIconsStyle.bold),
+                      size: 12,
+                      color: Colors.white,
                     ),
                   ),
-                )
-              : null,
+                ),
+              );
+            },
+          ),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(vertical: 10),
         ),

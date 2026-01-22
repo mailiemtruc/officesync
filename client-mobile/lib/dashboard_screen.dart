@@ -9,7 +9,7 @@ import 'features/core_service/presentation/pages/staff_home_view.dart';
 import 'features/core_service/presentation/pages/manager_home_view.dart';
 import 'features/core_service/presentation/pages/director_home_view.dart';
 import 'features/core_service/presentation/pages/admin_home_view.dart';
-
+import 'dart:async';
 // Import User Profile
 import 'features/hr_service/presentation/pages/user_profile_page.dart';
 
@@ -21,8 +21,12 @@ import '../../../../core/services/websocket_service.dart';
 
 class DashboardScreen extends StatefulWidget {
   final Map<String, dynamic> userInfo;
-
-  const DashboardScreen({super.key, required this.userInfo});
+  final int initialIndex; // <--- THÊM DÒNG NÀY
+  const DashboardScreen({
+    super.key,
+    required this.userInfo,
+    this.initialIndex = 0,
+  });
 
   // Hàm static giúp các trang con có thể gọi để chuyển tab
   static void switchTab(BuildContext context, int index) {
@@ -39,7 +43,7 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   int _currentIndex = 0;
   final _storage = const FlutterSecureStorage();
-
+  Timer? _refreshTimer;
   // Dùng IndexedStack để giữ trạng thái trang
   late List<Widget> _pages = [];
   bool _canAccessHrAttendance = false;
@@ -55,6 +59,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void initState() {
     super.initState();
+    _currentIndex = widget
+        .initialIndex; // <--- [QUAN TRỌNG] Gán index từ tham số truyền vào
     _initDashboardData();
   }
 
@@ -142,26 +148,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _setupRealtimePermissionListener() async {
     final userId = _currentUserInfo['id'];
     if (userId == null) return;
-
-    // URL chuẩn của HR Service (Port 8081)
     final String hrSocketUrl = 'ws://10.0.2.2:8081/ws-hr';
 
-    // 2. Thêm 'await' để đợi WebSocket kết nối xong và trả về hàm hủy đăng ký
     _unsubscribeFn = await WebSocketService().subscribe(
       '/topic/user/$userId/profile',
-      (message) async {
-        // Backend gửi text: "REFRESH_PROFILE"
+      (message) {
         if (message.toString().contains("REFRESH_PROFILE")) {
           print("--> [Dashboard] Received REFRESH_PROFILE signal");
 
-          // Delay nhỏ để DB phía Server kịp commit transaction
-          await Future.delayed(const Duration(milliseconds: 500));
-
-          // Gọi API lấy thông tin mới nhất
-          _refreshUserProfileFromApi();
+          // [FIX UX] Hủy timer cũ, chỉ chạy timer mới sau 1 giây
+          // Giúp gom nhiều thông báo cập nhật thành 1 lần gọi API duy nhất
+          _refreshTimer?.cancel();
+          _refreshTimer = Timer(const Duration(milliseconds: 1000), () {
+            if (mounted) _refreshUserProfileFromApi();
+          });
         }
       },
-      forceUrl: hrSocketUrl, // [QUAN TRỌNG] Bắt buộc kết nối đúng cổng 8081
+      forceUrl: hrSocketUrl,
     );
   }
 
@@ -169,20 +172,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
     try {
       final userId = _currentUserInfo['id'].toString();
       final employees = await _employeeDataSource.getEmployees(userId);
+
       final myProfile = employees.firstWhere(
         (e) => e.id == userId,
         orElse: () => throw Exception("User not found"),
       );
 
+      // [FIX] Map đầy đủ trường dữ liệu để truyền xuống con
       final newInfo = {
         'id': myProfile.id,
         'email': myProfile.email,
         'fullName': myProfile.fullName,
         'role': myProfile.role,
-        'mobileNumber': myProfile.phone,
+        'phone': myProfile.phone,
+        'mobileNumber': myProfile.phone, // Giữ key cũ để tương thích
         'dateOfBirth': myProfile.dateOfBirth,
         'avatarUrl': myProfile.avatarUrl,
-        'token': _currentUserInfo['token'], // Giữ token cũ
+        'token': _currentUserInfo['token'],
+        // [QUAN TRỌNG] Thêm 2 trường này để trang con hiển thị luôn
+        'employeeCode': myProfile.employeeCode,
+        'departmentName': myProfile.departmentName,
+        'companyName': _currentUserInfo['companyName'] ?? "OfficeSync",
       };
 
       await _storage.write(key: 'user_info', value: jsonEncode(newInfo));
@@ -190,10 +200,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (mounted) {
         setState(() {
           _currentUserInfo = newInfo;
-          // Rebuild lại các trang với quyền/role mới
           _updatePages(myProfile.role);
         });
-        // Check lại quyền HR (phòng khi bị tước quyền)
         _checkPermission();
       }
     } catch (e) {

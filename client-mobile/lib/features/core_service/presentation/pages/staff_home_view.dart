@@ -92,22 +92,33 @@ class _StaffHomeViewState extends State<StaffHomeView>
     }
   }
 
-  // [QUAN TRỌNG] Hàm lấy thông tin mới nhất từ API thay vì Storage cũ
   Future<void> _fetchLatestUserInfo() async {
-    try {
-      // 1. Lấy Tên công ty từ Storage (Login đã lưu)
-      final storage = const FlutterSecureStorage();
-      String companyName = "OfficeSync"; // Giá trị mặc định
+    final storage = const FlutterSecureStorage();
+    String companyName = "OfficeSync";
 
+    try {
+      // 1. Đọc từ Storage và CẬP NHẬT UI NGAY (Optimistic UI)
       String? userInfoStr = await storage.read(key: 'user_info');
+      Map<String, dynamic> localData = {};
+
       if (userInfoStr != null) {
-        final data = jsonDecode(userInfoStr);
-        if (data['companyName'] != null) {
-          companyName = data['companyName'];
+        localData = jsonDecode(userInfoStr);
+        if (localData['companyName'] != null) {
+          companyName = localData['companyName'];
+        }
+
+        // [QUAN TRỌNG] Update UI ngay lập tức từ dữ liệu local
+        if (mounted) {
+          setState(() {
+            _fullName = localData['fullName'] ?? _fullName;
+            _avatarUrl = localData['avatarUrl'] ?? _avatarUrl;
+            _jobTitle = "Staff • $companyName"; // Hiển thị tên công ty ngay
+            _loadingUserInfo = false;
+          });
         }
       }
 
-      // 2. Lấy thông tin Avatar/Tên mới nhất từ API
+      // 2. Sau đó mới gọi API để lấy dữ liệu mới nhất (nếu có mạng)
       final employees = await _employeeDataSource.getEmployees(
         widget.currentUserId.toString(),
       );
@@ -124,18 +135,43 @@ class _StaffHomeViewState extends State<StaffHomeView>
         ),
       );
 
+      // Thử lấy companyName mới từ API (nếu backend có trả về)
+      try {
+        final dynamic userDyn = currentUser;
+        if (getDynamicField(userDyn, 'companyName') != null) {
+          companyName = getDynamicField(userDyn, 'companyName');
+        }
+      } catch (_) {}
+
+      // 3. Cập nhật UI lần 2 (nếu dữ liệu API khác local)
       if (mounted) {
         setState(() {
           _fullName = currentUser.fullName;
           _avatarUrl = currentUser.avatarUrl;
+          _jobTitle = "Staff • $companyName";
           _loadingUserInfo = false;
-
-          // [QUAN TRỌNG] Thay thế hiển thị Role/Dept bằng Tên công ty
-          _jobTitle = companyName;
         });
       }
     } catch (e) {
       debugPrint("Error fetching user info in Home: $e");
+      // Dù lỗi API, nhưng nhờ bước 1, UI đã hiển thị đúng tên công ty rồi.
+      if (mounted) setState(() => _loadingUserInfo = false);
+    }
+  }
+
+  // Hàm hỗ trợ lấy field động an toàn
+  dynamic getDynamicField(dynamic object, String fieldName) {
+    try {
+      // Nếu object là Map
+      if (object is Map) return object[fieldName];
+      // Nếu object là Class, convert sang Json rồi lấy (cách an toàn nhất mà ko sửa Model)
+      try {
+        return (object.toJson())[fieldName];
+      } catch (_) {
+        return null;
+      }
+    } catch (_) {
+      return null;
     }
   }
 

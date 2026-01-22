@@ -238,11 +238,8 @@ class _SelectManagerPageState extends State<SelectManagerPage> {
       ),
       child: TextField(
         controller: _searchController,
-        // [MỚI] Cập nhật UI để hiện nút xóa
-        onChanged: (val) {
-          _onSearchChanged(val);
-          setState(() {});
-        },
+        // [TỐI ƯU] Bỏ setState ở đây
+        onChanged: (val) => _onSearchChanged(val),
         decoration: InputDecoration(
           hintText: 'Search name, employee ID...',
           hintStyle: const TextStyle(
@@ -255,32 +252,34 @@ class _SelectManagerPageState extends State<SelectManagerPage> {
             color: const Color(0xFF757575),
             size: 20,
           ),
-          // [MỚI] Nút Xóa hình tròn
-          suffixIcon: _searchController.text.isNotEmpty
-              ? Padding(
-                  padding: const EdgeInsets.all(10.0),
-                  child: GestureDetector(
-                    onTap: () {
-                      _searchController.clear();
-                      setState(() {});
-
-                      if (_debounce?.isActive ?? false) _debounce!.cancel();
-                      _performSearch("");
-                    },
-                    child: Container(
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFC4C4C4),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        PhosphorIcons.x(PhosphorIconsStyle.bold),
-                        size: 12,
-                        color: Colors.white,
-                      ),
+          // [TỐI ƯU] Dùng ValueListenableBuilder
+          suffixIcon: ValueListenableBuilder<TextEditingValue>(
+            valueListenable: _searchController,
+            builder: (context, value, child) {
+              if (value.text.isEmpty) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.all(10.0),
+                child: GestureDetector(
+                  onTap: () {
+                    _searchController.clear();
+                    if (_debounce?.isActive ?? false) _debounce!.cancel();
+                    _performSearch("");
+                  },
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFC4C4C4),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      PhosphorIcons.x(PhosphorIconsStyle.bold),
+                      size: 12,
+                      color: Colors.white,
                     ),
                   ),
-                )
-              : null,
+                ),
+              );
+            },
+          ),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(vertical: 10),
         ),

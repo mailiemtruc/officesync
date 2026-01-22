@@ -77,9 +77,15 @@ public ResponseEntity<List<Request>> getMyRequests(
         return ResponseEntity.ok(Map.of("message", "Request deleted successfully"));
     }
 
-    // 1. API cho Manager/Admin
-@GetMapping("/manager")
-public ResponseEntity<List<Request>> getManagerRequests(
+    @GetMapping("/{id}")
+    public ResponseEntity<Request> getRequestById(@PathVariable Long id) {
+        Request request = requestService.getRequestById(id);
+        return ResponseEntity.ok(request);
+    }
+
+
+     @GetMapping("/manager")
+     public ResponseEntity<List<Request>> getManagerRequests(
         @RequestHeader("X-User-Id") Long managerId,
         @RequestParam(required = false) String search,
         @RequestParam(required = false) Integer day,   // [MỚI]

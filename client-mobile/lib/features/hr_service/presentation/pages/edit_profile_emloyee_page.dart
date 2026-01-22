@@ -26,7 +26,10 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
   bool _isActive = true;
   String _selectedRole = 'Staff';
   String _selectedDepartmentName = 'Loading...';
-
+  late String _initialRole;
+  late String _initialDeptName;
+  late bool _initialActive;
+  late String _initialEmail;
   // [MỚI] Biến kiểm tra quyền hạn người đang đăng nhập
   bool _isCurrentUserManager = false;
   String? _currentUserId; // [QUAN TRỌNG] Lưu ID người đang thao tác
@@ -62,11 +65,26 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
 
     _selectedDepartmentName = widget.employee.departmentName ?? "Unassigned";
 
-    // [SỬA] Gọi hàm khởi tạo tuần tự để tránh lỗi thiếu ID
+    // [MỚI] Lưu trạng thái ban đầu
+    _initialEmail = widget.employee.email;
+    _initialActive = (widget.employee.status == "ACTIVE");
+    _initialRole = _selectedRole;
+    _initialDeptName = widget.employee.departmentName ?? "Unassigned";
+
     _initData();
   }
 
-  // [LOGIC MỚI] Hàm khởi tạo tuần tự
+  // Thêm hàm này vào trong class _EditProfileEmployeePageState
+  void _showErrorSnackBar(String message) {
+    if (!mounted) return;
+    CustomSnackBar.show(
+      context,
+      title: 'Error',
+      message: message,
+      isError: true,
+    );
+  }
+
   Future<void> _initData() async {
     await _checkCurrentUserRole(); // 1. Lấy ID trước
     if (_currentUserId != null) {
@@ -198,9 +216,9 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
     );
   }
 
-  // --- LOGIC XỬ LÝ LƯU (ĐÃ SỬA: Thay thế lỗi bằng Dialog xác nhận + Logic giáng chức) ---
   Future<void> _handleSave() async {
     final email = _emailController.text.trim();
+    // Validate Email
     final emailRegex = RegExp(
       r"^[a-zA-Z0-9.a-zA-Z0-9.!#$%&'*+-/=?^_`{|}~]+@[a-zA-Z0-9]+\.[a-zA-Z]+",
     );
@@ -209,28 +227,42 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
       return;
     }
 
+    // [CHECK THAY ĐỔI]
+    final bool emailChanged = email != _initialEmail;
+    final bool activeChanged = _isActive != _initialActive;
+    final bool roleChanged = _selectedRole != _initialRole;
+    final bool deptChanged = _selectedDepartmentName != _initialDeptName;
+
+    if (!emailChanged && !activeChanged && !roleChanged && !deptChanged) {
+      CustomSnackBar.show(
+        context,
+        title: 'Info',
+        message: 'No changes made to employee profile.',
+        isError: false,
+        backgroundColor: const Color(0xFF6B7280),
+      );
+      return;
+    }
+
     if (_currentUserId == null) {
       _showErrorSnackBar('Session expired. Please login again.');
       return;
     }
 
-    // --- LOGIC XỬ LÝ MANAGER MỚI (ĐÃ SỬA) ---
+    // --- LOGIC GIÁNG CHỨC & CẬP NHẬT (Giữ nguyên phần thông minh cũ) ---
     bool shouldProceed = true;
-    EmployeeModel? oldManager; // Lưu thông tin ông quản lý cũ để giáng chức
+    EmployeeModel? oldManager;
 
     if (_selectedRole == 'Manager' && _selectedDepartmentObj != null) {
       if (_selectedDepartmentObj!.manager != null) {
         final currentManagerId = _selectedDepartmentObj!.manager!.id;
         final myId = widget.employee.id;
 
-        // Nếu người đang giữ chức không phải là chính mình
         if (currentManagerId.toString() != myId.toString()) {
           final currentManagerName =
               _selectedDepartmentObj!.manager?.fullName ?? "Unknown";
+          oldManager = _selectedDepartmentObj!.manager;
 
-          oldManager = _selectedDepartmentObj!.manager; // Lưu lại ông cũ
-
-          // HIỆN DIALOG XÁC NHẬN
           final bool? confirm = await showModalBottomSheet<bool>(
             context: context,
             backgroundColor: Colors.transparent,
@@ -257,39 +289,34 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
     setState(() => _isLoading = true);
 
     try {
-      // ---------------------------------------------------------
-      // BƯỚC 1: GIÁNG CHỨC NGƯỜI CŨ (Nếu có người cần thay thế)
-      // ---------------------------------------------------------
+      // 1. Giáng chức người cũ (nếu có)
       if (oldManager != null && oldManager.id != null) {
-        // Gọi API update người cũ về STAFF
         await _repository.updateEmployee(
           _currentUserId!,
           oldManager.id!,
           oldManager.fullName,
           oldManager.phone,
           oldManager.dateOfBirth,
-          // Các thông tin khác giữ nguyên
           email: oldManager.email,
           avatarUrl: oldManager.avatarUrl,
           status: oldManager.status,
-
-          // QUAN TRỌNG NHẤT: Set role về STAFF
-          role: 'STAFF',
-
-          // Giữ nguyên phòng ban (vẫn ở phòng cũ nhưng làm lính)
-          // Hoặc set về null nếu muốn đuổi khỏi phòng
+          role: 'STAFF', // Giáng chức
           departmentId: _selectedDepartmentObj!.id,
         );
-
-        print("--> Demoted old manager: ${oldManager.fullName}");
       }
 
-      // ---------------------------------------------------------
-      // BƯỚC 2: CẬP NHẬT NGƯỜI MỚI (Logic cũ của bạn)
-      // ---------------------------------------------------------
+      // 2. Cập nhật nhân viên hiện tại
       String statusToSend = _isActive ? "ACTIVE" : "LOCKED";
       String roleToSend = _selectedRole.toUpperCase();
       int? deptIdToSend = _selectedDepartmentObj?.id;
+
+      // Nếu không đổi phòng ban, giữ nguyên ID phòng ban cũ
+      if (!deptChanged && _selectedDepartmentObj == null) {
+        // Logic này để handle trường hợp user không chọn lại phòng ban trong dropdown
+        // nhưng phòng ban cũ vẫn giữ nguyên (thông qua so sánh string name)
+        // Bạn có thể cần tìm lại deptId dựa trên _initialDeptName nếu cần thiết,
+        // nhưng logic cũ của bạn dùng _selectedDepartmentObj là ổn nếu initData fetch đủ.
+      }
 
       final success = await _repository.updateEmployee(
         _currentUserId!,
@@ -325,16 +352,6 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
     }
   }
 
-  void _showErrorSnackBar(String message) {
-    CustomSnackBar.show(
-      context,
-      title: 'Error',
-      message: message,
-      isError: true,
-    );
-  }
-
-  // --- DELETE & SUSPEND ---
   void _showDeleteConfirmation(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -342,13 +359,14 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
       isScrollControlled: true,
       builder: (context) => ConfirmBottomSheet(
         title: 'Delete this account?',
-        message: 'This action cannot be undone.',
+        // [SỬA NỘI DUNG] Hiển thị đúng câu cảnh báo kèm tên nhân viên
+        message:
+            'This action cannot be undone. All data associated with employee ${widget.employee.fullName} will be permanently deleted.',
         confirmText: 'Delete',
         confirmColor: const Color(0xFFDC2626),
         onConfirm: () async {
           Navigator.pop(context);
 
-          // [FIX LỖI] Kiểm tra user id hiện tại
           if (_currentUserId == null) {
             _showErrorSnackBar("Session error. Please login again.");
             return;
@@ -356,10 +374,9 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
 
           setState(() => _isLoading = true);
 
-          // [FIX LỖI] Truyền 2 tham số: (deleterId, targetId)
           bool success = await _repository.deleteEmployee(
-            _currentUserId!, // Người xóa (bạn)
-            widget.employee.id!, // Người bị xóa
+            _currentUserId!,
+            widget.employee.id!,
           );
 
           if (mounted) {
@@ -388,7 +405,9 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
       isScrollControlled: true,
       builder: (context) => ConfirmBottomSheet(
         title: 'Suspend Access?',
-        message: 'Employee will not be able to log in.',
+        // [SỬA NỘI DUNG] Thêm tên nhân viên và câu "to the system"
+        message:
+            'Employee ${widget.employee.fullName} will not be able to log in to the system.',
         confirmText: 'Suspend',
         confirmColor: const Color(0xFFF97316),
         onConfirm: () {
@@ -396,6 +415,7 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
           Navigator.pop(context);
         },
         onCancel: () {
+          // Nếu bấm Cancel thì bật lại switch
           setState(() => _isActive = true);
         },
       ),

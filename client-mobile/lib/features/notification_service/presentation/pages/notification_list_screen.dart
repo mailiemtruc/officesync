@@ -1,11 +1,21 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart'; // Nếu báo lỗi, chạy lệnh: flutter pub add intl
+import 'package:intl/intl.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+
+// Service & Model
 import 'package:officesync/features/notification_service/notification_service.dart';
 import '../../models/notification_model.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
+
+// Data Sources & APIs
+import 'package:officesync/features/hr_service/data/datasources/request_remote_data_source.dart';
+import 'package:officesync/features/communication_service/data/newsfeed_api.dart';
+
+// Screens (Đã import đầy đủ các trang đích)
 import 'package:officesync/features/chat_service/presentation/pages/chat_detail_screen.dart';
-import 'package:officesync/features/communication_service/data/newsfeed_api.dart'; // ✅ Import API
-import 'package:officesync/features/communication_service/presentation/pages/post_detail_screen.dart'; // ✅ Import màn hình chi tiết
+import 'package:officesync/features/communication_service/presentation/pages/post_detail_screen.dart';
+import 'package:officesync/features/hr_service/presentation/pages/request_detail_page.dart';
+import 'package:officesync/features/hr_service/presentation/pages/manager_request_review_page.dart';
+import 'package:officesync/dashboard_screen.dart';
 
 class NotificationListScreen extends StatefulWidget {
   final int userId;
@@ -18,14 +28,15 @@ class NotificationListScreen extends StatefulWidget {
 class _NotificationListScreenState extends State<NotificationListScreen> {
   List<NotificationModel> _notifications = [];
   bool _isLoading = true;
+  final _requestDataSource = RequestRemoteDataSource();
+
   @override
   void initState() {
     super.initState();
     _loadData();
 
-    // 👇 CÀI "ĂNG-TEN" LẮNG NGHE TIN MỚI (Real-time)
+    // Lắng nghe tin mới realtime
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      print("🔔 Có tin mới: ${message.notification?.title}");
       if (message.notification != null) {
         if (mounted) {
           setState(() {
@@ -33,8 +44,9 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
               id: DateTime.now().millisecondsSinceEpoch,
               title: message.notification!.title ?? "Thông báo mới",
               body: message.notification!.body ?? "",
-              type: "GENERAL",
-              referenceId: 0,
+              type: message.data['type'] ?? "GENERAL",
+              referenceId:
+                  int.tryParse(message.data['referenceId'] ?? "0") ?? 0,
               isRead: false,
               createdAt: DateTime.now().toIso8601String(),
             );
@@ -55,80 +67,134 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
     }
   }
 
-  // 👇 [THÊM HÀM NÀY] Xử lý bấm vào thông báo
+  // HÀM XỬ LÝ TAP VÀO ITEM
   void _handleNotificationTap(NotificationModel noti) async {
-    // Lấy thông tin từ model
     String type = noti.type;
     int id = noti.referenceId;
-    String title = noti.title;
+    String currentUserId = widget.userId.toString();
 
-    switch (type) {
-      case 'CHAT':
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => ChatDetailScreen(
-              roomId: id,
-              chatName: title, // Lấy tên người gửi làm tên Chat
-            ),
-          ),
-        );
-        break;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const Center(child: CircularProgressIndicator()),
+    );
 
-      case 'ANNOUNCEMENT':
-      case 'COMMENT':
-      case 'REACTION':
-        // Hiển thị loading nhẹ nếu cần
-        final post = await NewsfeedApi().getPostById(id);
-        if (post != null && mounted) {
+    try {
+      switch (type) {
+        // --- REQUEST ---
+        case 'REQUEST':
+          if (id == 0) throw Exception("Invalid ID");
+
+          final requestModel = await _requestDataSource.getRequestById(
+            id.toString(),
+            currentUserId,
+          );
+
+          if (!mounted) return;
+          Navigator.pop(context); // Tắt loading
+
+          if (requestModel != null) {
+            bool isMyRequest = requestModel.requesterId == currentUserId;
+            if (isMyRequest) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => RequestDetailPage(request: requestModel),
+                ),
+              );
+            } else {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) =>
+                      ManagerRequestReviewPage(request: requestModel),
+                ),
+              );
+            }
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text("Không tìm thấy thông tin đơn này."),
+              ),
+            );
+          }
+          break;
+
+        // --- CHAT ---
+        case 'CHAT':
+          Navigator.pop(context);
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => PostDetailScreen(post: post)),
+            MaterialPageRoute(
+              builder: (_) =>
+                  ChatDetailScreen(roomId: id, chatName: noti.title),
+            ),
           );
-        }
-        break;
+          break;
 
-      case 'TASK':
-        // Sau này mở cái này
-        print("➡️ Đang mở Task ID: $id");
-        break;
+        // --- NEWSFEED ---
+        case 'ANNOUNCEMENT':
+        case 'COMMENT':
+        case 'REACTION':
+          final post = await NewsfeedApi().getPostById(id);
+          if (!mounted) return;
+          Navigator.pop(context);
 
-      case 'LEAVE_REQUEST':
-        print("➡️ Đang mở Đơn nghỉ phép ID: $id");
-        break;
+          if (post != null) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => PostDetailScreen(post: post)),
+            );
+          }
+          break;
 
-      default:
-        print("⚠️ Loại thông báo chưa hỗ trợ: $type");
+        // --- SYSTEM (SỬA LẠI ĐỂ DÙNG USER PROFILE PAGE) ---
+        case 'SYSTEM':
+        case 'ROLE_UPDATE':
+        case 'DEPARTMENT_UPDATE':
+          Navigator.pop(context);
+          DashboardScreen.switchTab(context, 2);
+
+          // 3. Đóng trang NotificationListScreen để lộ Dashboard ra
+          Navigator.pop(context);
+          break;
+
+        // --- DEFAULT ---
+        default:
+          Navigator.pop(context);
+          print("⚠️ Loại thông báo chưa hỗ trợ: $type");
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Chưa hỗ trợ loại thông báo: $type")),
+          );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Có lỗi xảy ra: $e")));
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white, // Thêm nền trắng cho sạch
       appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
         centerTitle: true,
-        leadingWidth: 54,
-        leading: Padding(
-          padding: const EdgeInsets.only(left: 24), // Căn lề 24px
-          child: InkWell(
-            onTap: () => Navigator.pop(context),
-            child: const Align(
-              alignment: Alignment.centerLeft,
-              child: Icon(
-                Icons.arrow_back_ios_new, // Icon mũi tên mảnh
-                color: Color(0xFF2260FF),
-                size: 24,
-              ),
-            ),
-          ),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios, color: Color(0xFF2260FF)),
+          onPressed: () => Navigator.pop(context),
         ),
-        // 2. Tiêu đề màu xanh và đậm
         title: const Text(
-          "NOTIFICATION", // Viết hoa nhìn cho "Pro"
+          "Notification",
           style: TextStyle(
-            color: Color(0xFF2260FF), // Mã màu xanh chuẩn của App bạn
+            color: Color(0xFF2260FF),
             fontWeight: FontWeight.bold,
-            fontSize: 24,
+            fontSize: 18,
           ),
         ),
       ),
@@ -149,11 +215,8 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
     );
   }
 
-  Widget _buildItem(dynamic notiItem) {
-    NotificationModel noti = notiItem as NotificationModel;
+  Widget _buildItem(NotificationModel noti) {
     bool isRead = noti.isRead;
-
-    // Xử lý thời gian hiển thị gọn gàng
     String timeStr = "";
     if (noti.createdAt.isNotEmpty) {
       try {
@@ -166,8 +229,6 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
     return Dismissible(
       key: Key(noti.id.toString()),
       direction: DismissDirection.endToStart,
-
-      // Nền đỏ khi vuốt xóa (có icon thùng rác)
       background: Container(
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
@@ -182,7 +243,6 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
           size: 32,
         ),
       ),
-
       onDismissed: (direction) {
         NotificationService().deleteNotification(noti.id);
         setState(() {
@@ -195,13 +255,11 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
           ),
         );
       },
-
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(16), // Bo góc mềm mại hơn
-          // Hiệu ứng đổ bóng (Shadow) tạo chiều sâu
+          borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
               color: Colors.grey.withOpacity(0.08),
@@ -210,7 +268,6 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
               offset: const Offset(0, 4),
             ),
           ],
-          // Nếu chưa đọc thì có viền xanh mờ bao quanh
           border: !isRead
               ? Border.all(
                   color: const Color(0xFF2260FF).withOpacity(0.3),
@@ -223,7 +280,7 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
           child: InkWell(
             borderRadius: BorderRadius.circular(16),
             onTap: () {
-              // Logic khi bấm vào: Đánh dấu đã đọc + Chuyển trang
+              // 1. Đánh dấu đã đọc
               if (!isRead) {
                 NotificationService().markAsRead(noti.id);
                 setState(() {
@@ -231,49 +288,37 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
                     (e) => e.id == noti.id,
                   );
                   if (index != -1) {
-                    // ✅ Tạo cái mới đè lên cái cũ
-                    _notifications[index] = NotificationModel(
-                      id: noti.id,
-                      title: noti.title,
-                      body: noti.body,
-                      type: noti.type,
-                      referenceId: noti.referenceId,
-                      isRead: true, // <--- Chỉ thay đổi đúng chỗ này thành true
-                      createdAt: noti.createdAt,
-                    );
+                    // [ĐÃ SỬA] Bây giờ NotificationModel đã có hàm copyWith
+                    _notifications[index] = noti.copyWith(isRead: true);
                   }
                 });
               }
-              _handleNotificationTap(noti); // Gọi hàm chuyển trang
+              // 2. Gọi hàm xử lý chuyển trang
+              _handleNotificationTap(noti);
             },
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // --- CỘT 1: ICON TRÒN (Thay đổi theo loại thông báo) ---
                   Container(
                     width: 48,
                     height: 48,
                     decoration: BoxDecoration(
-                      color: _getColorByType(noti.type), // Màu nền nhạt
+                      color: _getColorByType(noti.type),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
-                      _getIconByType(noti.type), // Icon tương ứng
-                      color: _getIconColorByType(noti.type), // Màu icon đậm
+                      _getIconByType(noti.type),
+                      color: _getIconColorByType(noti.type),
                       size: 22,
                     ),
                   ),
-
                   const SizedBox(width: 16),
-
-                  // --- CỘT 2: NỘI DUNG CHÍNH ---
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Hàng tiêu đề + Thời gian
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
@@ -282,7 +327,6 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
                                 noti.title,
                                 style: TextStyle(
                                   fontSize: 16,
-                                  // Chưa đọc thì chữ đậm, Đã đọc thì chữ thường
                                   fontWeight: isRead
                                       ? FontWeight.w600
                                       : FontWeight.w800,
@@ -302,15 +346,11 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
                             ),
                           ],
                         ),
-
                         const SizedBox(height: 6),
-
-                        // Nội dung tin nhắn
                         Text(
                           noti.body,
                           style: TextStyle(
                             fontSize: 14,
-                            // Chưa đọc thì màu đen rõ, Đã đọc thì màu xám
                             color: isRead
                                 ? Colors.grey.shade600
                                 : Colors.black87,
@@ -322,8 +362,6 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
                       ],
                     ),
                   ),
-
-                  // --- CỘT 3: CHẤM XANH (Chỉ hiện khi chưa đọc) ---
                   if (!isRead)
                     Container(
                       margin: const EdgeInsets.only(left: 10, top: 15),
@@ -359,7 +397,6 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
     );
   }
 
-  // 1. Lấy màu nền nhạt cho icon (VD: Tin nhắn -> Xanh nhạt)
   Color _getColorByType(String type) {
     switch (type) {
       case 'CHAT':
@@ -370,14 +407,13 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
         return const Color(0xFFE8F5E9);
       case 'TASK':
         return const Color(0xFFFFF3E0);
-      case 'LEAVE_REQUEST':
+      case 'REQUEST':
         return const Color(0xFFF3E5F5);
       default:
         return const Color(0xFFFFEBEE);
     }
   }
 
-  // 2. Lấy hình Icon tương ứng
   IconData _getIconByType(String type) {
     switch (type) {
       case 'CHAT':
@@ -390,14 +426,13 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
         return Icons.favorite_border;
       case 'TASK':
         return Icons.assignment_outlined;
-      case 'LEAVE_REQUEST':
-        return Icons.flight_takeoff;
+      case 'REQUEST':
+        return Icons.description_outlined;
       default:
         return Icons.notifications_none;
     }
   }
 
-  // 3. Lấy màu đậm cho Icon chính
   Color _getIconColorByType(String type) {
     switch (type) {
       case 'CHAT':
@@ -405,9 +440,10 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
       case 'ANNOUNCEMENT':
       case 'COMMENT':
       case 'REACTION':
+        return Colors.green;
       case 'TASK':
         return Colors.orange;
-      case 'LEAVE_REQUEST':
+      case 'REQUEST':
         return Colors.purple;
       default:
         return Colors.red;

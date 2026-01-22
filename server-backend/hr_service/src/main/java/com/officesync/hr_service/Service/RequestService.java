@@ -501,4 +501,24 @@ public class RequestService {
             log.warn("Lỗi lưu Audit Log: " + e.getMessage());
         }
     }
+
+    
+    public Request getRequestById(Long id) {
+        Request request = requestRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy đơn với ID: " + id));
+
+        // [QUAN TRỌNG] Unproxy các object quan hệ để tránh lỗi Lazy Loading khi trả về JSON
+        // (Nếu bạn dùng Hibernate Proxy)
+        if (request.getRequester() != null) {
+            request.setRequester((Employee) Hibernate.unproxy(request.getRequester()));
+        }
+        if (request.getApprover() != null) {
+            request.setApprover((Employee) Hibernate.unproxy(request.getApprover()));
+        }
+        if (request.getDepartment() != null) {
+            request.setDepartment((Department) Hibernate.unproxy(request.getDepartment()));
+        }
+        
+        return request;
+    }
 }

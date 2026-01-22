@@ -83,19 +83,6 @@ class _AdminHomeViewState extends State<AdminHomeView>
 
   Future<void> _fetchLatestUserInfo() async {
     try {
-      final storage = const FlutterSecureStorage();
-      String displayRole = "System Administrator";
-
-      String? userInfoStr = await storage.read(key: 'user_info');
-      if (userInfoStr != null) {
-        final data = jsonDecode(userInfoStr);
-
-        if (data['companyName'] != null &&
-            data['companyName'].toString().isNotEmpty) {
-          displayRole = data['companyName'];
-        }
-      }
-
       final employees = await _employeeDataSource.getEmployees(
         widget.currentUserId.toString(),
       );
@@ -116,7 +103,8 @@ class _AdminHomeViewState extends State<AdminHomeView>
           _fullName = currentUser.fullName;
           _avatarUrl = currentUser.avatarUrl;
 
-          _roleTitle = displayRole;
+          // [SỬA] Đối với Admin thì ghi rõ quyền quản trị hệ thống
+          _roleTitle = "System Administrator";
 
           _loadingUserInfo = false;
         });

@@ -331,11 +331,26 @@ class _ManagerRequestReviewPageState extends State<ManagerRequestReviewPage> {
                       bgColor: const Color(0xFFDC2626),
                       textColor: Colors.white,
                       onTap: () {
+                        final reason = _rejectReasonController.text.trim();
+
+                        // [SỬA LẠI ĐOẠN NÀY]
+                        if (reason.isEmpty) {
+                          // 1. Đóng BottomSheet TRƯỚC để lộ màn hình chính
+                          Navigator.pop(context);
+
+                          // 2. Sau đó mới hiện thông báo (để không bị đè)
+                          CustomSnackBar.show(
+                            context,
+                            title: "Required",
+                            message: "Please enter a reason for rejection.",
+                            isError: true,
+                          );
+                          return; // Dừng lại, không xử lý tiếp
+                        }
+
+                        // Trường hợp thành công
                         Navigator.pop(context);
-                        _processRequest(
-                          'REJECTED',
-                          _rejectReasonController.text,
-                        );
+                        _processRequest('REJECTED', reason);
                       },
                     ),
                   ),
