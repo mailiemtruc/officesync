@@ -172,9 +172,25 @@ class _ChatScreenState extends State<ChatScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
+        leadingWidth: 54,
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 24), // Căn lề 24px giống mẫu
+          child: InkWell(
+            onTap: () => Navigator.pop(context),
+            child: const Align(
+              alignment: Alignment.centerLeft,
+              child: Icon(
+                Icons.arrow_back_ios_new,
+                color: Color(0xFF2260FF), // Màu xanh đồng bộ
+                size: 24,
+              ),
+            ),
+          ),
+        ),
         iconTheme: const IconThemeData(color: Color(0xFF2260FF)),
+
         title: const Text(
-          "Messages",
+          "MESSAGES",
           style: TextStyle(
             color: Color(0xFF2260FF),
             fontSize: 24,

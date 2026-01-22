@@ -106,7 +106,24 @@ class _ContactScreenState extends State<ContactScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text("Contacts"), // Tiếng Anh
+        leadingWidth: 54, // Mở rộng vùng leading để chứa padding
+        leading: Padding(
+          padding: const EdgeInsets.only(
+            left: 24,
+          ), // Căn lề trái 24px giống mẫu
+          child: InkWell(
+            onTap: () => Navigator.pop(context),
+            child: const Align(
+              alignment: Alignment.centerLeft,
+              child: Icon(
+                Icons.arrow_back_ios_new, // Icon mũi tên mảnh giống hình
+                color: Color(0xFF2260FF),
+                size: 24,
+              ),
+            ),
+          ),
+        ),
+        title: const Text("CONTACTS"), // Tiếng Anh
         backgroundColor: Colors.white,
         elevation: 0, // Bỏ bóng cho phẳng, hiện đại
         centerTitle: true,

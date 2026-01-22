@@ -41,10 +41,26 @@ class _ChatInfoScreenState extends State<ChatInfoScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
+        leadingWidth: 54,
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 24), // Cách lề 24px
+          child: InkWell(
+            onTap: () => Navigator.pop(context),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Icon(
+                Icons.arrow_back_ios_new,
+                color: primaryColor, // Dùng biến màu đã khai báo trong file này
+                size: 24,
+              ),
+            ),
+          ),
+        ),
         title: Text(
-          widget.isGroup ? "Group Info" : "Chat Info",
+          widget.isGroup ? "GROUP INFO" : "CHAT INFO",
           style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold),
         ),
+        centerTitle: true,
         backgroundColor: Colors.white,
         elevation: 0,
         iconTheme: IconThemeData(color: primaryColor),

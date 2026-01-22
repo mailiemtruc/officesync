@@ -106,22 +106,29 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0, // Bỏ bóng đổ cho phẳng đẹp
-        centerTitle: true, // Căn giữa tiêu đề
-        // 1. Nút Back màu xanh
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: Color(0xFF2260FF)),
-          onPressed: () => Navigator.pop(context),
+        centerTitle: true,
+        leadingWidth: 54,
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 24), // Căn lề 24px
+          child: InkWell(
+            onTap: () => Navigator.pop(context),
+            child: const Align(
+              alignment: Alignment.centerLeft,
+              child: Icon(
+                Icons.arrow_back_ios_new, // Icon mũi tên mảnh
+                color: Color(0xFF2260FF),
+                size: 24,
+              ),
+            ),
+          ),
         ),
-
         // 2. Tiêu đề màu xanh và đậm
         title: const Text(
-          "Notification", // Viết hoa nhìn cho "Pro"
+          "NOTIFICATION", // Viết hoa nhìn cho "Pro"
           style: TextStyle(
             color: Color(0xFF2260FF), // Mã màu xanh chuẩn của App bạn
             fontWeight: FontWeight.bold,
-            fontSize: 18,
+            fontSize: 24,
           ),
         ),
       ),

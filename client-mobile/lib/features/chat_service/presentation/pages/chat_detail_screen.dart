@@ -263,10 +263,23 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 1,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
-          onPressed: () => Navigator.pop(context),
+        leadingWidth: 54,
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 24), // Căn lề trái 24px
+          child: InkWell(
+            onTap: () => Navigator.pop(context),
+            child: const Align(
+              alignment: Alignment.centerLeft,
+              child: Icon(
+                Icons.arrow_back_ios_new, // Icon mũi tên mảnh
+                color: Color(0xFF2260FF), // Màu xanh
+                size: 24,
+              ),
+            ),
+          ),
         ),
+        titleSpacing: 0,
+
         title: Row(
           children: [
             CircleAvatar(
@@ -296,11 +309,11 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                           style: TextStyle(
                             color: !isConnected
                                 ? Colors.grey
-                                : Colors.green, // Online màu xanh
+                                : Colors.green, // Online màu xanh lá
                             fontSize: 12,
                           ),
                         )
-                      : const SizedBox(), // Nếu Offline thì ẩn luôn, không chiếm chỗ
+                      : const SizedBox(),
                 ],
               ),
             ),

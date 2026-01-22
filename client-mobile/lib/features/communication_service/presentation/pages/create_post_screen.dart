@@ -77,17 +77,24 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        leadingWidth: 80,
-        leading: TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text(
-            "Cancel",
-            style: TextStyle(color: Colors.black54, fontSize: 16),
+        centerTitle: true,
+        leadingWidth: 54,
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 24),
+          child: InkWell(
+            onTap: () => Navigator.pop(context),
+            child: const Align(
+              alignment: Alignment.centerLeft,
+              child: Icon(
+                Icons.arrow_back_ios_new, // Icon mũi tên mảnh
+                color: Color(0xFF2260FF),
+                size: 24,
+              ),
+            ),
           ),
         ),
-        centerTitle: true,
         title: const Text(
-          "Create Post",
+          "CREATE POST",
           style: TextStyle(
             color: Color(0xFF2260FF),
             fontSize: 24,

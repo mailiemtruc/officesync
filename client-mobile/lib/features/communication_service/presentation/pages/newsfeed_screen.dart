@@ -224,17 +224,29 @@ class _NewsfeedScreenState extends State<NewsfeedScreen> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: AppColors.primary),
-          onPressed: () => Navigator.pop(context),
+        leadingWidth: 54,
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 24),
+          child: InkWell(
+            onTap: () => Navigator.pop(context),
+            child: const Align(
+              alignment: Alignment.centerLeft,
+              child: Icon(
+                Icons.arrow_back_ios_new,
+                color: AppColors.primary, // Hoặc Color(0xFF2260FF)
+                size: 24,
+              ),
+            ),
+          ),
         ),
         centerTitle: true,
         title: const Text(
-          "Internal Newsfeed",
+          "INTERNAL NEWSFEED",
           style: TextStyle(
-            color: AppColors.primary,
+            color: AppColors.primary, // Hoặc Color(0xFF2260FF)
+            fontSize: 24, // Tăng lên 24
+            fontFamily: 'Inter', // Thêm font Inter
             fontWeight: FontWeight.bold,
-            fontSize: 18,
           ),
         ),
       ),

@@ -135,14 +135,26 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: AppColors.primary),
-          onPressed: () {
-            Navigator.pop(context, {
-              'reactionCount': _currentReactionCount,
-              'commentCount': _currentCommentCount,
-            });
-          },
+        leadingWidth: 54,
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 24),
+          child: InkWell(
+            // Giữ nguyên logic pop kèm data
+            onTap: () {
+              Navigator.pop(context, {
+                'reactionCount': _currentReactionCount,
+                'commentCount': _currentCommentCount,
+              });
+            },
+            child: const Align(
+              alignment: Alignment.centerLeft,
+              child: Icon(
+                Icons.arrow_back_ios_new,
+                color: Color(0xFF2260FF),
+                size: 24,
+              ),
+            ),
+          ),
         ),
         centerTitle: true,
         title: const Text(

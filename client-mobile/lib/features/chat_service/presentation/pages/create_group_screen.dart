@@ -65,8 +65,23 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leadingWidth: 54,
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 24), // Cách lề 24px
+          child: InkWell(
+            onTap: () => Navigator.pop(context),
+            child: const Align(
+              alignment: Alignment.centerLeft,
+              child: Icon(
+                Icons.arrow_back_ios_new,
+                color: Color(0xFF2260FF),
+                size: 24,
+              ),
+            ),
+          ),
+        ),
         title: const Text(
-          "New Group",
+          "NEW GROUP",
           style: TextStyle(
             color: Color(0xFF2260FF), // [SỬA] Màu xanh 2260FF
             fontSize: 24,
