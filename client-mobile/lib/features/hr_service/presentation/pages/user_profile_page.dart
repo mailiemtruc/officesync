@@ -20,6 +20,7 @@ import '../../../../core/services/websocket_service.dart';
 import 'package:shimmer/shimmer.dart';
 import '../../../../core/utils/user_update_event.dart';
 import '../../../../core/services/security_service.dart';
+import 'package:officesync/features/chat_service/data/chat_api.dart';
 
 class UserProfilePage extends StatefulWidget {
   final Map<String, dynamic> userInfo;
@@ -41,7 +42,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
   final ImagePicker _picker = ImagePicker();
   final _storage = const FlutterSecureStorage();
   final _newsfeedApi = NewsfeedApi();
-
+  final _chatApi = ChatApi();
   late final EmployeeRepository _repository;
 
   @override
@@ -282,7 +283,17 @@ class _UserProfilePageState extends State<UserProfilePage> {
             isError: false,
           );
         }
-
+        // [THÊM ĐOẠN NÀY VÀO ĐÂY]
+        // Gọi Chat Service cập nhật Avatar (Chạy ngầm, không await)
+        _chatApi
+            .updateChatProfile(avatarUrl: avatarUrl)
+            .then((_) {
+              print("--> Chat Service đã được báo tin cập nhật Avatar.");
+            })
+            .catchError((e) {
+              print("--> Lỗi khi báo tin cho Chat Service: $e");
+            });
+        // ======================================================
         // [UPDATE] Gọi các tác vụ đồng bộ chạy NGẦM (không await để chặn UI)
         UserUpdateEvent().notify();
         _newsfeedApi.syncUserAvatar(avatarUrl).catchError((e) {

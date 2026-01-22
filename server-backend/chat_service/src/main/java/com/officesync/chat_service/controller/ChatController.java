@@ -18,7 +18,7 @@ import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.web.bind.annotation.*;
-
+import com.officesync.chat_service.dto.UpdateProfileRequest;
 import java.security.Principal;
 import java.text.SimpleDateFormat;
 import java.util.List;
@@ -205,4 +205,21 @@ public ResponseEntity<?> leaveRoom(@PathVariable Long roomId, Principal principa
         return ResponseEntity.badRequest().body(e.getMessage());
     }
 }
+@PutMapping("/api/users/profile")
+    public ResponseEntity<?> updateProfile(@RequestBody UpdateProfileRequest req, Principal principal) {
+        try {
+            // 1. Xác định User đang gọi là ai
+            String email = principal.getName();
+            ChatUser me = chatUserRepository.findByEmail(email)
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+
+            // 2. Gọi Service cập nhật
+            ChatUser updatedUser = chatService.updateUserProfile(me.getId(), req.getAvatarUrl(), req.getFullName());
+
+            return ResponseEntity.ok(updatedUser);
+        } catch (Exception e) {
+            log.error("Update profile error: ", e);
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
 }

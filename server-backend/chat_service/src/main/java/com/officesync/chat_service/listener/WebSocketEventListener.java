@@ -50,6 +50,8 @@ public class WebSocketEventListener {
         Optional<ChatUser> userOpt = chatUserRepository.findByEmail(email);
         if (userOpt.isPresent()) {
             ChatUser user = userOpt.get();
+
+            
             
             // 1. Update DB
             user.setOnline(isOnline);

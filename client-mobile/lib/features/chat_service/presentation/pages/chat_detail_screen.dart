@@ -5,7 +5,6 @@ import 'package:stomp_dart_client/stomp.dart';
 import 'package:stomp_dart_client/stomp_config.dart';
 import 'package:stomp_dart_client/stomp_frame.dart';
 import 'package:intl/intl.dart';
-
 // Import các file trong project
 import '../../data/models/chat_message.dart';
 import '../../data/chat_api.dart';
@@ -46,7 +45,6 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   List<ChatMessage> messages = [];
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-
   String myId = "";
   bool isConnected = false;
   bool isLoadingHistory = true;
