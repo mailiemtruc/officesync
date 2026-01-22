@@ -1,6 +1,12 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
+import 'package:flutter/material.dart'; // Import UI
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
+import '../../main.dart'; // Để lấy navigatorKey
+import '../services/security_service.dart';
+import '../services/websocket_service.dart';
+import '../utils/custom_snackbar.dart';
 
 class ApiClient {
   // Base URL cho Core Service (Logic chính)
@@ -49,20 +55,17 @@ class ApiClient {
     );
   }
 
-  // --- CORE & NOTE SERVICE METHODS (ĐÃ SỬA) ---
+  // --- CORE & NOTE SERVICE METHODS ---
 
-  // [SỬA] Thêm tham số queryParameters và options
   Future<Response> post(
     String path, {
     dynamic data,
     Map<String, dynamic>? queryParameters,
-    Options? options, // <--- Nhận options từ bên ngoài
+    Options? options,
   }) async {
     try {
-      // 1. Lấy Options mặc định (có Token)
       final baseOptions = await _getOptions();
 
-      // 2. Nếu có options bên ngoài truyền vào (ví dụ Header riêng), thì merge vào baseOptions
       if (options != null && options.headers != null) {
         baseOptions.headers?.addAll(options.headers!);
       }
@@ -71,18 +74,17 @@ class ApiClient {
         path,
         data: data,
         queryParameters: queryParameters,
-        options: baseOptions, // Dùng options đã merge
+        options: baseOptions,
       );
     } on DioException catch (e) {
       throw Exception(_handleError(e));
     }
   }
 
-  // [SỬA] Thêm tham số queryParameters và options
   Future<Response> get(
     String path, {
     Map<String, dynamic>? queryParameters,
-    Options? options, // <--- Nhận options từ bên ngoài
+    Options? options,
   }) async {
     try {
       final baseOptions = await _getOptions();
@@ -101,7 +103,6 @@ class ApiClient {
     }
   }
 
-  // [SỬA] Thêm tham số options
   Future<Response> put(String path, {dynamic data, Options? options}) async {
     try {
       final baseOptions = await _getOptions();
@@ -116,7 +117,6 @@ class ApiClient {
     }
   }
 
-  // [SỬA] Thêm tham số options
   Future<Response> delete(String path, {Options? options}) async {
     try {
       final baseOptions = await _getOptions();
@@ -162,8 +162,18 @@ class ApiClient {
     }
   }
 
-  // --- ERROR HANDLING ---
+  // --- ERROR HANDLING (ĐÃ SỬA ĐỂ CHẶN THIẾT BỊ CŨ) ---
   String _handleError(DioException e) {
+    // Bắt lỗi 401 hoặc 403 từ Backend (Token Version không khớp)
+    if (e.response?.statusCode == 401 || e.response?.statusCode == 403) {
+      print("🚨 Hard Kick Triggered: Token cũ hoặc không hợp lệ. Logout ngay!");
+
+      // Gọi hàm đá người dùng ra
+      _forceLogout();
+
+      return "Phiên đăng nhập đã hết hạn do tài khoản được dùng ở nơi khác.";
+    }
+
     if (e.response != null) {
       if (e.response!.data is String) {
         return e.response!.data.toString();
@@ -178,5 +188,35 @@ class ApiClient {
     }
 
     return "Connection failed. Please check your internet or server.";
+  }
+
+  // Hàm cưỡng chế đăng xuất (Giống SecurityService)
+  void _forceLogout() async {
+    try {
+      // 1. Xóa sạch Token lưu trong máy
+      await _storage.deleteAll();
+
+      // 2. Ngắt kết nối Socket (để không nhận tin rác nữa)
+      SecurityService().disconnect();
+      WebSocketService().disconnect();
+
+      // 3. Chuyển hướng về màn hình Login
+      // Sử dụng navigatorKey toàn cục từ main.dart để chuyển trang dù không có context ở đây
+      if (navigatorKey.currentState != null) {
+        navigatorKey.currentState!.pushNamedAndRemoveUntil(
+          '/login',
+          (route) => false,
+        );
+
+        // Hiện thông báo (Tuỳ chọn)
+        CustomSnackBar.showGlobal(
+          title: "Logged Out",
+          message: "Your account is already logged in on another device.",
+          isError: true,
+        );
+      }
+    } catch (e) {
+      print("Error during force logout: $e");
+    }
   }
 }

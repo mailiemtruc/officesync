@@ -5,7 +5,8 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
-import java.util.Random; 
+import java.util.Random;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -57,14 +58,17 @@ public class AuthService {
     private final Map<String, OtpData> registrationOtpCache = new ConcurrentHashMap<>();
 
     // --- LOGIN ---
+
     public AuthResponse login(LoginRequest req) {
         // 1. Tìm User
         User user = userRepository.findByEmail(req.getEmail()).orElse(null);
+        
+        // Kiểm tra mật khẩu thủ công (theo cách viết của bạn)
         if (user == null || !passwordEncoder.matches(req.getPassword(), user.getPassword())) {
             throw new RuntimeException("Incorrect email or password!");
         }
 
-        // 2. Khai báo biến chứa tên công ty (mặc định rỗng hoặc tên cho Super Admin)
+        // 2. Khai báo biến chứa tên công ty
         String companyName = "";
 
         // 3. Kiểm tra Company (Status & Lấy tên)
@@ -76,11 +80,10 @@ public class AuthService {
                 if ("LOCKED".equals(company.getStatus())) {
                     throw new RuntimeException("Your company account has been locked.");
                 }
-                // [MỚI] Lấy tên công ty gán vào biến
                 companyName = company.getName();
             }
         } else {
-            // Trường hợp user không thuộc công ty nào (Super Admin)
+            // Trường hợp Super Admin
             if ("SUPER_ADMIN".equals(user.getRole())) {
                 companyName = "System Admin";
             }
@@ -91,12 +94,29 @@ public class AuthService {
             throw new RuntimeException("Your account has been locked by Administrator.");
         }
 
-        securityNotificationService.notifyLoginConflict(user.getId());
-
-        // 5. Tạo Token và trả về Response (kèm companyName)
-        String token = tokenProvider.generateToken(user);
+        // ==================================================================
+        // 🔴 [MỚI] LOGIC TOKEN VERSIONING (HARD KICK)
+        // ==================================================================
         
-        // [MỚI] Truyền thêm companyName vào constructor
+        // A. Tạo version mới (UUID ngẫu nhiên)
+        String newTokenVersion = UUID.randomUUID().toString();
+        
+        // B. Lưu version này vào Database (Để vô hiệu hóa các token cũ chứa version khác)
+        user.setTokenVersion(newTokenVersion);
+        userRepository.save(user);
+
+        // C. Bắn Socket báo hiệu (Soft Kick - Chỉ mang tính chất thông báo UI)
+        try {
+            securityNotificationService.notifyLoginConflict(user.getId());
+        } catch (Exception e) {
+            // Log lỗi socket nhưng không chặn đăng nhập
+            System.err.println("Error sending login conflict socket: " + e.getMessage());
+        }
+
+        // 5. Tạo Token (Kèm theo Version mới)
+        // Lưu ý: Bạn phải chắc chắn đã sửa hàm generateToken trong JwtTokenProvider để nhận thêm tham số này
+        String token = tokenProvider.generateToken(user, newTokenVersion);
+        
         return new AuthResponse(token, user, companyName);
     }
 

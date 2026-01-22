@@ -6,6 +6,7 @@ import '../../../../core/config/app_colors.dart';
 import '../../../../dashboard_screen.dart';
 import '../../../../../core/services/websocket_service.dart';
 import '../../../../../core/services/security_service.dart';
+import '../../../../core/api/api_client.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -43,7 +44,23 @@ class _SplashScreenState extends State<SplashScreen> {
       try {
         final Map<String, dynamic> userData = jsonDecode(userInfoStr);
 
-        // --- [CODE CŨ] Khôi phục UserID nếu thiếu ---
+        final client = ApiClient();
+        final String role = userData['role'] ?? 'STAFF';
+
+        // PHÂN LUỒNG KIỂM TRA "SỐNG/CHẾT" CỦA TOKEN
+        if (role == 'SUPER_ADMIN') {
+          // Nếu là Admin: Gọi API dành riêng cho Admin (ví dụ lấy danh sách cty)
+          // Mục đích: Chỉ cần Server trả về 200 OK là được.
+          // (Thêm tham số size=1 cho nhẹ request)
+          await client.get(
+            '/admin/companies',
+            queryParameters: {'page': 0, 'size': 1},
+          );
+        } else {
+          // Nếu là Staff/Manager/Director: Gọi API lấy thông tin công ty
+          await client.get('/company/me');
+        }
+
         String? currentUserId = await storage.read(key: 'userId');
         if (currentUserId == null && userData['id'] != null) {
           await storage.write(key: 'userId', value: userData['id'].toString());
@@ -75,9 +92,14 @@ class _SplashScreenState extends State<SplashScreen> {
           );
         }
       } catch (e) {
-        print("Lỗi parse user info: $e");
-        // Nếu lỗi dữ liệu cũ, bắt đăng nhập lại cho an toàn
-        if (mounted) Navigator.pushReplacementNamed(context, '/register');
+        print("⚠️ Token hết hạn hoặc bị đăng nhập nơi khác: $e");
+
+        // 👇 [THÊM 2 DÒNG NÀY] 👇
+        await storage.deleteAll(); // Xóa sạch Token cũ trong máy
+        SecurityService().disconnect(); // Reset trạng thái socket
+
+        // Chuyển về Login thay vì Register cho đúng luồng
+        if (mounted) Navigator.pushReplacementNamed(context, '/login');
       }
     } else {
       // Chưa đăng nhập

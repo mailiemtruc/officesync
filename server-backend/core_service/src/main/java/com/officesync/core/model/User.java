@@ -51,4 +51,7 @@ public class User {
 
     @Column(columnDefinition = "ENUM('ACTIVE', 'LOCKED') DEFAULT 'ACTIVE'")
     private String status = "ACTIVE";
+
+    @Column(name = "token_version")
+    private String tokenVersion;
 }

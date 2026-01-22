@@ -6,7 +6,7 @@ import java.util.Date;
 
 import org.springframework.stereotype.Component;
 
-import com.officesync.core.model.User; // Import thêm cái này
+import com.officesync.core.model.User;
 
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.Jwts;
@@ -18,30 +18,32 @@ import io.jsonwebtoken.security.Keys;
 @Component
 public class JwtTokenProvider {
     
-    // 🔴 SỬA ĐỔI: Chuỗi bí mật mới siêu dài (>= 512 bits) để thỏa mãn HS512
-    // Chuỗi này dài khoảng 80+ ký tự, đảm bảo an toàn tuyệt đối
+    // Chuỗi bí mật (Giữ nguyên của bạn)
     private final String JWT_SECRET = "OfficeSync_Super_Secure_Secret_Key_For_Enterprise_Level_Security_Version_2025_Longer_Is_Better";
     
     private final long JWT_EXPIRATION = 604800000L; // 7 ngày
 
     private Key getSigningKey() {
-        // Chuyển chuỗi thành bytes UTF-8 để đảm bảo tính nhất quán
         byte[] keyBytes = JWT_SECRET.getBytes(StandardCharsets.UTF_8);
         return Keys.hmacShaKeyFor(keyBytes);
     }
 
-    // Tạo Token từ thông tin User
-    public String generateToken(User user) {
+    // 🔴 [SỬA 1] Thêm tham số tokenVersion vào hàm tạo Token
+    public String generateToken(User user, String tokenVersion) {
         return Jwts.builder()
                 .setSubject(user.getEmail()) 
                 .claim("role", user.getRole())
+                
+                // 👇 Lưu version vào payload của Token
+                .claim("version", tokenVersion) 
+                
                 .setIssuedAt(new Date())
                 .setExpiration(new Date(System.currentTimeMillis() + JWT_EXPIRATION))
                 .signWith(getSigningKey(), SignatureAlgorithm.HS512)
                 .compact();
     }
 
-    // Lấy Email từ Token
+    // Lấy Email từ Token (Giữ nguyên)
     public String getEmailFromToken(String token) {
         return Jwts.parserBuilder()
                 .setSigningKey(getSigningKey())
@@ -51,7 +53,17 @@ public class JwtTokenProvider {
                 .getSubject();
     }
 
-    // Validate Token
+    // 🔴 [SỬA 2] Thêm hàm lấy Version từ Token
+    public String getVersionFromToken(String token) {
+        return Jwts.parserBuilder()
+                .setSigningKey(getSigningKey())
+                .build()
+                .parseClaimsJws(token)
+                .getBody()
+                .get("version", String.class); // Lấy field 'version' dạng String
+    }
+
+    // Validate Token (Giữ nguyên)
     public boolean validateToken(String authToken) {
         try {
             Jwts.parserBuilder()

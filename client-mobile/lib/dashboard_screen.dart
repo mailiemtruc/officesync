@@ -138,17 +138,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  // [SỬA LỖI] Logic WebSocket chuẩn: Dùng forceUrl
-  void _setupRealtimePermissionListener() {
+  // 1. Thêm từ khóa 'async' vào khai báo hàm
+  Future<void> _setupRealtimePermissionListener() async {
     final userId = _currentUserInfo['id'];
     if (userId == null) return;
 
     // URL chuẩn của HR Service (Port 8081)
     final String hrSocketUrl = 'ws://10.0.2.2:8081/ws-hr';
 
-    // Dùng subscribe với forceUrl để Service tự quản lý kết nối
-    // Không cần check isConnected thủ công
-    _unsubscribeFn = WebSocketService().subscribe(
+    // 2. Thêm 'await' để đợi WebSocket kết nối xong và trả về hàm hủy đăng ký
+    _unsubscribeFn = await WebSocketService().subscribe(
       '/topic/user/$userId/profile',
       (message) async {
         // Backend gửi text: "REFRESH_PROFILE"
