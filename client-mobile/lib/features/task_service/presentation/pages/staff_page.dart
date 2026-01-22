@@ -7,6 +7,7 @@ import '../../widgets/task_detail_dialog.dart';
 import '../../data/task_session.dart';
 import '../../data/models/task_user.dart';
 import '../../data/network/task_stomp_service.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 class StaffPage extends StatefulWidget {
   const StaffPage({super.key});
@@ -114,17 +115,30 @@ class _StaffPageState extends State<StaffPage> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios, color: colorBlue),
-          onPressed: () => Navigator.pop(context),
-        ),
         centerTitle: true,
+        leadingWidth: 56, // Giống Admin
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 16.0),
+          child: IconButton(
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            icon: Icon(
+              PhosphorIcons.caretLeft(
+                PhosphorIconsStyle.bold,
+              ), // Đổi icon giống Admin
+              color: colorBlue,
+              size: 24,
+            ),
+            onPressed: () => Navigator.pop(context),
+          ),
+        ),
         title: Text(
           'STAFF',
           style: TextStyle(
-            fontWeight: FontWeight.bold,
             color: colorBlue,
-            fontSize: 30,
+            fontSize: 24, // Đồng bộ size 24
+            fontFamily: 'Inter',
+            fontWeight: FontWeight.w700,
           ),
         ),
       ),
@@ -140,6 +154,7 @@ class _StaffPageState extends State<StaffPage> {
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
                 color: colorBlack,
+                fontFamily: 'Inter', // Thêm đồng bộ font
               ),
             ),
           ),

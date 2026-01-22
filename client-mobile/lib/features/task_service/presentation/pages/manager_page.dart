@@ -9,6 +9,7 @@ import '../../widgets/create_task_dialog.dart';
 import '../../widgets/task_detail_dialog.dart';
 import '../../data/task_session.dart';
 import '../../data/network/task_stomp_service.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 class ManagerPage extends StatefulWidget {
   const ManagerPage({super.key});
@@ -200,27 +201,43 @@ class _ManagerPageState extends State<ManagerPage>
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios, color: colorBlue),
-          onPressed: () => Navigator.pop(context),
+        leadingWidth: 56, // Giống Admin
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 16.0),
+          child: IconButton(
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            icon: Icon(
+              PhosphorIcons.caretLeft(
+                PhosphorIconsStyle.bold,
+              ), // Đổi icon giống Admin
+              color: colorBlue,
+              size: 24,
+            ),
+            onPressed: () => Navigator.pop(context),
+          ),
         ),
         title: Text(
           'MANAGEMENT',
           style: TextStyle(
-            fontWeight: FontWeight.bold,
             color: colorBlue,
-            fontSize: 30,
+            fontSize: 24, // Đồng bộ size 24
+            fontFamily: 'Inter',
+            fontWeight: FontWeight.w700,
           ),
         ),
       ),
       body: Column(
         children: [
           Container(
-            margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.all(4),
+            margin: const EdgeInsets.symmetric(
+              horizontal: 24,
+              vertical: 16,
+            ), // Margin giống Admin
+            padding: const EdgeInsets.all(6), // Padding giống Admin
             decoration: BoxDecoration(
               color: colorWhite,
-              borderRadius: BorderRadius.circular(25),
+              borderRadius: BorderRadius.circular(15), // Bo góc 15 giống Admin
             ),
             child: Row(
               children: [
@@ -239,7 +256,13 @@ class _ManagerPageState extends State<ManagerPage>
       floatingActionButton: FloatingActionButton(
         onPressed: _openCreateTask,
         backgroundColor: colorBlue,
-        child: const Icon(Icons.add, color: Colors.white),
+        elevation: 4,
+        shape: const CircleBorder(), // Đảm bảo tròn giống Admin
+        child: const Icon(
+          Icons.add,
+          color: Colors.white,
+          size: 28,
+        ), // Size icon 28
       ),
     );
   }
@@ -955,17 +978,23 @@ class _ManagerPageState extends State<ManagerPage>
       child: GestureDetector(
         onTap: () => _tabController.animateTo(index),
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12),
+          padding: const EdgeInsets.symmetric(
+            vertical: 10,
+          ), // Padding 10 giống Admin
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: isSelected ? colorBlue : Colors.transparent,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(10), // Bo góc 10 giống Admin
           ),
           child: Text(
             label,
             style: TextStyle(
-              color: isSelected ? colorWhite : colorBlue,
-              fontWeight: FontWeight.bold,
+              color: isSelected
+                  ? colorWhite
+                  : const Color(0xFF9CA3AF), // Màu xám Admin
+              fontWeight: FontWeight.w600, // w600 giống Admin
+              fontSize: 14, // Size 14 giống Admin
+              fontFamily: 'Inter',
             ),
           ),
         ),

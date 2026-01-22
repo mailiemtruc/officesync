@@ -8,6 +8,7 @@ import '../../widgets/create_task_dialog.dart';
 import '../../widgets/task_detail_dialog.dart';
 import '../../data/task_session.dart';
 import '../../data/models/task_department.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 class CompanyAdminPage extends StatefulWidget {
   const CompanyAdminPage({super.key});
@@ -104,32 +105,50 @@ class _CompanyAdminPageState extends State<CompanyAdminPage>
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios, color: colorBlue),
-          onPressed: () => Navigator.pop(context),
+        leadingWidth: 56,
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 16.0),
+          child: IconButton(
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            icon: Icon(
+              PhosphorIcons.caretLeft(PhosphorIconsStyle.bold),
+              color: colorBlue,
+              size: 24,
+            ),
+            onPressed: () => Navigator.pop(context),
+          ),
         ),
         title: Text(
           'COMPANY ADMIN',
           style: TextStyle(
-            fontWeight: FontWeight.bold,
             color: colorBlue,
-            fontSize: 30,
+            fontSize: 24, // Giảm từ 30 xuống 24 để giống mẫu
+            fontFamily: 'Inter',
+            fontWeight: FontWeight.w700,
           ),
         ),
       ),
       body: Column(
         children: [
           Container(
-            margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.all(4),
+            margin: const EdgeInsets.symmetric(
+              horizontal: 24,
+              vertical: 16,
+            ), // Căn lề giống ảnh
+            padding: const EdgeInsets.all(
+              6,
+            ), // Khoảng cách đệm giữa viền trắng và nút xanh
             decoration: BoxDecoration(
               color: colorWhite,
-              borderRadius: BorderRadius.circular(25),
+              borderRadius: BorderRadius.circular(
+                15,
+              ), // Bo góc nhẹ hơn 25 để giống mẫu
             ),
             child: Row(
               children: [
-                _buildTabBtn("List Task", 0),
-                _buildTabBtn("Reports & Statistics", 1),
+                _buildTabBtn("List Task", 0), // Đổi tên nhãn
+                _buildTabBtn("Reports & Statistics", 1), // Đổi tên nhãn
               ],
             ),
           ),
@@ -144,7 +163,9 @@ class _CompanyAdminPageState extends State<CompanyAdminPage>
       floatingActionButton: FloatingActionButton(
         onPressed: _openCreateTask,
         backgroundColor: colorBlue,
-        child: const Icon(Icons.add, color: Colors.white),
+        elevation: 4,
+        shape: const CircleBorder(), // Đảm bảo nút luôn tròn giống ảnh
+        child: const Icon(Icons.add, color: Colors.white, size: 28),
       ),
     );
   }
@@ -155,17 +176,21 @@ class _CompanyAdminPageState extends State<CompanyAdminPage>
       child: GestureDetector(
         onTap: () => _tabController.animateTo(index),
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12),
+          padding: const EdgeInsets.symmetric(vertical: 10),
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: isSelected ? colorBlue : Colors.transparent,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(10),
           ),
           child: Text(
             label,
             style: TextStyle(
-              color: isSelected ? colorWhite : colorBlue,
-              fontWeight: FontWeight.bold,
+              color: isSelected
+                  ? colorWhite
+                  : const Color(0xFF9CA3AF), // Màu xám khi không chọn
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+              fontFamily: 'Inter',
             ),
           ),
         ),
