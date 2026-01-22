@@ -82,9 +82,9 @@ async def chat_endpoint(req: ChatRequest):
             """
         else:
             if user_lang == "Vietnamese":
-                greeting_guide = 'Hãy nói: "Xin chào! Chào mừng bạn quay trở lại OfficeSync. Tôi có thể hỗ trợ gì cho công việc của bạn hôm nay?"'
+                greeting_guide = "Xin chào! Chào mừng bạn quay trở lại OfficeSync. Tôi có thể hỗ trợ gì cho công việc của bạn hôm nay?"
             else:
-                greeting_guide = 'Say: "Welcome back to OfficeSync! How can I assist you with your work today?"'
+                greeting_guide = "Welcome back to OfficeSync! How can I assist you with your work today?"
 
             lang_instruction = f"""
             ✅ TRẠNG THÁI: Ngôn ngữ {user_lang}.
@@ -114,36 +114,33 @@ async def chat_endpoint(req: ChatRequest):
         )
 
         user_history = CHAT_HISTORY.get(req.userId, [])
-        # enable_automatic_function_calling=False để ta tự xử lý vòng lặp
         chat = model.start_chat(history=user_history, enable_automatic_function_calling=False)
 
         # 4. Gửi tin nhắn User
         response = await chat.send_message_async(req.message)
 
-        # --- [FIX LỖI 400] XỬ LÝ SONG SONG (BATCH PROCESSING) ---
+        # --- XỬ LÝ SONG SONG (BATCH PROCESSING) ---
         final_text = ""
         
         while True:
-            # A. Tìm TẤT CẢ các Function Call trong phản hồi của AI
+            # A. Tìm TẤT CẢ các Function Call
             function_calls = []
             if response.candidates and response.candidates[0].content.parts:
                 for part in response.candidates[0].content.parts:
-                    # Kiểm tra kỹ xem part này có phải function call không
                     if part.function_call and part.function_call.name:
                         function_calls.append(part.function_call)
 
-            # B. Nếu có Function Call (1 hoặc nhiều cái)
+            # B. Nếu có Function Call
             if function_calls:
                 response_parts = []
                 
-                # Thực thi TỪNG tool một và gom kết quả lại
+                # Thực thi TỪNG tool
                 for fc in function_calls:
                     tool_name = fc.name
                     args = {k: v for k, v in fc.args.items()}
                     
                     logger.info(f"🤖 Tool Call: {tool_name} | Args: {args}")
 
-                    # Thực thi tool
                     try:
                         tool_result = await manager.handle_tool_call(
                             tool_name, req.userId, args, http_client, settings
@@ -151,8 +148,6 @@ async def chat_endpoint(req: ChatRequest):
                     except Exception as e:
                         tool_result = f"Error executing tool: {str(e)}"
 
-                    # Đóng gói kết quả vào list parts
-                    # LƯU Ý: Phải dùng đúng cấu trúc Part(function_response=...)
                     response_parts.append(
                         genai.protos.Part(
                             function_response=genai.protos.FunctionResponse(
@@ -162,24 +157,22 @@ async def chat_endpoint(req: ChatRequest):
                         )
                     )
 
-                # C. Gửi TOÀN BỘ kết quả về cho Gemini 1 lần duy nhất trong lượt này
-                # (Đáp ứng yêu cầu: số response parts == số call parts)
+                # C. Gửi kết quả về Gemini
                 response = await chat.send_message_async(
                     genai.protos.Content(parts=response_parts)
                 )
-                
-                # Quay lại đầu vòng while để xem Gemini có gọi tiếp tool nào không
                 continue 
             
             else:
                 # --- KHÔNG GỌI TOOL (Chỉ là Text) ---
                 final_text = response.text
-                break # Thoát vòng lặp
+                break 
 
         # 6. Lưu lịch sử
         CHAT_HISTORY[req.userId] = chat.history
 
-        return {"reply": final_text}
+        # [QUAN TRỌNG] Thêm .strip() để cắt bỏ dòng trống thừa ở cuối
+        return {"reply": final_text.strip() if final_text else ""}
 
     except Exception as e:
         logger.error(f"Error: {e}", exc_info=True)

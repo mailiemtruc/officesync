@@ -7,44 +7,44 @@ from typing import Dict, Any, List, Optional
 
 logger = logging.getLogger(__name__)
 
-# --- 1. ĐỊNH NGHĨA SCHEMA ---
+# --- 1. ĐỊNH NGHĨA SCHEMA (PHIÊN BẢN ĐÃ FIX LỖI HỎI LẠI) ---
 TOOL_DEF = {
     "function_declarations": [
         {
             "name": "get_attendance_history",
-            "description": "Lấy chi tiết lịch sử Check-in/Check-out. Dùng cho: 'Hôm qua tôi đi làm lúc nào?', 'Sáng nay check-in chưa?', 'Lịch sử ngày 15'.",
+            "description": "Lấy lịch sử chấm công. Hỗ trợ xem 'tất cả', 'hôm nay', 'tháng này'.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "day": {
                         "type": "integer", 
-                        "description": "Ngày (1-31). Dựa vào 'hôm nay' để tính. VD: Nay 11, 'hôm qua' -> điền 10."
+                        "description": "Ngày (1-31). BỎ TRỐNG nếu muốn xem toàn bộ tháng."
                     },
                     "month": {
                         "type": "integer", 
-                        "description": "Tháng (1-12). TỰ TÍNH dựa vào tháng hiện tại. VD: Nay tháng 2, 'tháng trước' -> điền 1. Nay tháng 1, 'tháng trước' -> điền 12."
+                        "description": "Tháng (1-12). QUAN TRỌNG: Nếu user không nói tháng nào, MẶC ĐỊNH lấy tháng hiện tại."
                     },
                     "year": {
                         "type": "integer", 
-                        "description": "Năm. TỰ TÍNH. Lưu ý: Nếu lùi tháng ra khỏi năm hiện tại (VD: T1 lùi về T12) phải giảm năm đi 1."
+                        "description": "Năm. Mặc định năm hiện tại."
                     }
                 },
-                "required": [] 
+                "required": [] # Bot tự tin điền default nhờ description ở trên
             }
         },
         {
             "name": "get_monthly_timesheet",
-            "description": "Xem bảng công tổng hợp (Tổng giờ, số phút trễ). Dùng cho: 'Tháng trước tôi đi trễ bao nhiêu?', 'Công tháng này', 'Tháng 12 làm bao nhiêu giờ'.",
+            "description": "Xem bảng công tổng hợp (Tổng giờ, số phút trễ).",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "month": {
                         "type": "integer", 
-                        "description": "Tháng (1-12). Nếu user nói 'tháng trước', hãy lấy tháng hiện tại TRỪ 1."
+                        "description": "Tháng (1-12). Mặc định tháng hiện tại."
                     },
                     "year": {
                         "type": "integer", 
-                        "description": "Năm. Lưu ý xử lý trường hợp chuyển giao năm (Giao thừa)."
+                        "description": "Năm. Mặc định năm hiện tại."
                     }
                 },
                 "required": []
@@ -53,30 +53,22 @@ TOOL_DEF = {
     ]
 }
 
-# --- 2. SYSTEM PROMPT (NÂNG CẤP LOGIC THỜI GIAN) ---
+# --- 2. SYSTEM PROMPT (BỔ SUNG QUY TẮC 'XEM TẤT CẢ') ---
 SYSTEM_PROMPT = """
 --- HƯỚNG DẪN ATTENDANCE SERVICE ---
 
-1. **QUY TẮC TÍNH THỜI GIAN (QUAN TRỌNG):**
-   Bạn (AI) phải tự tính toán ngày tháng dựa trên "Thời gian hiện tại" được cung cấp ở đầu hội thoại. KHÔNG ĐƯỢC HỎI LẠI USER những câu dư thừa.
-   
-   *Ví dụ giả sử hôm nay là: 2026-01-11 (Tháng 1, Năm 2026)*
-   - User: "Tháng này"   -> Gọi tool với `month=1, year=2026`.
-   - User: "Tháng trước" -> Gọi tool với `month=12, year=2025` (Lùi 1 tháng, lùi 1 năm).
-   - User: "Hôm qua"     -> Gọi tool với `day=10, month=1, year=2026`.
-   - User: "Hôm kia"     -> Gọi tool với `day=9, month=1, year=2026`.
+1. **QUY TẮC XỬ LÝ THỜI GIAN (BẮT BUỘC):**
+   - User nói: "Xem tất cả", "Xem lịch sử", "Full history" -> **GỌI NGAY** tool với `month` và `year` hiện tại. KHÔNG ĐƯỢC HỎI LẠI "Ngày nào?".
+   - User nói: "Tháng trước" -> Tự lùi 1 tháng.
+   - User nói: "Hôm qua" -> Tự tính ngày hôm qua.
 
 2. **Quy tắc hiển thị:**
-   - Nếu `late_minutes_total` > 0: "Bạn đi trễ X phút" 🟠.
-   - Nếu `status` == "MISSING_CHECKOUT": Cảnh báo quên check-out 🔴.
-   - Nếu hỏi "Check-in chưa?": Nếu API trả về list rỗng -> "Chưa check-in".
-
-3. **Phản hồi mẫu:**
-   - User: "Tháng trước tôi có đi trễ không?"
-   - AI (Sau khi gọi get_monthly_timesheet): "Dạ, trong tháng 12/2025, bạn có 3 ngày đi trễ (Tổng 45 phút) ạ 🟠."
+   - Nếu `late_minutes` > 0: Thêm icon 🟠.
+   - Nếu `status` == "MISSING_CHECKOUT": Cảnh báo 🔴.
+   - Trả lời ngắn gọn, đi thẳng vào dữ liệu.
 """
 
-# --- 3. CÁC HÀM GỌI API ---
+# --- 3. CÁC HÀM GỌI API (GIỮ NGUYÊN) ---
 async def fetch_history(user_id: int, month: int, year: int, settings: Any, client: httpx.AsyncClient) -> List[Dict]:
     url = f"{settings.ATTENDANCE_SERVICE_URL}/history"
     headers = {"X-User-Id": str(user_id)}
@@ -99,7 +91,7 @@ async def fetch_timesheet(user_id: int, month: int, year: int, settings: Any, cl
         logger.error(f"Error fetching timesheet: {e}")
         return []
 
-# --- 4. FORMATTERS ---
+# --- 4. FORMATTERS (GIỮ NGUYÊN) ---
 def format_history_response(data: List[Dict], day_filter: Optional[int] = None) -> Any:
     if not data: return "Không tìm thấy dữ liệu (API trả về rỗng)."
     
@@ -130,12 +122,9 @@ def format_timesheet_response(data: List[Dict]) -> Any:
     for day in data:
         if day.get("totalWorkingHours", 0) == 0 and day.get("status") == "ABSENT": continue
         
-        # [QUAN TRỌNG] TÍNH TỔNG SỐ PHÚT TRỄ TRONG NGÀY
         total_late = 0
         sessions = day.get("sessions", [])
         if sessions:
-            # Giả định danh sách session đã được sắp xếp theo thời gian từ sáng -> tối
-            # Lấy thông tin trễ của session đầu tiên
             first_session = sessions[0] 
             total_late = first_session.get("lateMinutes", 0)
 
@@ -144,17 +133,15 @@ def format_timesheet_response(data: List[Dict]) -> Any:
             "total_hours": day.get("totalWorkingHours"),
             "status": day.get("status"),
             "sessions_count": len(sessions),
-            "late_minutes_total": total_late  # <--- Trường quan trọng gửi cho AI
+            "late_minutes_total": total_late 
         })
     return summary
 
 # --- 5. EXECUTE HANDLER ---
 async def execute(user_id: int, args: Dict[str, Any], client: httpx.AsyncClient, settings: Any, tool_name: str = None) -> Any:
-    # Lấy ngày hiện tại
     today = datetime.date.today()
     
-    # Logic: Nếu AI gửi tham số (do nó tự tính), thì dùng tham số đó.
-    # Nếu AI không gửi (None), thì fallback về today.
+    # Logic fallback: Nếu Bot gửi None (do prompt bảo mặc định) -> code tự lấy today
     month = int(args.get("month") or today.month)
     year = int(args.get("year") or today.year)
     day = args.get("day")
