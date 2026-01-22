@@ -77,35 +77,52 @@ class _ChatScreenState extends State<ChatScreen> {
 
   // [LOGIC SỬA LỖI ĐÈ DANH SÁCH]
   void _handleNewMessage(dynamic data) {
-    int roomId = data['roomId'];
-    // Backend nên trả về cả tên phòng, avatar... nếu là nhóm mới
-    // Nếu data thiếu thông tin, ta buộc phải gọi API reload
+    print("⚡ Xử lý tin nhắn Socket: $data");
 
     if (mounted) {
       setState(() {
-        // 1. Tìm xem phòng này đã có trong danh sách chưa
-        int index = _allRooms.indexWhere((r) => r.id == roomId);
+        // TRƯỜNG HỢP 1: ĐÂY LÀ SỰ KIỆN TẠO PHÒNG MỚI (Từ code Java vừa sửa)
+        if (data['event_type'] == 'NEW_ROOM') {
+          print("✨ Có nhóm mới! Thêm ngay vào đầu danh sách.");
 
-        if (index != -1) {
-          // ==> CÓ RỒI: Lấy nó ra, xóa khỏi vị trí cũ
-          ChatRoom existingRoom = _allRooms[index];
-          _allRooms.removeAt(index);
+          // 1. Parse JSON thành Object ChatRoom
+          // (Lưu ý: ChatRoom.fromJson của bạn phải khớp key với Java gửi)
+          try {
+            ChatRoom newRoom = ChatRoom.fromJson(data);
 
-          // Đưa nó lên đầu danh sách (Top 1)
-          _allRooms.insert(0, existingRoom);
+            // 2. Kiểm tra trùng (cho chắc chắn)
+            int index = _allRooms.indexWhere((r) => r.id == newRoom.id);
+            if (index == -1) {
+              // Chưa có -> Thêm vào đầu
+              _allRooms.insert(0, newRoom);
+            }
+          } catch (e) {
+            print("❌ Lỗi parse phòng mới: $e");
+            // Nếu lỗi parse thì fallback về cách cũ: Load lại API
+            _loadData();
+            return;
+          }
+        }
+        // TRƯỜNG HỢP 2: TIN NHẮN THƯỜNG (Cập nhật vị trí phòng cũ)
+        else if (data['roomId'] != null) {
+          int roomId = data['roomId'] is int
+              ? data['roomId']
+              : int.tryParse(data['roomId'].toString()) ?? 0;
 
-          // (Tùy chọn) Nếu bạn có trường lastMessage trong ChatRoom, hãy update ở đây
-          // existingRoom.lastMessage = data['content'];
-        } else {
-          // ==> CHƯA CÓ (Nhóm mới hoặc Chat mới):
-          // Cách an toàn nhất là gọi lại API load lại list
-          // Vì ta cần đầy đủ avatar, tên nhóm từ server
-          print("✨ Phát hiện phòng mới, reload lại list...");
-          _loadData();
-          return;
+          int index = _allRooms.indexWhere((r) => r.id == roomId);
+          if (index != -1) {
+            // Có rồi -> Bốc lên đầu
+            ChatRoom existingRoom = _allRooms[index];
+            _allRooms.removeAt(index);
+            _allRooms.insert(0, existingRoom);
+          } else {
+            // Có tin nhắn từ phòng lạ (chưa có trong list) -> Load lại cho chắc
+            _loadData();
+            return;
+          }
         }
 
-        // Cập nhật lại danh sách hiển thị (nếu đang không tìm kiếm)
+        // Cập nhật lại UI tìm kiếm
         if (_searchController.text.isEmpty) {
           _filteredRooms = _allRooms;
         }

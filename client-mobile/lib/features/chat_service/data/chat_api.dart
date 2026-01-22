@@ -244,6 +244,31 @@ class ChatApi {
       return false;
     }
   }
+
+  Future<bool> updateChatProfile({String? avatarUrl, String? fullName}) async {
+    try {
+      final headers = await _getHeaders();
+      final body = json.encode({"avatarUrl": avatarUrl, "fullName": fullName});
+
+      print("🚀 [ChatApi] Đang gửi lệnh đồng bộ Avatar...");
+      final response = await http.put(
+        Uri.parse('$baseUrl/api/users/profile'),
+        headers: headers,
+        body: body,
+      );
+
+      if (response.statusCode == 200) {
+        print("✅ [ChatApi] Đồng bộ Avatar thành công!");
+        return true;
+      } else {
+        print("❌ [ChatApi] Lỗi đồng bộ: ${response.body}");
+        return false;
+      }
+    } catch (e) {
+      print("❌ [ChatApi] Exception: $e");
+      return false;
+    }
+  }
 }
 
 // Model đơn giản dùng cho Danh bạ (Paste luôn xuống cuối file chat_api.dart cũng được)

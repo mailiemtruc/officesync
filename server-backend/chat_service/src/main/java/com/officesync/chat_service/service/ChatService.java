@@ -21,11 +21,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Optional;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -40,6 +42,7 @@ public class ChatService {
     // [NEW] Inject RabbitMQ template and ObjectMapper
     private final RabbitTemplate rabbitTemplate;
     private final ObjectMapper objectMapper;
+  
 
     @Transactional
     public ChatMessage saveMessage(Long senderId, ChatMessageDTO dto) {
@@ -445,29 +448,66 @@ public void leaveRoom(Long userId, Long roomId) {
     log.info("User {} left room {}", userId, roomId);
 }
 // Hàm bắn tin hiệu "Có phòng mới" qua Socket
-    private void notifyNewRoom(ChatRoom room, List<Long> memberIds) {
+ private void notifyNewRoom(ChatRoom room, List<Long> memberIds) {
         if (memberIds == null || memberIds.isEmpty()) return;
 
-        // Tạo payload đơn giản để Client nhận biết
-        ChatMessageDTO notification = new ChatMessageDTO();
-        notification.setRoomId(room.getId());
-        notification.setContent("Bạn đã được thêm vào nhóm " + room.getRoomName());
-        notification.setType(ChatMessage.MessageType.JOIN); // Loại tin nhắn là JOIN
-        notification.setSender("SYSTEM");
-        notification.setTimestamp(new Date().toString());
+        // 1. Tạo payload chứa thông tin phòng y hệt như API lấy danh sách
+        Map<String, Object> payload = new java.util.HashMap<>();
+        payload.put("id", room.getId());
+        payload.put("roomName", room.getRoomName());
+        payload.put("type", room.getType()); // "GROUP"
+        payload.put("roomAvatarUrl", room.getRoomAvatarUrl());
+        
+        // Chuyển ngày sang chuỗi ISO 8601
+        if (room.getUpdatedAt() != null) {
+            payload.put("updatedAt", room.getUpdatedAt().toString());
+        } else {
+             payload.put("updatedAt", java.time.LocalDateTime.now().toString());
+        }
+        
+        // [QUAN TRỌNG] Đánh dấu đây là event tạo phòng mới
+        payload.put("event_type", "NEW_ROOM"); 
 
-        // Lấy danh sách User để lấy Email (vì Socket gửi theo Email)
+        // 2. Lấy danh sách User để bắn tin
         List<ChatUser> users = chatUserRepository.findAllById(memberIds);
 
         for (ChatUser user : users) {
-            // Gửi vào kênh riêng của từng người: /user/{email}/queue/notifications
-            // Client Flutter (ChatScreen) đang lắng nghe kênh này
+            log.info("📢 Bắn Socket phòng mới cho: {}", user.getEmail());
+            
+            // Gửi Map này đi, Jackson sẽ tự convert sang JSON
             messagingTemplate.convertAndSendToUser(
                 user.getEmail(),
                 "/queue/notifications",
-                notification
+                payload
             );
         }
-        log.info("📢 Đã bắn socket báo nhóm mới cho {} thành viên", users.size());
     }
+    @Transactional
+    public ChatUser updateUserProfile(Long userId, String newAvatarUrl, String newName) {
+        ChatUser user = chatUserRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        boolean isChanged = false;
+
+        // 1. Cập nhật Avatar
+        if (newAvatarUrl != null && !newAvatarUrl.isEmpty()) {
+            user.setAvatarUrl(newAvatarUrl);
+            isChanged = true;
+        }
+
+        // 2. Cập nhật Tên (nếu có)
+        if (newName != null && !newName.isEmpty()) {
+            user.setFullName(newName);
+            isChanged = true;
+        }
+
+        // 3. Nếu có thay đổi thì lưu xuống DB
+        if (isChanged) {
+            ChatUser savedUser = chatUserRepository.save(user);
+            log.info("✅ Đã đồng bộ Profile User ID: {} | Avatar: {}", userId, newAvatarUrl);
+            return savedUser;
+        }
+        return user;
+    }
+
 }
