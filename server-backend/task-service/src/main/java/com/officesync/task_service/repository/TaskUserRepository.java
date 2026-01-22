@@ -9,4 +9,5 @@ public interface TaskUserRepository extends JpaRepository<TaskUser, Long> {
     List<TaskUser> findByCompanyId(Long companyId);
     List<TaskUser> findByCompanyIdAndStatus(Long companyId, String status);
     Optional<TaskUser> findByEmail(String email);
+    List<TaskUser> findAllByEmail(String email);
 }

@@ -7,4 +7,6 @@ import java.util.List;
 
 public interface TaskDepartmentRepository extends JpaRepository<TaskDepartment, Long> {
     List<TaskDepartment> findByCompanyId(Long companyId);
+
+    List<TaskDepartment> findAllByManagerId(Long managerId);
 }

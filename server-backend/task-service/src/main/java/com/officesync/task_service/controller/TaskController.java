@@ -1,19 +1,15 @@
-// com.officesync.task_service.controller.TaskController.java
 package com.officesync.task_service.controller;
 
 import java.util.List;
 import java.util.Map;
-
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
 import com.officesync.task_service.model.Task;
 import com.officesync.task_service.model.TaskDepartment;
 import com.officesync.task_service.model.TaskUser;
 import com.officesync.task_service.repository.TaskDepartmentRepository;
 import com.officesync.task_service.repository.TaskUserRepository;
 import com.officesync.task_service.service.TaskService;
-
 import lombok.RequiredArgsConstructor;
 
 @RestController
@@ -27,17 +23,15 @@ public class TaskController {
 
     @GetMapping("/me")
     public ResponseEntity<TaskUser> getCurrentUser(@RequestHeader("X-User-Id") Long userId) {
-        // Logic này sẽ lấy User từ database dựa trên ID gửi từ Mobile
-        TaskUser user = taskService.getOrSyncUser(userId);
-        return ResponseEntity.ok(user);
+        return ResponseEntity.ok(taskService.getOrSyncUser(userId));
     }
+
     @PostMapping
     public ResponseEntity<?> createTask(
             @RequestHeader("X-User-Id") Long creatorId,
             @RequestBody Task task) {
         try {
-            Task created = taskService.createTask(task, creatorId);
-            return ResponseEntity.ok(created);
+            return ResponseEntity.ok(taskService.createTask(task, creatorId));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }
@@ -65,50 +59,30 @@ public class TaskController {
         return ResponseEntity.ok(taskService.publishTask(id));
     }
 
-    // [MỚI] API ÉP ĐỒNG BỘ (Gọi cái này nếu thấy dữ liệu thiếu)
-    @PostMapping("/sync")
-    public ResponseEntity<?> forceSync(@RequestHeader("X-User-Id") Long requesterId) {
-        try {
-            taskService.forceSyncData(requesterId);
-            return ResponseEntity.ok(Map.of("message", "Data synchronized successfully from HR"));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
-        }
-    }
-
     @GetMapping
     public ResponseEntity<List<Task>> getTasks(@RequestHeader("X-User-Id") Long requesterId) {
         TaskUser requester = taskService.getOrSyncUser(requesterId);
-        // Truyền thêm requesterId vào service để lọc theo Role
         List<Task> list = taskService.listTasksForCompany(requester.getCompanyId(), requesterId);
         return ResponseEntity.ok(list);
     }
 
     @GetMapping("/mine")
-    public ResponseEntity<List<Task>> getMyTasks(
-            @RequestHeader("X-User-Id") Long requesterId) {
-        taskService.getOrSyncUser(requesterId);
+    public ResponseEntity<List<Task>> getMyTasks(@RequestHeader("X-User-Id") Long requesterId) {
         List<Task> list = taskService.listTasksForAssignee(requesterId);
         return ResponseEntity.ok(list);
     }
 
     @GetMapping("/departments")
-    public ResponseEntity<List<TaskDepartment>> getDepartments(
-            @RequestHeader("X-User-Id") Long requesterId) {
+    public ResponseEntity<List<TaskDepartment>> getDepartments(@RequestHeader("X-User-Id") Long requesterId) {
         TaskUser requester = taskService.getOrSyncUser(requesterId);
-        List<TaskDepartment> depts = deptRepo.findByCompanyId(requester.getCompanyId());
-        return ResponseEntity.ok(depts);
+        return ResponseEntity.ok(deptRepo.findByCompanyId(requester.getCompanyId()));
     }
 
     @GetMapping("/users/suggestion")
     public ResponseEntity<List<TaskUser>> suggestUsers(
             @RequestHeader("X-User-Id") Long requesterId,
             @RequestParam(defaultValue = "") String keyword) {
-        
         TaskUser requester = taskService.getOrSyncUser(requesterId);
-        
-        // Trả về tất cả nhân viên trong CÙNG CÔNG TY
-        List<TaskUser> users = userRepo.findByCompanyId(requester.getCompanyId());
-        return ResponseEntity.ok(users);
+        return ResponseEntity.ok(userRepo.findByCompanyId(requester.getCompanyId()));
     }
 }
