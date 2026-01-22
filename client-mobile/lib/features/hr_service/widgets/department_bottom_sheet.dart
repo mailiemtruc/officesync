@@ -1,7 +1,7 @@
-import 'dart:convert'; // [MỚI] Để parse JSON user_info
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart'; // [MỚI] Import storage
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../domain/repositories/department_repository_impl.dart';
 import '../data/models/department_model.dart';
 import 'confirm_bottom_sheet.dart';
@@ -12,7 +12,7 @@ import '../../../../core/utils/custom_snackbar.dart';
 
 class DepartmentBottomSheet extends StatelessWidget {
   final DepartmentModel department;
-  final VoidCallback onDeleteSuccess; // Callback khi xóa thành công
+  final VoidCallback onDeleteSuccess;
 
   const DepartmentBottomSheet({
     super.key,
@@ -32,8 +32,6 @@ class DepartmentBottomSheet extends StatelessWidget {
         confirmText: 'Delete',
         confirmColor: const Color(0xFFDC2626),
         onConfirm: () async {
-          // [SỬA LỖI LOGIC TẠI ĐÂY]
-          // 1. Lấy ID người dùng từ storage
           const storage = FlutterSecureStorage();
           String? userId;
           try {
@@ -48,7 +46,7 @@ class DepartmentBottomSheet extends StatelessWidget {
 
           if (userId == null) {
             if (context.mounted) {
-              Navigator.pop(context); // Đóng dialog confirm
+              Navigator.pop(context);
               CustomSnackBar.show(
                 context,
                 title: 'Session Error',
@@ -59,13 +57,11 @@ class DepartmentBottomSheet extends StatelessWidget {
             return;
           }
 
-          // 2. Gọi API Xóa
           final repo = DepartmentRepositoryImpl(
             remoteDataSource: DepartmentRemoteDataSource(),
           );
 
           try {
-            // [SỬA LỖI]: Phải hứng kết quả trả về (true/false)
             final bool success = await repo.deleteDepartment(
               userId,
               department.id!,
@@ -73,10 +69,9 @@ class DepartmentBottomSheet extends StatelessWidget {
 
             if (!context.mounted) return;
 
-            // [LOGIC MỚI] Kiểm tra kết quả
             if (success) {
-              Navigator.pop(context); // Đóng Dialog
-              onDeleteSuccess(); // Refresh list
+              Navigator.pop(context);
+              onDeleteSuccess();
               CustomSnackBar.show(
                 context,
                 title: 'Success',
@@ -84,7 +79,6 @@ class DepartmentBottomSheet extends StatelessWidget {
                 isError: false,
               );
             } else {
-              // Nếu thất bại (Server trả về false do lỗi 500)
               Navigator.pop(context);
               CustomSnackBar.show(
                 context,
@@ -111,7 +105,6 @@ class DepartmentBottomSheet extends StatelessWidget {
     );
   }
 
-  // Hàm parse màu (Giữ nguyên logic cũ)
   Color _parseColor(String? hexColor) {
     if (hexColor == null || hexColor.isEmpty) return Colors.blue;
     try {
@@ -150,7 +143,7 @@ class DepartmentBottomSheet extends StatelessWidget {
             ),
             const SizedBox(height: 24),
 
-            // Header (Giữ nguyên UI gốc)
+            // Header Section
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Row(
@@ -173,14 +166,47 @@ class DepartmentBottomSheet extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          department.name,
-                          style: const TextStyle(
-                            color: Colors.black,
-                            fontSize: 16,
-                            fontFamily: 'Inter',
-                            fontWeight: FontWeight.w600,
-                          ),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                department.name,
+                                style: const TextStyle(
+                                  color: Colors.black,
+                                  fontSize: 16,
+                                  fontFamily: 'Inter',
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (department.isHr) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFEEF2FF),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(
+                                    color: const Color(0xFFC7D2FE),
+                                    width: 0.5,
+                                  ),
+                                ),
+                                child: const Text(
+                                  'HR',
+                                  style: TextStyle(
+                                    color: Color(0xFF4338CA),
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                         const SizedBox(height: 4),
                         Text(
@@ -195,6 +221,7 @@ class DepartmentBottomSheet extends StatelessWidget {
                       ],
                     ),
                   ),
+                  // [ĐÃ SỬA] Thêm lại nút đóng và đóng ngoặc đầy đủ
                   IconButton(
                     icon: const Icon(Icons.close, color: Colors.grey),
                     onPressed: () => Navigator.pop(context),
@@ -233,12 +260,11 @@ class DepartmentBottomSheet extends StatelessWidget {
                 final bool? result = await Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => EditDepartmentPage(
-                      department: department,
-                    ), // Truyền model vào
+                    builder: (context) =>
+                        EditDepartmentPage(department: department),
                   ),
                 );
-                if (result == true) onDeleteSuccess(); // Refresh nếu có sửa
+                if (result == true) onDeleteSuccess();
               },
             ),
 
@@ -267,13 +293,10 @@ class DepartmentBottomSheet extends StatelessWidget {
     required Color color,
     required VoidCallback onTap,
   }) {
-    // [ĐÃ SỬA] Thêm Material để hiển thị hiệu ứng sóng nước (Ripple) rõ ràng
     return Material(
-      color:
-          Colors.transparent, // Quan trọng: Để không che mất nền trắng bên dưới
+      color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        // Tùy chỉnh màu hiệu ứng lan tỏa theo màu của icon (VD: Nút xóa sẽ lan màu đỏ nhạt)
         splashColor: color.withOpacity(0.1),
         highlightColor: color.withOpacity(0.05),
         child: Padding(

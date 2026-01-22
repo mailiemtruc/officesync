@@ -14,6 +14,8 @@ import '../../domain/repositories/request_repository.dart';
 import '../../data/models/request_model.dart';
 import '../../domain/repositories/department_repository_impl.dart';
 import '../../domain/repositories/department_repository.dart';
+import 'package:path_provider/path_provider.dart'; // Import mới
+import 'package:path/path.dart' as path; // Import mới
 
 class CreateRequestPage extends StatefulWidget {
   const CreateRequestPage({super.key});
@@ -72,7 +74,7 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
     _fetchHrDepartmentName();
   }
 
-  // --- 1. CHỌN FILE (CHƯA UPLOAD NGAY) ---
+  // --- 1. CHỌN FILE VÀ LƯU AN TOÀN ---
   Future<void> _pickAndUpload(ImageSource source, bool isVideo) async {
     Navigator.pop(context); // Đóng BottomSheet
 
@@ -95,9 +97,23 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
           : await _picker.pickImage(source: source, imageQuality: 70);
 
       if (xfile != null) {
+        // [FIX - ENTERPRISE SOLUTION]
+        // Thay vì dùng file cache (dễ bị xóa), ta copy sang thư mục Documents của App
+
+        // 1. Lấy đường dẫn thư mục Documents
+        final directory = await getApplicationDocumentsDirectory();
+
+        // 2. Tạo tên file mới (dùng timestamp để tránh trùng tên)
+        final String fileName =
+            '${DateTime.now().millisecondsSinceEpoch}_${path.basename(xfile.path)}';
+        final String newPath = '${directory.path}/$fileName';
+
+        // 3. Copy file từ Cache sang Documents
+        final File savedFile = await File(xfile.path).copy(newPath);
+
         setState(() {
-          // [ĐÃ SỬA] Chỉ lưu file vào list local
-          _selectedFiles.add(File(xfile.path));
+          // 4. Lưu file đã copy vào danh sách (Không dùng xfile.path nữa)
+          _selectedFiles.add(savedFile);
 
           if (isVideo)
             _videoCount++;
@@ -305,10 +321,22 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
   }
 
   // --- LOGIC XÓA FILE LOCAL ---
+  // --- LOGIC XÓA FILE LOCAL ---
   void _removeFile(int index) {
     File file = _selectedFiles[index];
+
+    // [THÊM] Xóa file vật lý trong thư mục Documents để dọn rác
+    try {
+      if (file.existsSync()) {
+        file.delete();
+      }
+    } catch (e) {
+      print("Lỗi xóa file local: $e");
+    }
+
     String path = file.path.toLowerCase();
     bool isVideo = path.endsWith('.mp4') || path.endsWith('.mov');
+
     setState(() {
       _selectedFiles.removeAt(index);
       if (isVideo)
@@ -344,43 +372,33 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
     }
   }
 
-  // --- SUBMIT: UPLOAD RỒI TẠO ĐƠN ---
+  // --- SUBMIT: VALIDATE TRƯỚC -> UPLOAD SAU ---
   Future<void> _onSubmit() async {
+    // 1. Check cơ bản: Lý do
     if (_reasonController.text.trim().isEmpty) {
       _showErrorSnackBar("Please enter a reason");
       return;
     }
 
+    // Bắt đầu xử lý
     setState(() => _isSubmitting = true);
 
     try {
       final userId = await _getUserIdFromStorage();
       if (userId == null) throw Exception("User session not found.");
 
-      // [ĐÃ SỬA] B1: Upload tất cả file trong danh sách
-      List<String> uploadedUrls = [];
-      if (_selectedFiles.isNotEmpty) {
-        for (var file in _selectedFiles) {
-          // Gọi API upload từng file
-          String url = await _repository.uploadFile(file);
-          uploadedUrls.add(url);
-        }
-      }
-
-      // Ghép thành chuỗi evidenceUrl
-      String? evidenceString = uploadedUrls.isNotEmpty
-          ? uploadedUrls.join(';')
-          : null;
-
-      // Xử lý Ngày Giờ (Giữ nguyên logic cũ)
+      // ============================================================
+      // BƯỚC 1: TÍNH TOÁN VÀ VALIDATE NGÀY GIỜ (Làm trước khi upload)
+      // ============================================================
       DateTime startDateTime;
       DateTime endDateTime;
 
       if (_selectedTypeIndex == 0) {
-        // Leave
+        // --- LEAVE (Nghỉ phép) ---
         if (_fromDate == null || _toDate == null) {
           throw Exception("Please select From & To Date");
         }
+        // Mặc định giờ hành chính 08:00 - 17:00
         startDateTime = DateTime(
           _fromDate!.year,
           _fromDate!.month,
@@ -396,7 +414,7 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
           0,
         );
       } else if (_selectedTypeIndex == 1) {
-        // Overtime
+        // --- OVERTIME (Làm thêm giờ) ---
         if (_fromDate == null || _startTime == null || _endTime == null) {
           throw Exception("Please select Date & Time");
         }
@@ -407,15 +425,25 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
           _startTime!.hour,
           _startTime!.minute,
         );
+        // Xử lý trường hợp làm qua đêm (nếu cần), ở đây giả sử trong ngày hoặc user chọn ngày kết thúc
+        // Theo UI hiện tại chỉ có 1 Date, nên giả định OT trong ngày hoặc qua đêm ngắn
+        DateTime endDateBase = _fromDate!;
+
+        // Logic phụ: Nếu giờ kết thúc nhỏ hơn giờ bắt đầu -> hiểu là sang ngày hôm sau
+        int endHour = _endTime!.hour;
+        if (endHour < _startTime!.hour) {
+          endDateBase = endDateBase.add(const Duration(days: 1));
+        }
+
         endDateTime = DateTime(
-          _fromDate!.year,
-          _fromDate!.month,
-          _fromDate!.day,
+          endDateBase.year,
+          endDateBase.month,
+          endDateBase.day,
           _endTime!.hour,
           _endTime!.minute,
         );
       } else {
-        // Late/Early
+        // --- LATE/EARLY (Đi muộn/Về sớm) ---
         if (_fromDate == null) throw Exception("Please select Date");
         if (_startTime == null)
           throw Exception("Please select First Time field");
@@ -438,26 +466,60 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
         );
       }
 
+      // --- VALIDATE LOGIC THỜI GIAN ---
+      // Kiểm tra 1: Thời gian kết thúc phải sau thời gian bắt đầu
       if (endDateTime.isBefore(startDateTime)) {
         throw Exception("End time cannot be before Start time.");
       }
 
-      if (_selectedTypeIndex == 2 &&
-          endDateTime.difference(startDateTime).inMinutes <= 0) {
-        throw Exception(
-          "Invalid duration. Check your Shift Standard Time vs Actual Time.",
-        );
+      // Kiểm tra 2: Thời gian bằng nhau
+      if (endDateTime.isAtSameMomentAs(startDateTime)) {
+        throw Exception("Start time and End time cannot be the same.");
       }
 
-      // Tính Duration
+      // Kiểm tra 3: Logic riêng cho Late/Early (Nếu cần duration > 0)
+      if (_selectedTypeIndex == 2 &&
+          endDateTime.difference(startDateTime).inMinutes <= 0) {
+        throw Exception("Invalid duration. Please check your time input.");
+      }
+
+      // Tính Duration trước để chắc chắn mọi thứ hợp lệ
       final durationDiff = endDateTime.difference(startDateTime);
       double durationVal = durationDiff.inMinutes / 60.0;
       String durationUnit = "HOURS";
       if (_selectedTypeIndex == 0 && durationVal >= 24) {
-        durationVal = durationDiff.inDays.toDouble() + 1;
+        // Nếu nghỉ phép tính theo ngày (Logic này tùy thuộc business của bạn)
+        // Ví dụ: tính số ngày dựa trên working days, ở đây tính đơn giản
+        durationVal = (durationDiff.inDays + 1).toDouble();
         durationUnit = "DAYS";
       }
 
+      // ============================================================
+      // BƯỚC 2: UPLOAD FILES (Chỉ chạy khi logic trên đã OK)
+      // ============================================================
+      List<String> uploadedUrls = [];
+      if (_selectedFiles.isNotEmpty) {
+        for (var file in _selectedFiles) {
+          // Kiểm tra file tồn tại (Safety Check)
+          if (!await file.exists()) {
+            throw Exception(
+              "File không tồn tại hoặc đã bị xóa. Vui lòng chọn lại.",
+            );
+          }
+
+          // Gọi API upload
+          String url = await _repository.uploadFile(file);
+          uploadedUrls.add(url);
+        }
+      }
+
+      String? evidenceString = uploadedUrls.isNotEmpty
+          ? uploadedUrls.join(';')
+          : null;
+
+      // ============================================================
+      // BƯỚC 3: TẠO REQUEST MODEL & GỬI BACKEND
+      // ============================================================
       RequestType typeEnum = RequestType.ANNUAL_LEAVE;
       if (_selectedTypeIndex == 1) typeEnum = RequestType.OVERTIME;
       if (_selectedTypeIndex == 2) {
@@ -466,7 +528,6 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
             : RequestType.EARLY_DEPARTURE;
       }
 
-      // Tạo Model
       final requestModel = RequestModel(
         type: typeEnum,
         status: RequestStatus.PENDING,
@@ -477,7 +538,6 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
         durationUnit: durationUnit,
       );
 
-      // B2: Gọi API tạo đơn (kèm chuỗi evidence đã upload)
       await _repository.createRequest(
         userId: userId,
         request: requestModel,

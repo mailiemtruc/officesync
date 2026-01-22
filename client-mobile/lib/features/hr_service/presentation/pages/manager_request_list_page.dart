@@ -3,12 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:intl/intl.dart';
+import 'dart:async';
+
+// Import các file của bạn (Giữ nguyên)
 import '../../../../core/services/websocket_service.dart';
 import '../../../../core/config/app_colors.dart';
 import '../../data/models/request_model.dart';
 import 'manager_request_review_page.dart';
 import '../../data/datasources/request_remote_data_source.dart';
-import 'dart:async';
 import '../../widgets/skeleton_request_card.dart';
 
 enum FilterType { none, date, month, year }
@@ -30,15 +32,18 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
   dynamic _unsubscribeFn;
   String? _currentCompanyId;
 
+  // [LOGIC MỚI 1] Biến lưu Role người dùng hiện tại
+  String _currentUserRole = '';
+
   List<Map<String, dynamic>> _requestList = [];
 
-  // [THÊM MỚI] Biến phục vụ tìm kiếm Server-side
+  // Biến phục vụ tìm kiếm Server-side
   final TextEditingController _searchController = TextEditingController();
   Timer? _debounce;
 
-  // [CẬP NHẬT] Thay biến _selectedMonth cũ bằng 2 biến này:
-  DateTime? _selectedDate; // Lưu thời gian đã chọn
-  FilterType _filterType = FilterType.none; // Lưu kiểu lọc đang chọn
+  // Biến lọc thời gian
+  DateTime? _selectedDate;
+  FilterType _filterType = FilterType.none;
 
   @override
   void initState() {
@@ -49,19 +54,18 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
 
   @override
   void dispose() {
-    // [QUAN TRỌNG] Hủy đăng ký khi thoát màn hình để tránh leak
     if (_unsubscribeFn != null) {
       _unsubscribeFn(unsubscribeHeaders: const <String, String>{});
     }
+    _searchController.dispose();
+    _debounce?.cancel();
     super.dispose();
   }
 
-  // [ĐÃ SỬA] Thêm kiểm tra mounted
   void _onSearchChanged(String query) {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
     _debounce = Timer(const Duration(milliseconds: 600), () {
       if (mounted) {
-        // [FIX 1] Chỉ gọi API khi màn hình còn hiển thị
         _fetchRequests();
       }
     });
@@ -80,10 +84,8 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
     if (_currentCompanyId != null) {
       final topic = '/topic/company/$_currentCompanyId/requests';
 
-      // [ĐÃ SỬA] Thêm tham số forceUrl
       _unsubscribeFn = WebSocketService().subscribe(topic, (data) {
         if (!mounted) return;
-
         print("--> Socket received update. Reloading list...");
         _fetchRequests(isBackgroundRefresh: true);
       }, forceUrl: hrSocketUrl);
@@ -91,13 +93,11 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
   }
 
   Future<void> _fetchRequests({bool isBackgroundRefresh = false}) async {
-    // [FIX 1] Check mounted
     if (!mounted) return;
 
     if (!isBackgroundRefresh) setState(() => _isLoading = true);
 
     try {
-      // --- Logic lấy userId giữ nguyên ---
       String? userId;
       String? userInfoStr = await _storage.read(key: 'user_info');
 
@@ -105,6 +105,10 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
         try {
           final userMap = jsonDecode(userInfoStr);
           userId = userMap['id']?.toString();
+
+          // [LOGIC MỚI 2] Lấy Role từ token/storage
+          // Nếu không có key 'role', mặc định là EMPLOYEE
+          _currentUserRole = userMap['role']?.toString() ?? 'STAFF';
         } catch (e) {
           print("Error parsing user info: $e");
         }
@@ -112,10 +116,8 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
       if (userId == null) {
         userId = await _storage.read(key: 'user_id');
       }
-      // ----------------------------------
 
       if (userId != null) {
-        // [LOGIC MỚI] Tính toán tham số dựa trên FilterType
         int? d, m, y;
 
         if (_selectedDate != null) {
@@ -135,14 +137,13 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
         List<RequestModel> requests = await _dataSource.getManagerRequests(
           userId,
           search: _searchController.text,
-          day: d, // Gửi ngày (hoặc null)
-          month: m, // Gửi tháng (hoặc null)
-          year: y, // Gửi năm (hoặc null)
+          day: d,
+          month: m,
+          year: y,
         );
 
         if (mounted) {
           setState(() {
-            // Map dữ liệu sang format UI
             _requestList = requests.map((req) {
               return {
                 'request': req,
@@ -173,7 +174,35 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
     }
   }
 
-  // [ĐÃ TỐI ƯU] Menu chọn loại lọc - Mượt mà hơn
+  // [CẬP NHẬT] Hàm kiểm tra quyền duyệt đơn (An toàn hơn)
+  bool _canReview(RequestModel req) {
+    // 1. Chỉ quan tâm đơn PENDING
+    if (req.status != RequestStatus.PENDING) return false;
+
+    // 2. Nếu mình là ADMIN -> Có quyền duyệt tất cả
+    final myRoleClean = _currentUserRole.toUpperCase().trim();
+    if (myRoleClean == 'COMPANY_ADMIN') return true;
+
+    // [FIX QUAN TRỌNG] Xử lý trường hợp role bị null do lỗi backend
+    // Nếu role người gửi bị null/empty -> Mặc định coi là nguy hiểm -> Trả về FALSE (về History)
+    // Để tránh việc HR lỡ tay duyệt đơn của Manager
+    if (req.requesterRole == null || req.requesterRole!.isEmpty) {
+      print(
+        "--> WARNING: Request ID ${req.id} has missing Role data. Moved to History for safety.",
+      );
+      return false;
+    }
+
+    // 3. Nếu người tạo đơn là MANAGER -> HR không được duyệt
+    final requesterRoleClean = req.requesterRole!.toUpperCase().trim();
+    if (requesterRoleClean == 'MANAGER') {
+      return false;
+    }
+
+    // 4. Các trường hợp còn lại (HR duyệt Staff) -> True
+    return true;
+  }
+
   void _onFilterTap() {
     showModalBottomSheet(
       context: context,
@@ -191,7 +220,6 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const SizedBox(height: 12),
-                  // Thanh nắm (Handle bar)
                   Container(
                     width: 48,
                     height: 5,
@@ -201,8 +229,6 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
                     ),
                   ),
                   const SizedBox(height: 24),
-
-                  // Tiêu đề & Nút Reset
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 24),
                     child: Row(
@@ -221,7 +247,6 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
                           TextButton(
                             onPressed: () {
                               Navigator.pop(context);
-                              // Delay nhỏ để đóng xong mới reset UI
                               Future.delayed(
                                 const Duration(milliseconds: 200),
                                 () {
@@ -245,32 +270,20 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
                     ),
                   ),
                   const SizedBox(height: 20),
-
-                  // --- CÁC TÙY CHỌN (Đã thêm logic chờ Animation) ---
                   _buildEnhancedFilterOption(
                     icon: PhosphorIcons.calendar(),
                     text: "Specific Date",
                     subText: "Filter by a specific day (e.g. 25 Oct)",
                     isSelected: _filterType == FilterType.date,
                     onTap: () async {
-                      // 1. Đổi màu ngay lập tức (Visual Feedback)
                       setModalState(() => _filterType = FilterType.date);
-
-                      // 2. Chờ 150ms để người dùng thấy hiệu ứng gợn sóng (Ripple)
                       await Future.delayed(const Duration(milliseconds: 150));
-
-                      // 3. Đóng BottomSheet
                       if (context.mounted) Navigator.pop(context);
-
-                      // 4. [QUAN TRỌNG] Chờ 300ms cho BottomSheet đóng hẳn rồi mới hiện Lịch
-                      // Giúp tránh việc 2 animation chạy cùng lúc gây giật lag
                       await Future.delayed(const Duration(milliseconds: 300));
-
                       _pickDate();
                     },
                   ),
                   const SizedBox(height: 12),
-
                   _buildEnhancedFilterOption(
                     icon: PhosphorIcons.calendarBlank(),
                     text: "Month & Year",
@@ -280,15 +293,11 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
                       setModalState(() => _filterType = FilterType.month);
                       await Future.delayed(const Duration(milliseconds: 150));
                       if (context.mounted) Navigator.pop(context);
-
-                      await Future.delayed(
-                        const Duration(milliseconds: 300),
-                      ); // Chờ đóng xong
+                      await Future.delayed(const Duration(milliseconds: 300));
                       _pickMonth();
                     },
                   ),
                   const SizedBox(height: 12),
-
                   _buildEnhancedFilterOption(
                     icon: PhosphorIcons.clock(),
                     text: "Year Only",
@@ -298,14 +307,10 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
                       setModalState(() => _filterType = FilterType.year);
                       await Future.delayed(const Duration(milliseconds: 150));
                       if (context.mounted) Navigator.pop(context);
-
-                      await Future.delayed(
-                        const Duration(milliseconds: 300),
-                      ); // Chờ đóng xong
+                      await Future.delayed(const Duration(milliseconds: 300));
                       _pickYear();
                     },
                   ),
-
                   SizedBox(height: MediaQuery.of(context).padding.bottom + 24),
                 ],
               ),
@@ -316,7 +321,6 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
     );
   }
 
-  // Widget con: Option Card xịn xò (Style Minimalist)
   Widget _buildEnhancedFilterOption({
     required IconData icon,
     required String text,
@@ -324,15 +328,11 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
     required VoidCallback onTap,
     required bool isSelected,
   }) {
-    // Màu sắc theo trạng thái
-    final bgColor = isSelected
-        ? const Color(0xFFF0F6FF)
-        : Colors.white; // Nền tổng thể
+    final bgColor = isSelected ? const Color(0xFFF0F6FF) : Colors.white;
     final borderColor = isSelected
         ? const Color(0xFF2260FF)
-        : const Color(0xFFF3F4F6); // Viền
+        : const Color(0xFFF3F4F6);
 
-    // Style icon circle
     final iconCircleColor = isSelected
         ? const Color(0xFF2260FF)
         : const Color(0xFFF9FAFB);
@@ -341,9 +341,7 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
-        duration: const Duration(
-          milliseconds: 200,
-        ), // Hiệu ứng chuyển màu mượt mà
+        duration: const Duration(milliseconds: 200),
         curve: Curves.easeInOut,
         margin: const EdgeInsets.symmetric(horizontal: 24),
         padding: const EdgeInsets.all(16),
@@ -362,7 +360,6 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
         ),
         child: Row(
           children: [
-            // Icon tròn (Animated)
             AnimatedContainer(
               duration: const Duration(milliseconds: 200),
               padding: const EdgeInsets.all(12),
@@ -371,16 +368,11 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
                 shape: BoxShape.circle,
                 border: isSelected
                     ? null
-                    : Border.all(
-                        color: const Color(0xFFE5E7EB),
-                        width: 1,
-                      ), // Viền nhẹ khi chưa chọn
+                    : Border.all(color: const Color(0xFFE5E7EB), width: 1),
               ),
               child: Icon(icon, color: iconColor, size: 22),
             ),
             const SizedBox(width: 16),
-
-            // Text nội dung
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -409,8 +401,6 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
                 ],
               ),
             ),
-
-            // Icon check (Chỉ hiện khi chọn)
             AnimatedOpacity(
               opacity: isSelected ? 1.0 : 0.0,
               duration: const Duration(milliseconds: 200),
@@ -426,7 +416,6 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
     );
   }
 
-  // [MỚI] 2. Hàm Reset bộ lọc
   void _clearFilter() {
     setState(() {
       _filterType = FilterType.none;
@@ -435,7 +424,6 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
     _fetchRequests();
   }
 
-  // [CẬP NHẬT] 1. Chọn Ngày (Đồng bộ Theme)
   Future<void> _pickDate() async {
     final now = DateTime.now();
     final picked = await showDatePicker(
@@ -448,14 +436,12 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: const ColorScheme.light(
-              primary: AppColors.primary, // Màu header & nút chọn
+              primary: AppColors.primary,
               onPrimary: Colors.white,
               onSurface: Colors.black,
             ),
             textButtonTheme: TextButtonThemeData(
-              style: TextButton.styleFrom(
-                foregroundColor: AppColors.primary, // Màu nút Cancel/OK
-              ),
+              style: TextButton.styleFrom(foregroundColor: AppColors.primary),
             ),
           ),
           child: child!,
@@ -471,7 +457,6 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
     }
   }
 
-  // [CẬP NHẬT] 2. Chọn Năm (Đồng bộ Theme cho YearPicker)
   Future<void> _pickYear() async {
     showDialog(
       context: context,
@@ -479,7 +464,7 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: const ColorScheme.light(
-              primary: AppColors.primary, // Màu năm được chọn
+              primary: AppColors.primary,
               onSurface: Colors.black,
             ),
           ),
@@ -514,7 +499,6 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
     );
   }
 
-  // [CẬP NHẬT] 3. Chọn Tháng - Bước 1: Chọn Năm (Đồng bộ Theme)
   Future<void> _pickMonth() async {
     int tempYear = _selectedDate?.year ?? DateTime.now().year;
     await showDialog(
@@ -523,7 +507,7 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: const ColorScheme.light(
-              primary: AppColors.primary, // Màu năm được chọn
+              primary: AppColors.primary,
               onSurface: Colors.black,
             ),
           ),
@@ -543,8 +527,8 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
                 lastDate: DateTime(DateTime.now().year + 1),
                 selectedDate: DateTime(tempYear),
                 onChanged: (val) {
-                  Navigator.pop(context); // Tắt dialog chọn năm
-                  _pickMonthStep2(val.year); // Mở dialog chọn tháng
+                  Navigator.pop(context);
+                  _pickMonthStep2(val.year);
                 },
               ),
             ),
@@ -554,7 +538,6 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
     );
   }
 
-  // [CẬP NHẬT] 4. Chọn Tháng - Bước 2: Chọn Tháng cụ thể (Đồng bộ Theme)
   Future<void> _pickMonthStep2(int year) async {
     await showDialog(
       context: context,
@@ -562,7 +545,7 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: const ColorScheme.light(
-              primary: AppColors.primary, // Màu chủ đạo
+              primary: AppColors.primary,
               onSurface: Colors.black,
             ),
           ),
@@ -591,7 +574,6 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
                       Navigator.pop(context);
                     },
                     borderRadius: BorderRadius.circular(8),
-                    // Thêm hiệu ứng splash màu xanh nhạt khi nhấn
                     splashColor: AppColors.primary.withOpacity(0.1),
                     highlightColor: AppColors.primary.withOpacity(0.05),
                     child: Container(
@@ -624,20 +606,29 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
 
   @override
   Widget build(BuildContext context) {
-    // 1. Tính toán logic filter và count ngay tại build
-    // Để dùng cho cả Tabs và List
+    // [LOGIC MỚI 4] Lọc danh sách hiển thị dựa trên cả Status và Quyền hạn
     final displayList = _requestList.where((item) {
       final req = item['request'] as RequestModel;
+
+      // Sử dụng hàm _canReview để check quyền
+      final bool hasPermission = _canReview(req);
+
       if (_isToReviewTab) {
-        return req.status == RequestStatus.PENDING;
+        // Tab TO REVIEW: Chỉ hiện đơn PENDING và CÓ QUYỀN DUYỆT
+        // (Đơn Manager sẽ bị loại bỏ ở đây)
+        return req.status == RequestStatus.PENDING && hasPermission;
       } else {
-        return req.status != RequestStatus.PENDING;
+        // Tab HISTORY: Hiện đơn ĐÃ XỬ LÝ hoặc đơn PENDING MÀ KHÔNG CÓ QUYỀN (View only)
+        // (Đơn Manager sẽ hiện ở đây)
+        return req.status != RequestStatus.PENDING ||
+            (req.status == RequestStatus.PENDING && !hasPermission);
       }
     }).toList();
 
+    // [LOGIC MỚI 5] Đếm badge chỉ cho những đơn cần mình duyệt
     final int pendingCount = _requestList.where((item) {
       final req = item['request'] as RequestModel;
-      return req.status == RequestStatus.PENDING;
+      return req.status == RequestStatus.PENDING && _canReview(req);
     }).length;
 
     return Scaffold(
@@ -686,7 +677,6 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
                 ),
                 const SizedBox(height: 4),
 
-                // [MAIN CONTENT] Bọc AnimatedSwitcher
                 Expanded(
                   child: AnimatedSwitcher(
                     duration: const Duration(milliseconds: 300),
@@ -797,7 +787,7 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
 
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 300),
-      reverseDuration: const Duration(milliseconds: 50), // Fix dính hình
+      reverseDuration: const Duration(milliseconds: 50),
       switchInCurve: Curves.easeIn,
       switchOutCurve: Curves.easeOut,
       transitionBuilder: (child, animation) =>
@@ -851,8 +841,8 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
         children: [
           Expanded(
             child: _buildTabItem(
-              label: 'To review', // Chỉ để label text
-              count: pendingCount, // Truyền count vào để hiển thị badge
+              label: 'To review',
+              count: pendingCount,
               isActive: _isToReviewTab,
               onTap: () => setState(() => _isToReviewTab = true),
             ),
@@ -860,7 +850,7 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
           Expanded(
             child: _buildTabItem(
               label: 'History',
-              count: null, // History không hiện badge
+              count: null,
               isActive: !_isToReviewTab,
               onTap: () => setState(() => _isToReviewTab = false),
             ),
@@ -876,12 +866,10 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
     required bool isActive,
     required VoidCallback onTap,
   }) {
-    // Màu văn bản chính
     final baseColor = isActive
         ? const Color(0xE52260FF)
         : const Color(0xFFB2AEAE);
 
-    // Xử lý logic hiển thị số: Nếu > 100 thì hiện "99+"
     String? badgeText;
     if (count != null && count > 0) {
       badgeText = count > 100 ? '99+' : count.toString();
@@ -916,24 +904,15 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
                 fontFamily: 'Inter',
               ),
             ),
-            // Nếu có badgeText (tức là count > 0) thì hiển thị Badge đỏ
             if (badgeText != null) ...[
               const SizedBox(width: 6),
               Container(
-                // [FIX LỖI] Ép chiều cao cố định để không bị méo thành hình bầu dục dọc
                 height: 20,
-                constraints: const BoxConstraints(
-                  minWidth:
-                      20, // Chiều rộng tối thiểu bằng chiều cao -> Hình tròn
-                ),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 6,
-                ), // Chỉ padding ngang
+                constraints: const BoxConstraints(minWidth: 20),
+                padding: const EdgeInsets.symmetric(horizontal: 6),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFEF4444), // Nền đỏ
-                  borderRadius: BorderRadius.circular(
-                    10,
-                  ), // Bo tròn = height / 2
+                  color: const Color(0xFFEF4444),
+                  borderRadius: BorderRadius.circular(10),
                 ),
                 alignment: Alignment.center,
                 child: Text(
@@ -944,7 +923,7 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
                     fontSize: 11,
                     fontWeight: FontWeight.bold,
                     fontFamily: 'Inter',
-                    height: 1.1, // Căn chỉnh dòng để chữ nằm giữa
+                    height: 1.1,
                   ),
                 ),
               ),
@@ -965,7 +944,6 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
       ),
       child: TextField(
         controller: _searchController,
-        // [MỚI] Cập nhật UI để hiện/ẩn nút X khi gõ
         onChanged: (val) {
           _onSearchChanged(val);
           setState(() {});
@@ -983,22 +961,19 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
             color: const Color(0xFF757575),
             size: 20,
           ),
-          // [MỚI] Nút Xóa hình tròn (Đồng bộ giao diện)
           suffixIcon: _searchController.text.isNotEmpty
               ? Padding(
                   padding: const EdgeInsets.all(10.0),
                   child: GestureDetector(
                     onTap: () {
                       _searchController.clear();
-                      setState(() {}); // Cập nhật UI ẩn nút X
-
-                      // Hủy debounce cũ và load lại danh sách gốc
+                      setState(() {});
                       if (_debounce?.isActive ?? false) _debounce!.cancel();
                       _fetchRequests();
                     },
                     child: Container(
                       decoration: const BoxDecoration(
-                        color: Color(0xFFC4C4C4), // Màu nền xám
+                        color: Color(0xFFC4C4C4),
                         shape: BoxShape.circle,
                       ),
                       child: Icon(
@@ -1017,9 +992,7 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
     );
   }
 
-  // [CẬP NHẬT] Nút Filter có hiệu ứng nhấn (Ripple Effect)
   Widget _buildFilterButton() {
-    // Kiểm tra có đang lọc không
     final bool hasFilter =
         _filterType != FilterType.none && _selectedDate != null;
 
@@ -1034,7 +1007,6 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
       }
     }
 
-    // Màu sắc nền và viền
     final bgColor = hasFilter
         ? const Color(0xFFECF1FF)
         : const Color(0xFFF5F5F5);
@@ -1044,8 +1016,6 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
 
     return Material(
       color: bgColor,
-
-      // Tạo viền
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(color: borderColor, width: 1),
@@ -1053,12 +1023,9 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
       child: InkWell(
         onTap: _onFilterTap,
         borderRadius: BorderRadius.circular(12),
-
-        // Mới (Màu xám)
         splashColor: Colors.grey.withOpacity(0.2),
         highlightColor: Colors.grey.withOpacity(0.1),
         child: Container(
-          // Co giãn chiều rộng nếu có text
           width: hasFilter ? null : 45,
           height: 45,
           padding: EdgeInsets.symmetric(horizontal: hasFilter ? 12 : 0),
@@ -1067,7 +1034,6 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
             mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Icon Phễu
               Icon(
                 hasFilter
                     ? PhosphorIconsFill.funnel
@@ -1077,8 +1043,6 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
                     : const Color(0xFF555252),
                 size: 20,
               ),
-
-              // Text hiển thị & Nút xóa
               if (hasFilter) ...[
                 const SizedBox(width: 8),
                 Text(
@@ -1091,7 +1055,6 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                // Nút xóa filter (X) - Dùng GestureDetector để chặn sự kiện xuyên thấu
                 GestureDetector(
                   onTap: _clearFilter,
                   child: const Icon(
@@ -1117,21 +1080,18 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // [ĐÃ SỬA] Dùng icon ClipboardText giống trang MyRequests
           Icon(
             PhosphorIcons.clipboardText(PhosphorIconsStyle.regular),
-            size: 64, // Kích thước lớn 64
-            color: const Color(0xFFE5E7EB), // Màu xám rất nhạt
+            size: 64,
+            color: const Color(0xFFE5E7EB),
           ),
           const SizedBox(height: 16),
-
-          // [ĐÃ SỬA] Style chữ đồng bộ: Màu 9CA3AF, Size 16, Weight 500
           Text(
             message,
             style: const TextStyle(
-              color: Color(0xFF9CA3AF), // Màu xám chuẩn
+              color: Color(0xFF9CA3AF),
               fontSize: 16,
-              fontWeight: FontWeight.w500, // Độ đậm 500 (Medium)
+              fontWeight: FontWeight.w500,
               fontFamily: 'Inter',
             ),
             textAlign: TextAlign.center,
@@ -1183,13 +1143,12 @@ class _ManagerRequestCard extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                // --- BẮT ĐẦU ĐOẠN SỬA ---
                 Container(
                   width: 46,
                   height: 46,
                   decoration: const BoxDecoration(
                     shape: BoxShape.circle,
-                    color: Color(0xFFF3F4F6), // Nền xám nhạt
+                    color: Color(0xFFF3F4F6),
                   ),
                   child:
                       (data['avatar'] != null &&
@@ -1201,7 +1160,6 @@ class _ManagerRequestCard extends StatelessWidget {
                             height: 46,
                             fit: BoxFit.cover,
                             errorBuilder: (context, error, stackTrace) {
-                              // [SỬA 1] Bỏ 'const', thay Icons.person bằng PhosphorIcons
                               return Center(
                                 child: Icon(
                                   PhosphorIcons.user(PhosphorIconsStyle.fill),
@@ -1212,7 +1170,6 @@ class _ManagerRequestCard extends StatelessWidget {
                             },
                           ),
                         )
-                      // [SỬA 2] Bỏ 'const', thay Icons.person bằng PhosphorIcons
                       : Center(
                           child: Icon(
                             PhosphorIcons.user(PhosphorIconsStyle.fill),
@@ -1221,7 +1178,6 @@ class _ManagerRequestCard extends StatelessWidget {
                           ),
                         ),
                 ),
-                // --- KẾT THÚC ĐOẠN SỬA ---
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(
@@ -1250,27 +1206,21 @@ class _ManagerRequestCard extends StatelessWidget {
                                     WidgetSpan(
                                       alignment: PlaceholderAlignment.middle,
                                       child: Container(
-                                        margin: const EdgeInsets.only(
-                                          left: 4,
-                                        ), // Thêm margin nhẹ
+                                        margin: const EdgeInsets.only(left: 4),
                                         padding: const EdgeInsets.symmetric(
                                           horizontal: 8,
                                           vertical: 2,
                                         ),
                                         decoration: BoxDecoration(
-                                          color: const Color(
-                                            0xFFECF1FF,
-                                          ), // Màu nền xanh nhạt giống hình
+                                          color: const Color(0xFFECF1FF),
                                           borderRadius: BorderRadius.circular(
                                             4,
-                                          ), // Bo góc nhẹ
+                                          ),
                                         ),
                                         child: const Text(
                                           'Manager',
                                           style: TextStyle(
-                                            color: Color(
-                                              0xFF2260FF,
-                                            ), // Màu chữ xanh dương
+                                            color: Color(0xFF2260FF),
                                             fontSize: 12,
                                             fontWeight: FontWeight.w600,
                                             fontFamily: 'Inter',

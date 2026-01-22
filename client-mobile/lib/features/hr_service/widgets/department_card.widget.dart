@@ -14,11 +14,8 @@ class DepartmentCard extends StatelessWidget {
     this.onMenuTap,
   });
 
-  // Hàm chuyển đổi mã Hex (#RRGGBB) sang Color object
   Color _parseColor(String? hexColor) {
-    if (hexColor == null || hexColor.isEmpty) {
-      return Colors.blue;
-    }
+    if (hexColor == null || hexColor.isEmpty) return Colors.blue;
     try {
       final buffer = StringBuffer();
       if (hexColor.length == 6 || hexColor.length == 7) buffer.write('ff');
@@ -31,21 +28,12 @@ class DepartmentCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 1. Lấy màu sắc từ model
     final Color themeColor = _parseColor(department.color);
 
-    // [SỬA] Xử lý tên Manager: Nếu null hoặc rỗng thì hiện "No Manager"
-    String managerName = department.manager?.fullName ?? "";
-    if (managerName.trim().isEmpty) {
-      managerName = "No Manager";
-    }
-
-    // [SỬA] Xử lý Avatar: Nếu chuỗi rỗng thì coi như null để hiện icon mặc định
+    String managerName = department.manager?.fullName ?? "No Manager";
     String? avatarUrl = department.manager?.avatarUrl;
-    if (avatarUrl != null && avatarUrl.trim().isEmpty) {
-      avatarUrl = null;
-    }
-    final bool hasAvatar = avatarUrl != null && avatarUrl.isNotEmpty;
+    if (avatarUrl != null && avatarUrl.trim().isEmpty) avatarUrl = null;
+    final bool hasAvatar = avatarUrl != null;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -54,8 +42,10 @@ class DepartmentCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
+            color: Colors.black.withOpacity(
+              0.06,
+            ), // [UPDATE] Shadow nhẹ hơn cho hiện đại
+            blurRadius: 12,
             offset: const Offset(0, 4),
           ),
         ],
@@ -69,7 +59,7 @@ class DepartmentCard extends StatelessWidget {
             child: IntrinsicHeight(
               child: Row(
                 children: [
-                  // --- THANH MÀU BÊN TRÁI ---
+                  // Thanh màu bên trái
                   Container(width: 4, color: themeColor),
 
                   Expanded(
@@ -78,7 +68,7 @@ class DepartmentCard extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // --- HEADER: Tên phòng ban & Code ---
+                          // --- HEADER ---
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -87,14 +77,28 @@ class DepartmentCard extends StatelessWidget {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(
-                                      department.name,
-                                      style: const TextStyle(
-                                        color: Colors.black,
-                                        fontSize: 16,
-                                        fontFamily: 'Inter',
-                                        fontWeight: FontWeight.w600,
-                                      ),
+                                    // [UPDATE] Row chứa Tên + Badge HR
+                                    Row(
+                                      children: [
+                                        Flexible(
+                                          child: Text(
+                                            department.name,
+                                            style: const TextStyle(
+                                              color: Colors.black,
+                                              fontSize: 16,
+                                              fontFamily: 'Inter',
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        // [NEW] Hiển thị Badge nếu là HR
+                                        if (department.isHr) ...[
+                                          const SizedBox(width: 8),
+                                          _buildHrBadge(),
+                                        ],
+                                      ],
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
@@ -110,16 +114,20 @@ class DepartmentCard extends StatelessWidget {
                                 ),
                               ),
 
-                              // [ĐÃ SỬA] Chỉ hiện nút 3 chấm nếu onMenuTap KHÁC NULL
                               if (onMenuTap != null)
                                 GestureDetector(
                                   onTap: onMenuTap,
-                                  child: Icon(
-                                    PhosphorIcons.dotsThree(
-                                      PhosphorIconsStyle.bold,
+                                  child: Container(
+                                    // Tăng vùng bấm
+                                    color: Colors.transparent,
+                                    padding: const EdgeInsets.all(4),
+                                    child: Icon(
+                                      PhosphorIcons.dotsThree(
+                                        PhosphorIconsStyle.bold,
+                                      ),
+                                      color: const Color(0xFFBDBDBD),
+                                      size: 24,
                                     ),
-                                    color: const Color(0xFFBDBDBD),
-                                    size: 24,
                                   ),
                                 ),
                             ],
@@ -127,10 +135,9 @@ class DepartmentCard extends StatelessWidget {
 
                           const SizedBox(height: 20),
 
-                          // --- FOOTER: Manager Info & Member Count ---
+                          // --- FOOTER ---
                           Row(
                             children: [
-                              // Avatar Manager
                               Container(
                                 width: 40,
                                 height: 40,
@@ -138,7 +145,7 @@ class DepartmentCard extends StatelessWidget {
                                   shape: BoxShape.circle,
                                   color: hasAvatar
                                       ? Colors.transparent
-                                      : const Color(0xFFE0E0E0),
+                                      : const Color(0xFFF3F4F6),
                                 ),
                                 child: ClipOval(
                                   child: hasAvatar
@@ -151,10 +158,7 @@ class DepartmentCard extends StatelessWidget {
                                       : _buildDefaultAvatar(),
                                 ),
                               ),
-
                               const SizedBox(width: 12),
-
-                              // Tên & Chức danh Manager
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -184,8 +188,7 @@ class DepartmentCard extends StatelessWidget {
                                   ],
                                 ),
                               ),
-
-                              // Badge số lượng thành viên
+                              // Member Badge
                               Container(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 10,
@@ -232,15 +235,49 @@ class DepartmentCard extends StatelessWidget {
     );
   }
 
+  // [NEW] Widget Badge HR đẹp mắt
+  Widget _buildHrBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEEF2FF),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: const Color(0xFFC7D2FE), // Viền xanh Indigo nhạt
+          width: 0.5,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            PhosphorIcons.shieldCheck(PhosphorIconsStyle.fill), // Icon uy tín
+            size: 12,
+            color: const Color(0xFF4338CA), // Màu icon xanh Indigo đậm
+          ),
+          const SizedBox(width: 4),
+          const Text(
+            'HR Office',
+            style: TextStyle(
+              color: Color(0xFF4338CA),
+              fontSize: 10,
+              fontFamily: 'Inter',
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildDefaultAvatar() {
     return Container(
       alignment: Alignment.center,
       color: const Color(0xFFEFF1F5),
       child: Icon(
-        // [ĐÃ SỬA] Đổi sang Phosphor Icon
         PhosphorIcons.user(PhosphorIconsStyle.fill),
-        color: const Color(0xFF9CA3AF), // Màu icon xám đậm
-        size: 24,
+        color: const Color(0xFF9CA3AF),
+        size: 20,
       ),
     );
   }

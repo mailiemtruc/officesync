@@ -12,24 +12,23 @@ import com.officesync.hr_service.Model.RequestStatus;
 
 @Repository
 public interface RequestRepository extends JpaRepository<Request, Long> {
-  // [MỚI] Tìm tất cả đơn của người tạo (để xóa khi nhân viên nghỉ việc)
-    List<Request> findByRequesterId(Long requesterId);
-    // [MỚI] Tìm tất cả đơn mà người này là người duyệt (để gỡ tên)
-    List<Request> findByApproverId(Long approverId);
     
-   List<Request> findByRequesterIdAndIsHiddenFalseOrderByCreatedAtDesc(Long requesterId);
-    // 2. Lấy danh sách đơn cần duyệt theo phòng ban (Dành cho Manager)
+    // ... (Giữ nguyên các hàm findBy khác) ...
+
+    List<Request> findByRequesterId(Long requesterId);
+    List<Request> findByApproverId(Long approverId);
+    List<Request> findByRequesterIdAndIsHiddenFalseOrderByCreatedAtDesc(Long requesterId);
     List<Request> findByDepartmentIdAndStatus(Long departmentId, RequestStatus status);
-    // 2. [CŨ - KHÔNG DÙNG NỮA] Lấy theo phòng ban
     List<Request> findByDepartmentIdOrderByCreatedAtDesc(Long departmentId);
-// 3. [CŨ - DÙNG LẠI] Lấy tất cả đơn của công ty (cho Admin xem History)
     List<Request> findByCompanyIdOrderByCreatedAtDesc(Long companyId);
 
-  // 1. ADMIN: Thêm tìm theo Status
-    @Query("SELECT r FROM Request r " +
+    // 1. ADMIN (Giữ nguyên Fix Fetch)
+    @Query("SELECT DISTINCT r FROM Request r " +
             "JOIN FETCH r.requester e " +
             "LEFT JOIN FETCH e.department ed " +
+            "LEFT JOIN FETCH ed.manager " +      
             "LEFT JOIN FETCH r.department d " +
+            "LEFT JOIN FETCH d.manager " +       
             "LEFT JOIN FETCH r.approver a " +
             "WHERE r.companyId = :companyId " +
             "AND r.requester.id <> :adminId " +
@@ -37,7 +36,7 @@ public interface RequestRepository extends JpaRepository<Request, Long> {
             "OR LOWER(e.employeeCode) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
             "OR LOWER(r.requestCode) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
             "OR LOWER(r.type) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
-            "OR LOWER(r.status) LIKE LOWER(CONCAT('%', :keyword, '%')))) " + // [THÊM] Tìm theo Status
+            "OR LOWER(r.status) LIKE LOWER(CONCAT('%', :keyword, '%')))) " +
             "AND (:day IS NULL OR DAY(r.createdAt) = :day) " +
             "AND (:month IS NULL OR MONTH(r.createdAt) = :month) " +
             "AND (:year IS NULL OR YEAR(r.createdAt) = :year) " +
@@ -51,46 +50,66 @@ public interface RequestRepository extends JpaRepository<Request, Long> {
             @Param("year") Integer year
     );
 
-    // 2. HR: Thêm tìm theo Status
-    @Query("SELECT r FROM Request r " +
+    // 2. HR: [ĐÂY LÀ PHẦN SỬA ĐỔI QUAN TRỌNG]
+    @Query("SELECT DISTINCT r FROM Request r " +
             "JOIN FETCH r.requester e " +
             "LEFT JOIN FETCH e.department ed " +
+            "LEFT JOIN FETCH ed.manager " +       // [FIX] Fetch Manager để hiển thị tên
             "LEFT JOIN FETCH r.department d " +
+            "LEFT JOIN FETCH d.manager " +        
             "LEFT JOIN FETCH r.approver a " +
             "WHERE r.companyId = :companyId " +
-            "AND r.requester.id <> :hrId " +
-            "AND e.role <> 'MANAGER' " +
+            "AND r.requester.id <> :hrId " + // Không hiện đơn của chính mình (vì xem ở tab My Request rồi)
+            
+            // [LOGIC BẢO MẬT NỘI BỘ HR & MANAGER]
+            "AND ( " +
+            "   r.status <> 'PENDING' " + // CASE 1: Nếu đã Duyệt/Hủy -> Ai cũng thấy (để chấm công)
+            "   OR " +
+            "   ( " +
+            //      CASE 2: Nếu đang PENDING -> Phải thỏa mãn:
+            "       e.role <> 'MANAGER' " +       // Không phải là Manager (Manager pending chỉ Admin thấy)
+            "       AND ed.isHr = false " +       // VÀ Không phải là người phòng HR (để đồng nghiệp HR ko thấy)
+            "   ) " +
+            "   OR " +
+            //      CASE 3: Ngoại lệ -> Nếu người xem (hrId) chính là Sếp trực tiếp -> Phải thấy để duyệt
+            "   (ed.manager.id = :hrId AND r.status = 'PENDING') " +
+            ") " +
+
             "AND (:keyword IS NULL OR (LOWER(e.fullName) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
             "OR LOWER(e.employeeCode) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
             "OR LOWER(r.requestCode) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
             "OR LOWER(r.type) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
-            "OR LOWER(r.status) LIKE LOWER(CONCAT('%', :keyword, '%')))) " + // [THÊM] Tìm theo Status
+            "OR LOWER(r.status) LIKE LOWER(CONCAT('%', :keyword, '%')))) " +
             "AND (:day IS NULL OR DAY(r.createdAt) = :day) " +
             "AND (:month IS NULL OR MONTH(r.createdAt) = :month) " +
             "AND (:year IS NULL OR YEAR(r.createdAt) = :year) " +
             "ORDER BY r.createdAt DESC")
     List<Request> searchRequestsForHR(
             @Param("companyId") Long companyId,
-            @Param("hrId") Long hrId,
+            @Param("hrId") Long hrId, // ID của người đang xem danh sách
             @Param("keyword") String keyword,
             @Param("day") Integer day,
             @Param("month") Integer month,
             @Param("year") Integer year
     );
 
-    // 3. MANAGER: Thêm tìm theo Status
+    // 3. MANAGER (Giữ nguyên)
     @Query("SELECT r FROM Request r " +
             "JOIN FETCH r.requester e " +
             "LEFT JOIN FETCH e.department ed " +
+            "LEFT JOIN FETCH ed.manager " +       
             "LEFT JOIN FETCH r.department d " +
+            "LEFT JOIN FETCH d.manager " +        
             "LEFT JOIN FETCH r.approver a " +
             "WHERE r.department.id = :deptId " +
             "AND r.requester.id <> :managerId " +
+            "AND e.role <> 'MANAGER' " +         
+            "AND e.role <> 'COMPANY_ADMIN' " +   
             "AND (:keyword IS NULL OR (LOWER(e.fullName) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
             "OR LOWER(e.employeeCode) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
             "OR LOWER(r.requestCode) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
             "OR LOWER(r.type) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
-            "OR LOWER(r.status) LIKE LOWER(CONCAT('%', :keyword, '%')))) " + // [THÊM] Tìm theo Status
+            "OR LOWER(r.status) LIKE LOWER(CONCAT('%', :keyword, '%')))) " +
             "AND (:day IS NULL OR DAY(r.createdAt) = :day) " +
             "AND (:month IS NULL OR MONTH(r.createdAt) = :month) " +
             "AND (:year IS NULL OR YEAR(r.createdAt) = :year) " +
@@ -104,17 +123,19 @@ public interface RequestRepository extends JpaRepository<Request, Long> {
             @Param("year") Integer year
     );
 
-    // 4. NHÂN VIÊN: Thêm tìm theo Status
+    // 4. EMPLOYEE (Giữ nguyên)
     @Query("SELECT r FROM Request r " +
             "JOIN FETCH r.requester e " +
             "LEFT JOIN FETCH e.department ed " +
+            "LEFT JOIN FETCH ed.manager " +      
             "LEFT JOIN FETCH r.department d " +
+            "LEFT JOIN FETCH d.manager " +       
             "LEFT JOIN FETCH r.approver a " +
             "WHERE r.requester.id = :userId " +
             "AND r.isHidden = false " + 
             "AND (:keyword IS NULL OR (LOWER(r.requestCode) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
             "OR LOWER(r.type) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
-            "OR LOWER(r.status) LIKE LOWER(CONCAT('%', :keyword, '%')))) " + // [THÊM] Tìm theo Status
+            "OR LOWER(r.status) LIKE LOWER(CONCAT('%', :keyword, '%')))) " + 
             "AND (:day IS NULL OR DAY(r.createdAt) = :day) " +
             "AND (:month IS NULL OR MONTH(r.createdAt) = :month) " +
             "AND (:year IS NULL OR YEAR(r.createdAt) = :year) " +

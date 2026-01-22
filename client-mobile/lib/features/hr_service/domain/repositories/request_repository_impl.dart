@@ -45,6 +45,7 @@ class RequestRepositoryImpl implements RequestRepository {
     return await remoteDataSource.getMyRequests(
       userId,
       search: search,
+      day: day, // <--- BẠN ĐANG THIẾU DÒNG NÀY (Thêm vào đây)
       month: month,
       year: year,
     );

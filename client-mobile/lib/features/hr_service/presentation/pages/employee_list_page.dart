@@ -86,9 +86,11 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
     });
   }
 
-  // --- LOGIC GỌI API & PHÂN QUYỀN ---
-  Future<void> _fetchData({String keyword = ''}) async {
-    if (mounted) setState(() => _isLoading = true);
+  Future<void> _fetchData({String keyword = '', bool isSilent = false}) async {
+    // 1. Chỉ hiện Skeleton loading nếu không phải là Silent Refresh
+    if (mounted && !isSilent) {
+      setState(() => _isLoading = true);
+    }
 
     try {
       _currentUserId = await _getCurrentUserId();
@@ -96,7 +98,7 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
       if (_currentUserId != null) {
         List<EmployeeModel> apiResult;
 
-        // Backend đã lọc dữ liệu theo quyền (Data Scoping)
+        // 2. Gọi API lấy danh sách nhân viên (Backend đã Scoping dữ liệu theo quyền)
         if (keyword.isEmpty) {
           apiResult = await _employeeRepository.getEmployees(_currentUserId!);
         } else {
@@ -106,7 +108,7 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
           );
         }
 
-        // Cập nhật Role User hiện tại
+        // 3. [LOGIC PHÂN QUYỀN GỐC] Xác định Role và Phòng ban của User hiện tại
         if (_currentUserRole == null || keyword.isEmpty) {
           try {
             final me = apiResult.firstWhere(
@@ -128,38 +130,35 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
               _currentUserDeptName = me.departmentName;
             }
           } catch (e) {
-            print("Info: Current user not found in the fetched list.");
+            debugPrint("Info: Current user not found in the list.");
           }
         }
 
-        // GÁN DỮ LIỆU
+        // 4. Gán dữ liệu vào danh sách tương ứng
         if (_isEmployeesTab) {
           _employees = apiResult;
-          // Tìm đoạn code trong hàm _fetchData và sửa lại:
         } else {
           // Tab Departments
           List<DepartmentModel> deptData;
-
           if (keyword.isEmpty) {
-            // [ĐÃ SỬA] Truyền _currentUserId vào hàm getDepartments
-            // Lưu ý: _currentUserId đã được check null ở đầu hàm _fetchData nên an toàn
             deptData = await _employeeRepository.getDepartments(
               _currentUserId!,
             );
           } else {
             deptData = await _departmentRepository.searchDepartments(
-              _currentUserId ?? '',
+              _currentUserId!,
               keyword,
             );
           }
-          if (mounted) setState(() => _departments = deptData);
+          _departments = deptData;
         }
 
         if (mounted) setState(() {});
       }
     } catch (e) {
-      print("Error fetching data: $e");
+      debugPrint("Error fetching data: $e");
     } finally {
+      // 5. Luôn tắt loading ở cuối
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -177,6 +176,7 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
     return null;
   }
 
+  // Điều hướng thêm mới
   Future<void> _navigateToAddPage() async {
     if (!_isEmployeesTab && _currentUserRole == 'MANAGER') {
       CustomSnackBar.show(
@@ -188,26 +188,21 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
       return;
     }
 
-    Route<bool> route;
-
-    if (_isEmployeesTab) {
-      route = MaterialPageRoute<bool>(
-        builder: (context) => const AddEmployeePage(),
-      );
-    } else {
-      route = MaterialPageRoute<bool>(
-        builder: (context) => const CreateDepartmentPage(),
-      );
-    }
+    Route<bool> route = _isEmployeesTab
+        ? MaterialPageRoute<bool>(builder: (context) => const AddEmployeePage())
+        : MaterialPageRoute<bool>(
+            builder: (context) => const CreateDepartmentPage(),
+          );
 
     final bool? result = await Navigator.push(context, route);
     if (!mounted) return;
     if (result == true) {
-      _fetchData();
+      // Tải lại ngầm để dữ liệu mới xuất hiện mà không mất danh sách cũ
+      _fetchData(keyword: _searchController.text, isSilent: true);
     }
   }
 
-  // --- MENU NHÂN VIÊN ---
+  // Menu tùy chọn nhân viên
   void _showOptions(BuildContext context, EmployeeModel employee) async {
     final result = await showModalBottomSheet(
       context: context,
@@ -221,45 +216,30 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
     );
 
     if (result == true) {
-      _fetchData(keyword: _searchController.text);
+      // Tải lại ngầm khi có thay đổi từ BottomSheet
+      _fetchData(keyword: _searchController.text, isSilent: true);
     }
   }
 
-  // --- [ĐÃ SỬA] MENU PHÒNG BAN ---
   void _showDepartmentOptions(DepartmentModel dept) async {
-    // Gọi BottomSheet từ file widget bên ngoài
     await showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (context) => DepartmentBottomSheet(
         department: dept,
-        // Callback khi xóa/sửa thành công -> Load lại list
         onDeleteSuccess: () {
-          _fetchData(keyword: _searchController.text);
+          // Sử dụng isSilent: true để cập nhật danh sách mà không hiện Skeleton
+          _fetchData(keyword: _searchController.text, isSilent: true);
         },
       ),
     );
-
-    // Sau khi đóng bottom sheet, load lại data cho chắc chắn
-    _fetchData(keyword: _searchController.text);
   }
 
   Future<void> _handleDeleteEmployee(String targetId) async {
-    // Đổi tên tham số thành targetId cho rõ
     try {
-      // [FIX LỖI] Kiểm tra null
-      if (_currentUserId == null) {
-        CustomSnackBar.show(
-          context,
-          title: 'Session Error',
-          message: 'Session expired. Please login again.',
-          isError: true,
-        );
-        return;
-      }
+      if (_currentUserId == null) return;
 
-      // [FIX LỖI] Truyền 2 tham số: (Người xóa, Người bị xóa)
       bool success = await _employeeRepository.deleteEmployee(
         _currentUserId!,
         targetId,
@@ -273,7 +253,8 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
             message: 'Employee deleted successfully',
             isError: false,
           );
-          _fetchData();
+          // Tải lại ngầm và giữ nguyên từ khóa tìm kiếm
+          _fetchData(keyword: _searchController.text, isSilent: true);
         } else {
           CustomSnackBar.show(
             context,
@@ -284,20 +265,12 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
         }
       }
     } catch (e) {
-      print("Delete error: $e");
+      debugPrint("Delete error: $e");
     }
   }
 
   Future<void> _handleToggleLock(EmployeeModel emp) async {
-    if (_currentUserId == null) {
-      CustomSnackBar.show(
-        context,
-        title: 'Session Error',
-        message: 'Session expired. Please login again.',
-        isError: true,
-      );
-      return;
-    }
+    if (_currentUserId == null) return;
 
     String newStatus = emp.status == 'ACTIVE' ? 'LOCKED' : 'ACTIVE';
     try {
@@ -321,14 +294,8 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
             message: 'Account is now $newStatus',
             isError: false,
           );
-          _fetchData(keyword: _searchController.text);
-        } else {
-          CustomSnackBar.show(
-            context,
-            title: 'Error',
-            message: 'Failed to update status',
-            isError: true,
-          );
+          // Tải lại ngầm
+          _fetchData(keyword: _searchController.text, isSilent: true);
         }
       }
     } catch (e) {
@@ -540,7 +507,7 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
                   builder: (context) => DepartmentDetailsPage(department: dept),
                 ),
               ).then((_) {
-                _fetchData(keyword: _searchController.text);
+                _fetchData(keyword: _searchController.text, isSilent: true);
               });
             },
           ),
