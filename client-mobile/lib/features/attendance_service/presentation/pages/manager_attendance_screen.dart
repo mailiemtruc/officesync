@@ -7,10 +7,11 @@ import 'dart:convert';
 import '../../data/attendance_api.dart';
 import '../../data/models/attendance_model.dart';
 import '../../data/models/timesheet_model.dart';
-import '../widgets/daily_timesheet_card.dart';
+import '../../widgets/daily_timesheet_card.dart';
 // [MỚI] Import WebSocket Service
 import '../../../../core/services/websocket_service.dart';
 import '../../../../core/utils/custom_snackbar.dart';
+import '../../widgets/skeleton_manager_row.dart';
 
 class ManagerAttendanceScreen extends StatefulWidget {
   final String userRole;
@@ -404,12 +405,17 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
 
             Expanded(
               child: _isLoading
-                  ? const Center(
-                      child: CircularProgressIndicator(color: primaryColor),
+                  // [THAY ĐỔI TẠI ĐÂY] Thay CircularProgressIndicator bằng List Skeleton
+                  ? ListView.builder(
+                      padding: const EdgeInsets.only(top: 16),
+                      itemCount: 6, // Giả lập 6 item đang load
+                      itemBuilder: (context, index) {
+                        return const SkeletonManagerRow();
+                      },
                     )
                   : Column(
                       children: [
-                        // Chỉ cần gọi cái này là đủ, bao gồm cả Search + Filter + Month
+                        // ... Phần Filter và List dữ liệu thật giữ nguyên ...
                         Padding(
                           padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                           child: _buildFilterControlSection(

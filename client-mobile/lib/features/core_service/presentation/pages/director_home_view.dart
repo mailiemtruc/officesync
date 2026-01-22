@@ -15,6 +15,7 @@ import '../../../hr_service/data/models/employee_model.dart';
 import '../../../../core/utils/user_update_event.dart';
 import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../../widgets/skeleton_director_home.dart';
 
 class DirectorHomeView extends StatefulWidget {
   final int currentUserId;
@@ -31,6 +32,7 @@ class _DirectorHomeViewState extends State<DirectorHomeView>
   final ApiClient api = ApiClient();
   List<TaskModel> tasks = [];
   bool loadingTasks = true;
+  bool _isFirstLoad = true;
 
   // [MỚI] Biến User Info
   final EmployeeRemoteDataSource _employeeDataSource =
@@ -45,16 +47,38 @@ class _DirectorHomeViewState extends State<DirectorHomeView>
     super.initState();
     WidgetsBinding.instance.addObserver(this); // [MỚI]
 
+    // Animation fade
     Future.delayed(const Duration(milliseconds: 100), () {
       if (mounted) setState(() => _animate = true);
     });
 
-    _fetchLatestUserInfo(); // [MỚI]
-    fetchTasks();
+    // Gọi hàm load dữ liệu tổng hợp
+    _loadAllData();
+
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (mounted) setState(() => _animate = true);
+    });
+
     _updateSubscription = UserUpdateEvent().onUserUpdated.listen((_) {
       print("--> DirectorHomeView: Received update signal. Reloading info...");
       _fetchLatestUserInfo();
     });
+  }
+
+  Future<void> _loadAllData() async {
+    try {
+      // Chạy song song 2 API
+      await Future.wait([_fetchLatestUserInfo(), fetchTasks()]);
+    } catch (e) {
+      debugPrint("⚠️ Lỗi tải dữ liệu: $e");
+    } finally {
+      // [QUAN TRỌNG] Dù thành công hay thất bại, luôn tắt loading
+      if (mounted) {
+        setState(() {
+          _isFirstLoad = false;
+        });
+      }
+    }
   }
 
   @override
@@ -141,17 +165,22 @@ class _DirectorHomeViewState extends State<DirectorHomeView>
     final width = MediaQuery.of(context).size.width;
     final isDesktop = width > 900;
 
-    // [MỚI]
     return RefreshIndicator(
       onRefresh: () async {
-        await Future.wait([_fetchLatestUserInfo(), fetchTasks()]);
+        // Khi kéo để refresh thì không cần hiện Skeleton full màn hình nữa
+        await _loadAllData();
       },
       color: AppColors.primary,
       child: Container(
         color: const Color(0xFFF3F5F9),
         child: SafeArea(
           bottom: false,
-          child: isDesktop ? _buildDesktopLayout() : _buildMobileLayout(),
+          // [THAY ĐỔI TẠI ĐÂY] Kiểm tra _isFirstLoad
+          child: _isFirstLoad
+              ? const SkeletonDirectorHome() // Hiện Skeleton
+              : (isDesktop
+                    ? _buildDesktopLayout()
+                    : _buildMobileLayout()), // Hiện nội dung thật
         ),
       ),
     );

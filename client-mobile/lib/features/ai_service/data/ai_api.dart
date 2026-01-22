@@ -25,9 +25,11 @@ class AiApi {
 
       // 3. Xử lý kết quả
       if (response.statusCode == 200) {
-        // Python trả về UTF-8, cần decode đúng để không lỗi font tiếng Việt
+        // Python trả về UTF-8, decode để không lỗi font
         final data = jsonDecode(utf8.decode(response.bodyBytes));
-        return data['reply']; // Key 'reply' khớp với code Python main.py
+
+        // [SỬA TẠI ĐÂY] Thêm .trim() để cắt sạch khoảng trắng/xuống dòng thừa
+        return (data['reply'] ?? "").toString().trim();
       } else {
         return "AI Server Error (${response.statusCode}): Vui lòng thử lại sau.";
       }

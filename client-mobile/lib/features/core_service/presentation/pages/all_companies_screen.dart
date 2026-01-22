@@ -3,6 +3,7 @@ import '../../../../core/api/api_client.dart';
 import '../../../../core/config/app_colors.dart';
 import '../../data/models/company_model.dart';
 import 'company_detail_screen.dart';
+import '../../widgets/skeleton_company_item.dart';
 
 class AllCompaniesScreen extends StatefulWidget {
   const AllCompaniesScreen({super.key});
@@ -101,7 +102,15 @@ class _AllCompaniesScreenState extends State<AllCompaniesScreen> {
           // --- LIST (Giao diện mới hiện đại) ---
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
+                // [THAY ĐỔI TẠI ĐÂY] Hiển thị Skeleton List
+                ? ListView.separated(
+                    padding: const EdgeInsets.all(20),
+                    itemCount: 6, // Giả lập 6 item đang load
+                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    itemBuilder: (context, index) {
+                      return const SkeletonCompanyItem();
+                    },
+                  )
                 : _filteredCompanies.isEmpty
                 ? _buildEmptyState()
                 : ListView.separated(

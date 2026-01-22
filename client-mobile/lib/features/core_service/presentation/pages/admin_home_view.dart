@@ -14,6 +14,7 @@ import 'package:officesync/features/notification_service/presentation/pages/noti
 import '../../../hr_service/data/datasources/employee_remote_data_source.dart';
 import '../../../hr_service/data/models/employee_model.dart';
 import '../../../../core/utils/user_update_event.dart';
+import '../../widgets/skeleton_admin_dashboard.dart';
 
 class AdminHomeView extends StatefulWidget {
   final int currentUserId;
@@ -228,7 +229,8 @@ class _AdminHomeViewState extends State<AdminHomeView>
   }
 
   Widget _buildMobileLayout() {
-    if (_isLoading) return const Center(child: CircularProgressIndicator());
+    if (_isLoading) return const SkeletonAdminDashboard();
+
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(24, 10, 24, 20),
@@ -250,7 +252,8 @@ class _AdminHomeViewState extends State<AdminHomeView>
   }
 
   Widget _buildDesktopLayout() {
-    if (_isLoading) return const Center(child: CircularProgressIndicator());
+    if (_isLoading) return const SkeletonAdminDashboard();
+
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(40.0),

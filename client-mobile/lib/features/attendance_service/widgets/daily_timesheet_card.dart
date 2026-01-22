@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../../data/models/timesheet_model.dart';
+import '../data/models/timesheet_model.dart';
 
 class DailyTimesheetCard extends StatelessWidget {
   final TimesheetModel data;

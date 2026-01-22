@@ -13,6 +13,7 @@ import '../../../task_service/widgets/task_detail_dialog.dart';
 import '../../../hr_service/data/datasources/employee_remote_data_source.dart';
 import '../../../hr_service/data/models/employee_model.dart';
 import '../../../../core/utils/user_update_event.dart';
+import '../../widgets/skeleton_manager_home.dart';
 
 class ManagerHomeView extends StatefulWidget {
   final int currentUserId;
@@ -29,6 +30,7 @@ class _ManagerHomeViewState extends State<ManagerHomeView>
   final ApiClient api = ApiClient();
   List<TaskModel> tasks = [];
   bool loadingTasks = true;
+  bool _isFirstLoad = true;
 
   // [MỚI] Biến User Info
   final EmployeeRemoteDataSource _employeeDataSource =
@@ -47,13 +49,28 @@ class _ManagerHomeViewState extends State<ManagerHomeView>
       if (mounted) setState(() => _animate = true);
     });
 
-    _fetchLatestUserInfo();
-    fetchTasks();
+    _loadAllData();
 
     _updateSubscription = UserUpdateEvent().onUserUpdated.listen((_) {
       print("--> ManagerHomeView: Received update signal. Reloading info...");
       _fetchLatestUserInfo();
     });
+  }
+
+  Future<void> _loadAllData() async {
+    try {
+      // Chạy song song 2 API: Lấy thông tin User và Lấy Task
+      await Future.wait([_fetchLatestUserInfo(), fetchTasks()]);
+    } catch (e) {
+      debugPrint("⚠️ Lỗi tải dữ liệu Manager Home: $e");
+    } finally {
+      // [QUAN TRỌNG] Luôn tắt Skeleton dù thành công hay thất bại
+      if (mounted) {
+        setState(() {
+          _isFirstLoad = false;
+        });
+      }
+    }
   }
 
   @override
@@ -140,17 +157,22 @@ class _ManagerHomeViewState extends State<ManagerHomeView>
     final width = MediaQuery.of(context).size.width;
     final isDesktop = width > 900;
 
-    // [MỚI]
     return RefreshIndicator(
       onRefresh: () async {
-        await Future.wait([_fetchLatestUserInfo(), fetchTasks()]);
+        // Khi kéo refresh thì gọi lại load data (không hiện skeleton full màn hình)
+        await _loadAllData();
       },
       color: AppColors.primary,
       child: Container(
         color: const Color(0xFFF3F5F9),
         child: SafeArea(
           bottom: false,
-          child: isDesktop ? _buildDesktopLayout() : _buildMobileLayout(),
+          // [THAY ĐỔI TẠI ĐÂY] Logic hiển thị Skeleton
+          child: _isFirstLoad
+              ? const SkeletonManagerHome() // Đang load lần đầu -> Hiện Skeleton
+              : (isDesktop
+                    ? _buildDesktopLayout()
+                    : _buildMobileLayout()), // Load xong -> Hiện nội dung thật
         ),
       ),
     );

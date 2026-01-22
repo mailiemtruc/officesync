@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../../../core/config/app_colors.dart';
 import '../../../../core/api/api_client.dart';
+import '../../widgets/skeleton_analytics_screen.dart';
 
 class AnalyticsScreen extends StatefulWidget {
   const AnalyticsScreen({super.key});
@@ -112,7 +113,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const SkeletonAnalyticsScreen()
           : SingleChildScrollView(
               padding: const EdgeInsets.all(20),
               child: Column(

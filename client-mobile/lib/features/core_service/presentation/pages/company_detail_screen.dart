@@ -5,6 +5,7 @@ import '../../../../core/api/api_client.dart';
 import '../../data/models/company_model.dart';
 import '../../data/models/user_model.dart';
 import '../../../../core/utils/custom_snackbar.dart';
+import '../../widgets/skeleton_company_detail.dart';
 
 class CompanyDetailScreen extends StatefulWidget {
   final int companyId;
@@ -187,7 +188,7 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
 
       // --- BODY ---
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const SkeletonCompanyDetail()
           : TabBarView(
               controller: _tabController,
               children: [_buildOverviewTab(), _buildMembersTab()],

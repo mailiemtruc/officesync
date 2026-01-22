@@ -13,6 +13,7 @@ import '../../../hr_service/data/models/employee_model.dart';
 import '../../../../core/utils/user_update_event.dart';
 import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../../widgets/skeleton_staff_home.dart';
 
 class StaffHomeView extends StatefulWidget {
   final int currentUserId;
@@ -26,6 +27,7 @@ class StaffHomeView extends StatefulWidget {
 class _StaffHomeViewState extends State<StaffHomeView>
     with WidgetsBindingObserver {
   bool _animate = false;
+  bool _isFirstLoad = true;
   final ApiClient api = ApiClient();
   final EmployeeRemoteDataSource _employeeDataSource =
       EmployeeRemoteDataSource(); // [MỚI]
@@ -50,13 +52,29 @@ class _StaffHomeViewState extends State<StaffHomeView>
       if (mounted) setState(() => _animate = true);
     });
 
-    _fetchLatestUserInfo(); // [MỚI] Gọi hàm lấy dữ liệu từ API
-    fetchTasks();
+    _loadAllData();
+
     // [QUAN TRỌNG - MỚI] Đăng ký lắng nghe: Hễ ai gọi notify() là tôi reload ngay
     _updateSubscription = UserUpdateEvent().onUserUpdated.listen((_) {
       print("--> StaffHomeView: Received update signal. Reloading info...");
       _fetchLatestUserInfo();
     });
+  }
+
+  Future<void> _loadAllData() async {
+    try {
+      // Chạy song song 2 API
+      await Future.wait([_fetchLatestUserInfo(), fetchTasks()]);
+    } catch (e) {
+      debugPrint("⚠️ Lỗi tải dữ liệu Staff Home: $e");
+    } finally {
+      // [QUAN TRỌNG] Luôn tắt Skeleton
+      if (mounted) {
+        setState(() {
+          _isFirstLoad = false;
+        });
+      }
+    }
   }
 
   @override
@@ -146,17 +164,22 @@ class _StaffHomeViewState extends State<StaffHomeView>
     final width = MediaQuery.of(context).size.width;
     final isDesktop = width > 900;
 
-    // [MỚI] Bọc RefreshIndicator để người dùng có thể kéo xuống cập nhật thủ công
     return RefreshIndicator(
       onRefresh: () async {
-        await Future.wait([_fetchLatestUserInfo(), fetchTasks()]);
+        // Kéo để refresh thì gọi lại load data (không hiện skeleton full)
+        await _loadAllData();
       },
       color: AppColors.primary,
       child: Container(
         color: const Color(0xFFF3F5F9),
         child: SafeArea(
           bottom: false,
-          child: isDesktop ? _buildDesktopLayout() : _buildMobileLayout(),
+          // [THAY ĐỔI TẠI ĐÂY] Logic hiển thị Skeleton
+          child: _isFirstLoad
+              ? const SkeletonStaffHome() // Đang load lần đầu -> Hiện Skeleton
+              : (isDesktop
+                    ? _buildDesktopLayout()
+                    : _buildMobileLayout()), // Load xong -> Hiện nội dung thật
         ),
       ),
     );

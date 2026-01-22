@@ -10,9 +10,10 @@ import 'package:intl/intl.dart';
 import '../../data/attendance_api.dart';
 import '../../data/models/attendance_model.dart'; // Dùng cho response check-in
 import '../../data/models/timesheet_model.dart'; // [MỚI] Import TimesheetModel
-import '../widgets/wifi_status_card.dart';
-import '../widgets/daily_timesheet_card.dart'; // [MỚI] Import Widget hiển thị thẻ ngày
+import '../../widgets/wifi_status_card.dart';
+import '../../widgets/daily_timesheet_card.dart'; // [MỚI] Import Widget hiển thị thẻ ngày
 import '../../../../core/utils/custom_snackbar.dart';
+import '../../widgets/skeleton_timesheet_card.dart';
 
 class AttendanceScreen extends StatefulWidget {
   const AttendanceScreen({super.key});
@@ -479,13 +480,15 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
                         // LIST DỮ LIỆU
                         if (_isLoadingHistory)
-                          const SliverToBoxAdapter(
-                            child: Padding(
-                              padding: EdgeInsets.only(top: 40),
-                              child: Center(
-                                child: CircularProgressIndicator(
-                                  color: primaryColor,
-                                ),
+                          SliverPadding(
+                            padding: const EdgeInsets.symmetric(horizontal: 24),
+                            sliver: SliverList(
+                              delegate: SliverChildBuilderDelegate(
+                                (context, index) {
+                                  return const SkeletonTimesheetCard();
+                                },
+                                childCount:
+                                    5, // Hiển thị giả lập 5 item đang load
                               ),
                             ),
                           )

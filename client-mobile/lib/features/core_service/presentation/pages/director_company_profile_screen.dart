@@ -13,6 +13,7 @@ import '../../../../core/config/app_colors.dart';
 import '../../../../core/api/api_client.dart';
 import '../../../../core/utils/custom_snackbar.dart';
 import '../../../../core/widgets/custom_text_field.dart';
+import '../../widgets/skeleton_director_profile.dart';
 
 class DirectorCompanyProfileScreen extends StatefulWidget {
   const DirectorCompanyProfileScreen({super.key});
@@ -360,7 +361,7 @@ class _DirectorCompanyProfileScreenState
         centerTitle: true,
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const SkeletonDirectorProfile()
           : SingleChildScrollView(
               padding: const EdgeInsets.all(24),
               child: Column(

@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../../../core/config/app_colors.dart'; // Giữ nguyên import của bạn
+// import 'package:shimmer/shimmer.dart'; // <-- Bỏ dòng này vì đã chuyển logic sang file khác
+import '../../../../core/config/app_colors.dart';
 import '../../data/ai_api.dart';
+
+// 1. IMPORT WIDGET DÙNG CHUNG (Chú ý đường dẫn)
+import '../../widgets/skeleton_chat_bubble.dart';
 
 class AiChatScreen extends StatefulWidget {
   const AiChatScreen({super.key});
@@ -18,14 +22,12 @@ class _AiChatScreenState extends State<AiChatScreen> {
   // Color Palette
   static const Color primaryColor = Color(0xFF2260FF);
   static const Color primaryDark = Color(0xFF1A4BD6);
-  static const Color bgChatColor = Color(0xFFF8FAFC); // Xám rất nhạt
-  static const Color aiBubbleColor = Colors.white;
+  static const Color bgChatColor = Color(0xFFF8FAFC);
   static const Color textDark = Color(0xFF1E293B);
 
   final List<Map<String, dynamic>> _messages = [];
   bool _isTyping = false;
 
-  // Gợi ý câu hỏi nhanh
   final List<String> _suggestions = [
     "Tháng này công cán sao?",
     "Hôm nay check-in chưa?",
@@ -35,7 +37,6 @@ class _AiChatScreenState extends State<AiChatScreen> {
   @override
   void initState() {
     super.initState();
-    // Đặt màu status bar cho đồng bộ
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
         statusBarColor: Colors.white,
@@ -47,7 +48,6 @@ class _AiChatScreenState extends State<AiChatScreen> {
 
   void _startConversation() async {
     setState(() => _isTyping = true);
-    // Gửi tín hiệu ngầm để AI bắt đầu (User không thấy)
     String reply = await _aiApi.sendMessage("START_CONVERSATION");
 
     if (mounted) {
@@ -68,7 +68,6 @@ class _AiChatScreenState extends State<AiChatScreen> {
     _controller.clear();
     _scrollToBottom();
 
-    // Gọi API
     String reply = await _aiApi.sendMessage(text);
 
     if (mounted) {
@@ -84,7 +83,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent + 60, // Scroll dư ra chút
+          _scrollController.position.maxScrollExtent + 60,
           duration: const Duration(milliseconds: 400),
           curve: Curves.easeOutQuad,
         );
@@ -99,16 +98,17 @@ class _AiChatScreenState extends State<AiChatScreen> {
       appBar: _buildModernAppBar(),
       body: Column(
         children: [
-          // 1. DANH SÁCH TIN NHẮN
           Expanded(
             child: ListView.builder(
               controller: _scrollController,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
               itemCount: _messages.length + (_isTyping ? 1 : 0),
               itemBuilder: (context, index) {
+                // 2. SỬ DỤNG WIDGET DÙNG CHUNG TẠI ĐÂY
                 if (index == _messages.length && _isTyping) {
-                  return const TypingIndicator();
+                  return const SkeletonChatBubble(); // <-- Đổi tên thành SkeletonChatBubble
                 }
+
                 final msg = _messages[index];
                 return ModernMessageBubble(
                   text: msg['text'],
@@ -117,8 +117,6 @@ class _AiChatScreenState extends State<AiChatScreen> {
               },
             ),
           ),
-
-          // 2. GỢI Ý NHANH
           if (_messages.isNotEmpty && _messages.length < 4)
             Container(
               height: 50,
@@ -150,14 +148,13 @@ class _AiChatScreenState extends State<AiChatScreen> {
                 },
               ),
             ),
-
-          // 3. KHUNG NHẬP LIỆU (FLOATING)
           _buildFloatingInput(),
         ],
       ),
     );
   }
 
+  // ... (Phần _buildModernAppBar và _buildFloatingInput giữ nguyên như cũ)
   PreferredSizeWidget _buildModernAppBar() {
     return AppBar(
       backgroundColor: Colors.white,
@@ -190,7 +187,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                   width: 10,
                   height: 10,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF10B981), // Green online
+                    color: const Color(0xFF10B981),
                     shape: BoxShape.circle,
                     border: Border.all(color: Colors.white, width: 2),
                   ),
@@ -208,7 +205,6 @@ class _AiChatScreenState extends State<AiChatScreen> {
                   color: textDark,
                   fontWeight: FontWeight.bold,
                   fontSize: 16,
-                  fontFamily: 'Inter',
                 ),
               ),
               Text(
@@ -262,9 +258,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                         onSubmitted: _sendMessage,
                       ),
                     ),
-                    const SizedBox(
-                      width: 16,
-                    ), // Thêm khoảng trống nhỏ bên phải cho đẹp
+                    const SizedBox(width: 16),
                   ],
                 ),
               ),
@@ -276,11 +270,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                 width: 50,
                 height: 50,
                 decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [primaryColor, primaryDark],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
+                  gradient: LinearGradient(colors: [primaryColor, primaryDark]),
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
@@ -304,8 +294,6 @@ class _AiChatScreenState extends State<AiChatScreen> {
   }
 }
 
-// --- WIDGETS UI ---
-
 class ModernMessageBubble extends StatelessWidget {
   final String text;
   final bool isUser;
@@ -327,12 +315,9 @@ class ModernMessageBubble extends StatelessWidget {
         ),
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
         decoration: BoxDecoration(
-          // User dùng Gradient, AI dùng màu trắng
           gradient: isUser
               ? const LinearGradient(
                   colors: [Color(0xFF2260FF), Color(0xFF1650E6)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
                 )
               : null,
           color: isUser ? null : Colors.white,
@@ -346,21 +331,13 @@ class ModernMessageBubble extends StatelessWidget {
                 ? const Radius.circular(4)
                 : const Radius.circular(20),
           ),
-          boxShadow: isUser
-              ? [
-                  const BoxShadow(
-                    color: Color(0x332260FF),
-                    blurRadius: 8,
-                    offset: Offset(0, 4),
-                  ),
-                ]
-              : [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.04),
-                    blurRadius: 5,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 5,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
         child: Text(
           text,
@@ -370,86 +347,6 @@ class ModernMessageBubble extends StatelessWidget {
             height: 1.5,
             fontWeight: isUser ? FontWeight.w500 : FontWeight.w400,
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class TypingIndicator extends StatefulWidget {
-  const TypingIndicator({super.key});
-
-  @override
-  State<TypingIndicator> createState() => _TypingIndicatorState();
-}
-
-class _TypingIndicatorState extends State<TypingIndicator>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1200),
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 16, left: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(20),
-            topRight: Radius.circular(20),
-            bottomRight: Radius.circular(20),
-            bottomLeft: Radius.circular(4),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 5,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: List.generate(3, (index) {
-            return FadeTransition(
-              opacity: Tween(begin: 0.4, end: 1.0).animate(
-                CurvedAnimation(
-                  parent: _controller,
-                  curve: Interval(
-                    index * 0.2,
-                    0.6 + index * 0.2,
-                    curve: Curves.easeInOut,
-                  ),
-                ),
-              ),
-              child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 2),
-                width: 8,
-                height: 8,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF2260FF),
-                  shape: BoxShape.circle,
-                ),
-              ),
-            );
-          }),
         ),
       ),
     );

@@ -9,6 +9,7 @@ import '../../../../core/config/app_colors.dart';
 import '../../../../core/utils/custom_snackbar.dart';
 import '../../data/models/note_model.dart';
 import 'note_editor_screen.dart';
+import '../../widgets/skeleton_note_item.dart';
 
 // Enum cho các kiểu sắp xếp
 enum SortType { dateUpdated, title }
@@ -254,13 +255,46 @@ class _NoteListScreenState extends State<NoteListScreen> {
             _buildCustomAppBar(),
             Expanded(
               child: _isLoading
-                  ? const Center(child: CircularProgressIndicator())
+                  // [THAY ĐỔI TẠI ĐÂY] Hiển thị Skeleton List
+                  ? ListView.builder(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 24,
+                      ),
+                      itemCount: 6, // Giả lập 6 note đang load
+                      itemBuilder: (context, index) {
+                        // Thêm một chút logic để giả lập Header nhóm (Today, Yesterday...)
+                        // Cứ mỗi 3 item thì hiện một cái Header giả
+                        if (index % 3 == 0) {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Skeleton Header
+                              Container(
+                                width: 100,
+                                height: 20,
+                                margin: const EdgeInsets.only(
+                                  left: 4,
+                                  bottom: 12,
+                                  top: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[300],
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                              ),
+                              const SkeletonNoteItem(),
+                            ],
+                          );
+                        }
+                        return const SkeletonNoteItem();
+                      },
+                    )
                   : _allNotes.isEmpty
                   ? _buildEmptyState()
                   : RefreshIndicator(
                       onRefresh: () =>
                           _fetchNotes(query: _searchController.text),
-                      // Luôn hiển thị List View
                       child: _buildListView(),
                     ),
             ),
