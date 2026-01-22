@@ -30,9 +30,9 @@ class _StaffPageState extends State<StaffPage> {
   final Color colorBlue = const Color(0xFF2260FF);
   final Color colorGreen = const Color(0xFF4EE375);
   final Color colorOrange = const Color(0xFFFFA322);
-  final Color colorBg = const Color(0xFFF3F5F9);
   final Color colorWhite = const Color(0xFFFFFFFF);
   final Color colorBlack = const Color(0xFF000000);
+  final Color colorBg = const Color.fromARGB(255, 238, 241, 251);
 
   @override
   void initState() {

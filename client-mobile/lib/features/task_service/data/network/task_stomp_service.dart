@@ -13,7 +13,7 @@ class TaskStompService {
 
   void connect() {
     // Địa chỉ IP máy tính chạy backend của bạn
-    const String serverIp = '192.168.1.8';
+    const String serverIp = '192.168.1.4';
 
     client = StompClient(
       config: StompConfig(

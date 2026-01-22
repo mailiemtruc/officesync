@@ -70,6 +70,16 @@ public class TaskService {
         return savedTask;
     }
 
+    public void deleteTask(Long taskId, Long requesterId) {
+        Task task = taskRepo.findById(taskId).orElseThrow();
+        if (!task.getCreatorId().equals(requesterId) && !getOrSyncUser(requesterId).getRole().equals("COMPANY_ADMIN")) {
+            throw new RuntimeException("No permission");
+        }
+        Task savedTask = taskRepo.save(task);
+        sendTaskNotifications(savedTask);
+        taskRepo.deleteById(taskId);
+    }
+
     public Task updateTask(Long taskId, Task taskDetails, Long requesterId) {
         Task task = taskRepo.findById(taskId)
                 .orElseThrow(() -> new RuntimeException("Task not found"));
@@ -131,11 +141,5 @@ public class TaskService {
         return taskRepo.findByAssigneeId(assigneeId);
     }
 
-    public void deleteTask(Long taskId, Long requesterId) {
-        Task task = taskRepo.findById(taskId).orElseThrow();
-        if (!task.getCreatorId().equals(requesterId) && !getOrSyncUser(requesterId).getRole().equals("COMPANY_ADMIN")) {
-            throw new RuntimeException("No permission");
-        }
-        taskRepo.deleteById(taskId);
-    }
+    
 }

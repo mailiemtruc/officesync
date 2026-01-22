@@ -44,8 +44,8 @@ class _ManagerPageState extends State<ManagerPage>
   final Color colorBlack = const Color(0xFF000000);
   final Color colorGreen = const Color(0xFF4EE375);
   final Color colorOrange = const Color(0xFFFFA322);
-  final Color colorBg = const Color(0xFFF3F5F9);
-
+  final Color colorBg = const Color.fromARGB(255, 238, 241, 251);
+  //Color(0xFFCAD6FF)
   @override
   void initState() {
     super.initState();
