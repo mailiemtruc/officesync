@@ -213,7 +213,6 @@ services:
       - "5000:5000"
     environment:
       # Truyền API Key từ file .env gốc
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       # [QUAN TRỌNG] Override URL để gọi nội bộ trong Docker Network
       # Format: http://<tên-container-attendance>:<port-nội-bộ>
       - ATTENDANCE_SERVICE_URL=http://attendance-service:8083/api/attendance

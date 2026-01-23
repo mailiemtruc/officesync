@@ -14,7 +14,7 @@ class SecurityService {
   bool _isListening = false;
 
   // URL của Core Service (Port 8080)
-  final String _coreUrl = 'ws://10.0.2.2:8080/ws-core';
+  final String _coreUrl = 'ws://10.0.2.2:8000/ws-core';
 
   // Hàm kích hoạt bảo mật
   void startListening(int userId, int? companyId) {

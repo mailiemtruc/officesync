@@ -10,7 +10,7 @@ class AttendanceApi {
 
   // URL Service Chấm công (Port 8083)
   // Nếu chạy máy thật: thay 10.0.2.2 bằng IP LAN (VD: 192.168.1.x)
-  static const String _serviceUrl = 'http://10.0.2.2:8083/api/attendance';
+  static const String _serviceUrl = 'http://10.0.2.2:8000/api/attendance';
 
   // 1. Hàm Check-in
   Future<AttendanceModel> checkIn(

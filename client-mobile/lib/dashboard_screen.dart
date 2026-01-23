@@ -148,7 +148,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _setupRealtimePermissionListener() async {
     final userId = _currentUserInfo['id'];
     if (userId == null) return;
-    final String hrSocketUrl = 'ws://10.0.2.2:8081/ws-hr';
+    final String hrSocketUrl = 'ws://10.0.2.2:8000/ws-hr';
 
     _unsubscribeFn = await WebSocketService().subscribe(
       '/topic/user/$userId/profile',

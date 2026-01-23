@@ -6,7 +6,7 @@ class AiApi {
   // [QUAN TRỌNG]
   // - Nếu chạy máy ảo Android: dùng 'http://10.0.2.2:5000'
   // - Nếu chạy máy thật (cắm cáp): dùng IP LAN của máy tính (VD: 'http://192.168.1.5:5000')
-  static const String _baseUrl = 'http://10.0.2.2:5000';
+  static const String _baseUrl = 'http://10.0.2.2:8000/api/ai';
 
   final _storage = const FlutterSecureStorage();
 

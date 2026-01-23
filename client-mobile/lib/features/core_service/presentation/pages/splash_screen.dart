@@ -81,7 +81,7 @@ class _SplashScreenState extends State<SplashScreen> {
         }
 
         // [CŨ] KẾT NỐI SOCKET HR (Cổng 8081)
-        WebSocketService().connect('ws://10.0.2.2:8081/ws-hr');
+        WebSocketService().connect('ws://10.0.2.2:8000/ws-hr');
 
         if (mounted) {
           Navigator.pushReplacement(
