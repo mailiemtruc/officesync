@@ -2,10 +2,12 @@ package com.officesync.note_service;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.data.jpa.repository.config.EnableJpaAuditing; // 1. Thêm import này
+import org.springframework.data.jpa.repository.config.EnableJpaAuditing;
+import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
 
 @SpringBootApplication
-@EnableJpaAuditing // 2. Thêm dòng này để kích hoạt tự động điền ngày giờ
+@EnableJpaAuditing 
+@EnableDiscoveryClient
 public class NoteServiceApplication {
 
 	public static void main(String[] args) {

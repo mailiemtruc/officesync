@@ -24,11 +24,11 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         // 3. Endpoint để bắt tay (Handshake) kết nối WebSocket
         // App Flutter sẽ gọi vào: ws://localhost:8088/ws
-        registry.addEndpoint("/ws")
+        registry.addEndpoint("/ws-comm")
                 .setAllowedOriginPatterns("*") // Cho phép mọi nguồn (Flutter, Web...) kết nối
                 .withSockJS(); // Hỗ trợ fallback nếu mạng chặn WebSocket (tùy chọn)
         
-        registry.addEndpoint("/ws")
+        registry.addEndpoint("/ws-comm")
                 .setAllowedOriginPatterns("*"); // Cấu hình thêm cái này cho chắc ăn với Client thuần
     }
 }

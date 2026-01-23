@@ -88,6 +88,24 @@ services:
   # 2. MICROSERVICES
   # =======================================================
 
+  # GATEWAY SERVICE
+  gateway-service:
+    build:
+      context: ./gateway_service # Trỏ đúng vào thư mục bạn vừa tạo
+      dockerfile: Dockerfile
+    container_name: gateway-service
+    restart: unless-stopped
+    ports:
+      - "8000:8000" 
+    environment:
+      - SERVER_PORT=8000
+      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://discovery-service:8761/eureka/
+    depends_on:
+      discovery-service:
+        condition: service_healthy # Chỉ chạy Gateway khi Discovery đã khỏe
+    networks:
+      - officesync_net
+
   # CORE SERVICE
   core-service:
     build:
@@ -106,12 +124,16 @@ services:
       - SPRING_RABBITMQ_USERNAME=${RABBITMQ_USER}
       - SPRING_RABBITMQ_PASSWORD=${RABBITMQ_PASS}
       - SPRING_DATA_REDIS_HOST=redis
+
+      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://discovery-service:8761/eureka/
     depends_on:
       mysql-db:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      discovery-service:
         condition: service_healthy
     networks:
       - officesync_net
@@ -134,12 +156,16 @@ services:
       - SPRING_RABBITMQ_USERNAME=${RABBITMQ_USER}
       - SPRING_RABBITMQ_PASSWORD=${RABBITMQ_PASS}
       - SPRING_DATA_REDIS_HOST=redis
+
+      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://discovery-service:8761/eureka/
     depends_on:
       mysql-db:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      discovery-service:
         condition: service_healthy
     networks:
       - officesync_net
@@ -162,12 +188,16 @@ services:
       - SPRING_RABBITMQ_USERNAME=${RABBITMQ_USER}
       - SPRING_RABBITMQ_PASSWORD=${RABBITMQ_PASS}
       - SPRING_DATA_REDIS_HOST=redis
+
+      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://discovery-service:8761/eureka/
     depends_on:
       mysql-db:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      discovery-service:
         condition: service_healthy
     networks:
       - officesync_net
@@ -297,6 +327,7 @@ services:
         condition: service_healthy
     networks:
       - officesync_net
+
   #communication service
   communication-service:
     build:
@@ -315,12 +346,17 @@ services:
       - SPRING_RABBITMQ_USERNAME=${RABBITMQ_USER}
       - SPRING_RABBITMQ_PASSWORD=${RABBITMQ_PASS}
       - SPRING_DATA_REDIS_HOST=redis
+
+      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://discovery-service:8761/eureka/
+      - JWT_SECRET=OfficeSync_Super_Secure_Secret_Key_For_Enterprise_Level_Security_Version_2025_Longer_Is_Better
     depends_on:
       mysql-db:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      discovery-service:
         condition: service_healthy
     networks:
       - officesync_net
@@ -361,6 +397,7 @@ services:
         condition: service_healthy
     networks:
       - officesync_net
+
   #discovery
   discovery-service:
     build:

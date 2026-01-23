@@ -1,0 +1,73 @@
+server:
+  port: 8000
+
+spring:
+  application:
+    name: gateway-service
+
+  cloud:
+    gateway:
+      # --- CẤU HÌNH CORS (Cho phép Mobile/Web gọi vào) ---
+      globalcors:
+        cors-configurations:
+          "[/**]":
+            allowedOrigins: "*"
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - OPTIONS
+            allowedHeaders: "*"
+
+      # --- ĐỊNH TUYẾN (Routing) ---
+      routes:
+        # 1. CORE SERVICE
+        - id: core-service
+          uri: lb://CORE-SERVICE # lb:// + Tên service in hoa trên Eureka
+          predicates:
+            - Path=/api/auth/**, /api/admin/**, /api/company/**, /ws-core/**
+
+        # 2. ATTENDANCE SERVICE
+        - id: attendance-service
+          uri: lb://ATTENDANCE-SERVICE
+          predicates:
+            - Path=/api/attendance/**, /ws-attendance/**
+
+        # 3. AI SERVICE
+        - id: ai-service
+          # Dùng tên container "ai-service" thay vì lb://AI-SERVICE
+          uri: http://ai-service:5000
+          predicates:
+            - Path=/api/ai/**
+          filters:
+            # Loại bỏ tiền tố "/api/ai" trước khi gửi vào Python
+            # Ví dụ: User gọi /api/ai/chat -> Python nhận được /chat
+            - StripPrefix=2
+
+        # 4. NOTE SERVICE
+        - id: note-service
+          uri: lb://NOTE-SERVICE
+          predicates:
+            - Path=/api/notes/**
+
+        # 5. CHAT SERVICE
+        - id: chat-service
+          uri: lb://CHAT-SERVICE
+          predicates:
+            # Các API REST thông thường
+            - Path=/api/chat/**, /api/messages/**, /api/conversations/**, /api/users/**, /ws/**
+
+        # 6. COMMUNICATION SERVICE
+        - id: communication-service
+          uri: lb://COMMUNICATION-SERVICE
+          predicates:
+            - Path=/api/v1/newsfeed/**, /api/notifications/**, /ws-comm/**
+
+# Cấu hình Eureka Client (Nằm sát lề trái)
+eureka:
+  client:
+    service-url:
+      defaultZone: http://discovery-service:8761/eureka/
+    fetch-registry: true
+    register-with-eureka: true

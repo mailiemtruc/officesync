@@ -22,7 +22,7 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 // Cho phép swagger hoặc các file static nếu cần
                 .requestMatchers("/v3/api-docs/**", "/swagger-ui/**").permitAll()
-                .requestMatchers("/ws/**").permitAll()
+                .requestMatchers("/ws-comm/**").permitAll()
                 // Tất cả các request khác đều phải có Token
                 .anyRequest().authenticated()
             )
