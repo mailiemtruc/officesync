@@ -88,6 +88,112 @@ services:
   # 2. MICROSERVICES
   # =======================================================
 
+  # CORE SERVICE
+  core-service:
+    build:
+      context: ./core_service
+      dockerfile: Dockerfile
+    container_name: core-service
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - SERVER_PORT=8080
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql-db:3306/${DB_NAME_HR}?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=${DB_ROOT_PASSWORD}
+      - SPRING_RABBITMQ_HOST=rabbitmq
+      - SPRING_RABBITMQ_USERNAME=${RABBITMQ_USER}
+      - SPRING_RABBITMQ_PASSWORD=${RABBITMQ_PASS}
+      - SPRING_DATA_REDIS_HOST=redis
+    depends_on:
+      mysql-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - officesync_net
+
+  # ATTENDANCE SERVICE
+  attendance-service:
+    build:
+      context: ./attendance_service
+      dockerfile: Dockerfile
+    container_name: attendance-service
+    restart: unless-stopped
+    ports:
+      - "8083:8083"
+    environment:
+      - SERVER_PORT=8083
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql-db:3306/${DB_NAME_HR}?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=${DB_ROOT_PASSWORD}
+      - SPRING_RABBITMQ_HOST=rabbitmq
+      - SPRING_RABBITMQ_USERNAME=${RABBITMQ_USER}
+      - SPRING_RABBITMQ_PASSWORD=${RABBITMQ_PASS}
+      - SPRING_DATA_REDIS_HOST=redis
+    depends_on:
+      mysql-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - officesync_net
+
+  # NOTE SERVICE
+  note-service:
+    build:
+      context: ./note_service
+      dockerfile: Dockerfile
+    container_name: note-service
+    restart: unless-stopped
+    ports:
+      - "8082:8082"
+    environment:
+      - SERVER_PORT=8082
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql-db:3306/${DB_NAME_HR}?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=${DB_ROOT_PASSWORD}
+      - SPRING_RABBITMQ_HOST=rabbitmq
+      - SPRING_RABBITMQ_USERNAME=${RABBITMQ_USER}
+      - SPRING_RABBITMQ_PASSWORD=${RABBITMQ_PASS}
+      - SPRING_DATA_REDIS_HOST=redis
+    depends_on:
+      mysql-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - officesync_net
+
+  # AI SERVICE
+  ai-service:
+    build:
+      context: ./ai_service  # Trỏ vào thư mục chứa code Python
+      dockerfile: Dockerfile
+    container_name: ai-service
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      # Truyền API Key từ file .env gốc
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      # [QUAN TRỌNG] Override URL để gọi nội bộ trong Docker Network
+      # Format: http://<tên-container-attendance>:<port-nội-bộ>
+      - ATTENDANCE_SERVICE_URL=http://attendance-service:8083/api/attendance
+    env_file:
+      - .env
+    depends_on:
+      - attendance-service # Đợi attendance chạy xong mới chạy AI
+    networks:
+      - officesync_net
+
   # STORAGE SERVICE
   storage-service:
     build:
