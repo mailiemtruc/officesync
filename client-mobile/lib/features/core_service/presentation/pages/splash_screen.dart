@@ -140,7 +140,7 @@ class _SplashScreenState extends State<SplashScreen> {
                     width: logoWidth,
                     height: logoHeight,
                     child: Image.asset(
-                      'assets/images/logo1.png',
+                      'assets/images/logo1-01.png',
                       fit: BoxFit.contain,
                     ),
                   ),
