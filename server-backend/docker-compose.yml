@@ -175,7 +175,7 @@ services:
   # AI SERVICE
   ai-service:
     build:
-      context: ./ai_service  # Trỏ vào thư mục chứa code Python
+      context: ./ai_service # Trỏ vào thư mục chứa code Python
       dockerfile: Dockerfile
     container_name: ai-service
     restart: unless-stopped
@@ -297,7 +297,97 @@ services:
         condition: service_healthy
     networks:
       - officesync_net
+  #communication service
+  communication-service:
+    build:
+      context: .
+      dockerfile: communication_service/Dockerfile
+    container_name: communication-service
+    restart: unless-stopped
+    ports:
+      - "8088:8088"
+    environment:
+      - SERVER_PORT=8088
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql-db:3306/${DB_NAME_COMMUNICATION}?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=${DB_ROOT_PASSWORD}
+      - SPRING_RABBITMQ_HOST=rabbitmq
+      - SPRING_RABBITMQ_USERNAME=${RABBITMQ_USER}
+      - SPRING_RABBITMQ_PASSWORD=${RABBITMQ_PASS}
+      - SPRING_DATA_REDIS_HOST=redis
+    depends_on:
+      mysql-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - officesync_net
 
+  # CHAT SERVICE
+  #CHAT
+  chat-service: # <--- ĐÃ SỬA: Thụt vào 2 dấu cách
+    build:
+      context: ./chat_service
+      dockerfile: Dockerfile
+    container_name: chat-service
+    restart: unless-stopped
+    ports:
+      - "8092:8092"
+    environment:
+      - SERVER_PORT=8092
+      # --- KẾT NỐI DATABASE ---
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql-db:3306/${DB_NAME_CHAT}?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=${DB_ROOT_PASSWORD}
+      # --- KẾT NỐI DISCOVERY SERVICE ---
+      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://discovery-service:8761/eureka/
+      # --- MESSAGE BROKER & CACHE ---
+      - SPRING_RABBITMQ_HOST=rabbitmq
+      - SPRING_RABBITMQ_USERNAME=${RABBITMQ_USER}
+      - SPRING_RABBITMQ_PASSWORD=${RABBITMQ_PASS}
+      - SPRING_DATA_REDIS_HOST=redis
+      # --- BẢO MẬT ---
+      - JWT_SECRET=OfficeSync_Super_Secure_Secret_Key_For_Enterprise_Level_Security_Version_2025_Longer_Is_Better
+    depends_on:
+      discovery-service:
+        condition: service_healthy
+      mysql-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - officesync_net
+  #discovery
+  discovery-service: # <--- ĐÃ SỬA: Thụt vào 2 dấu cách
+    build:
+      context: ./discovery_service
+      dockerfile: Dockerfile
+    container_name: discovery-service
+    restart: unless-stopped
+    ports:
+      - "8761:8761"
+    environment:
+      - SERVER_PORT=8761
+    healthcheck:
+      # ĐÃ SỬA: Dùng wget thay vì curl
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8761/actuator/health",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - officesync_net
 # =======================================================
 # 3. VOLUMES
 # =======================================================
