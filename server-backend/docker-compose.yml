@@ -1,70 +1,180 @@
-version: "3.8" # <--- Nên thêm version
+version: "3.8"
 
 services:
-  # 1. DỊCH VỤ RABBITMQ
-  rabbitmq:
-    image: rabbitmq:3-management
-    container_name: rabbitmq-server
-    restart: always # <--- Tự động khởi động lại nếu bị crash hoặc restart máy
+  # =======================================================
+  # 1. HẠ TẦNG
+  # =======================================================
+
+  # MySQL Server
+  mysql-db:
+    image: mysql:8.0
+    container_name: mysql-server
+    restart: unless-stopped
     ports:
-      - "5672:5672" # App kết nối vào đây
-      - "15672:15672" # Vào web quản lý tại http://localhost:15672
+      - "3307:3306"
     environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME_HR}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./init-sql:/docker-entrypoint-initdb.d
+    networks:
+      - officesync_net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+      start_period: 10s
+
+  # PhpMyAdmin
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: phpmyadmin
+    restart: unless-stopped
+    ports:
+      - "9090:80"
+    environment:
+      PMA_HOST: mysql-db
+      PMA_PORT: 3306
+      PMA_USER: root
+      PMA_PASSWORD: ${DB_ROOT_PASSWORD}
+      UPLOAD_LIMIT: 128M
+    depends_on:
+      mysql-db:
+        condition: service_healthy
+    networks:
+      - officesync_net
+
+  # RabbitMQ
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: rabbitmq-server
+    restart: unless-stopped
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     networks:
       - officesync_net
-  # [MỚI] DỊCH VỤ REDIS
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+
+  # Redis
   redis:
     image: redis:7-alpine
     container_name: redis-server
-    restart: always
+    restart: unless-stopped
     ports:
       - "6379:6379"
-    command: redis-server --appendonly yes # Bật chế độ lưu đĩa để không mất cache khi restart
     volumes:
       - redis_data:/data
     networks:
       - officesync_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
-  # 2. DỊCH VỤ MYSQL (ĐÃ TẮT ĐỂ DÙNG MYSQL TRÊN MÁY TÍNH)
-  # mysql:
-  #   image: mysql:8.0
-  #   container_name: mysql-server
-  #   ports:
-  #     - "3307:3306"
-  #   environment:
-  #     MYSQL_ROOT_PASSWORD: root
-  #     MYSQL_DATABASE: officesync_db
-  #   volumes:
-  #     - mysql_data:/var/lib/mysql
-  #   networks:
-  #     - officesync_net
-  #   command: --default-authentication-plugin=mysql_native_password
+  # =======================================================
+  # 2. MICROSERVICES
+  # =======================================================
 
-  # 3. DỊCH VỤ PHPMYADMIN (ĐÃ TẮT VÌ KHÔNG CẦN THIẾT KHI DÙNG MYSQL LOCAL)
-  # phpmyadmin:
-  #   image: phpmyadmin/phpmyadmin
-  #   container_name: phpmyadmin
-  #   ports:
-  #     - "9000:80"
-  #   environment:
-  #     PMA_HOST: mysql
-  #     PMA_PORT: 3306
-  #   depends_on:
-  #     - mysql
-  #   networks:
-  #     - officesync_net
+  # STORAGE SERVICE
+  storage-service:
+    build:
+      context: ./storage_service
+      dockerfile: Dockerfile
+    container_name: storage-service
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    environment:
+      - SERVER_PORT=8090
+      - SPRING_RABBITMQ_HOST=rabbitmq
+      - SPRING_RABBITMQ_PORT=5672
+      - SPRING_RABBITMQ_USERNAME=${RABBITMQ_USER}
+      - SPRING_RABBITMQ_PASSWORD=${RABBITMQ_PASS}
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - storage_data:/app/img
+    networks:
+      - officesync_net
 
-# Khai báo Volumes
+  # HR SERVICE
+  hr-service:
+    build:
+      context: ./hr_service
+      dockerfile: Dockerfile
+    container_name: hr-service
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      - SERVER_PORT=8081
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql-db:3306/${DB_NAME_HR}?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=${DB_ROOT_PASSWORD}
+      - SPRING_RABBITMQ_HOST=rabbitmq
+      - SPRING_RABBITMQ_USERNAME=${RABBITMQ_USER}
+      - SPRING_RABBITMQ_PASSWORD=${RABBITMQ_PASS}
+      - SPRING_DATA_REDIS_HOST=redis
+    depends_on:
+      mysql-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - officesync_net
+
+  # NOTIFICATION SERVICE
+  notification-service:
+    build:
+      context: ./notification_service
+      dockerfile: Dockerfile
+    container_name: notification-service
+    restart: unless-stopped
+    ports:
+      - "8089:8089"
+    environment:
+      - SERVER_PORT=8089
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql-db:3306/${DB_NAME_NOTI}?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=${DB_ROOT_PASSWORD}
+      - SPRING_RABBITMQ_HOST=rabbitmq
+      - SPRING_DATA_REDIS_HOST=redis
+      - GOOGLE_APPLICATION_CREDENTIALS=${FIREBASE_KEY_PATH}
+    depends_on:
+      mysql-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - ./notification_service/src/main/resources/service-account.json:/app/service-account.json
+    networks:
+      - officesync_net
+
+# =======================================================
+# 3. VOLUMES
+# =======================================================
 volumes:
+  mysql_data:
   rabbitmq_data:
-  # mysql_data: # Tắt volume mysql
   redis_data:
+  storage_data:
 
-# ĐỊNH NGHĨA MẠNG
 networks:
   officesync_net:
     driver: bridge
