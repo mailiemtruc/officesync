@@ -184,17 +184,30 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        centerTitle: true,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: Color(0xFF2260FF)),
-          onPressed: () => Navigator.pop(context),
+        centerTitle: true, // <--- Dòng quan trọng để đưa chữ vào giữa
+        // --- 2. CHỈNH NÚT BACK (Giống các màn hình trước) ---
+        leadingWidth: 54,
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 24), // Căn lề 24px
+          child: InkWell(
+            onTap: () => Navigator.pop(context),
+            child: const Align(
+              alignment: Alignment.centerLeft,
+              child: Icon(
+                Icons.arrow_back_ios_new, // Icon mũi tên mảnh
+                color: Color(0xFF2260FF),
+                size: 24,
+              ),
+            ),
+          ),
         ),
         title: const Text(
-          "Notification",
+          "NOTIFICATIONS",
           style: TextStyle(
             color: Color(0xFF2260FF),
+            fontSize: 24, // Kích thước 24 cho đồng bộ
+            fontFamily: 'Inter', // Font Inter
             fontWeight: FontWeight.bold,
-            fontSize: 18,
           ),
         ),
       ),
