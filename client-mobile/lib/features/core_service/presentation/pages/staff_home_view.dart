@@ -5,6 +5,7 @@ import '../../../../core/config/app_colors.dart';
 import 'package:officesync/features/notification_service/presentation/pages/notification_list_screen.dart';
 import 'package:officesync/features/communication_service/presentation/pages/newsfeed_screen.dart';
 import 'package:officesync/features/chat_service/presentation/pages/chat_screen.dart';
+import '../../../note_service/presentation/pages/note_list_screen.dart';
 import '../../../../core/api/api_client.dart';
 import '../../../task_service/data/models/task_model.dart';
 import '../../../task_service/widgets/task_detail_dialog.dart';
@@ -488,7 +489,12 @@ class _StaffHomeViewState extends State<StaffHomeView>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildActionItem("Request", PhosphorIconsBold.calendarBlank, () {}),
-        _buildActionItem("Note", PhosphorIconsBold.notePencil, () {}),
+        _buildActionItem("Note", PhosphorIconsBold.notePencil, () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const NoteListScreen()),
+          );
+        }),
         _buildActionItem("OT", PhosphorIconsBold.clock, () {}),
         _buildActionItem("News", PhosphorIconsBold.newspaper, () {
           Navigator.push(

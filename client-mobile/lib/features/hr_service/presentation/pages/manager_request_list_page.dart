@@ -78,13 +78,13 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
       _currentCompanyId = userMap['companyId']?.toString();
     }
 
-    // URL chuẩn của HR Service
     final String hrSocketUrl = 'ws://10.0.2.2:8081/ws-hr';
 
     if (_currentCompanyId != null) {
       final topic = '/topic/company/$_currentCompanyId/requests';
 
-      _unsubscribeFn = WebSocketService().subscribe(topic, (data) {
+      // [SỬA LỖI TẠI ĐÂY] Thêm từ khóa 'await' vào trước WebSocketService().subscribe
+      _unsubscribeFn = await WebSocketService().subscribe(topic, (data) {
         if (!mounted) return;
         print("--> Socket received update. Reloading list...");
         _fetchRequests(isBackgroundRefresh: true);

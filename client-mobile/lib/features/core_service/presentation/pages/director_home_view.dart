@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:officesync/features/communication_service/presentation/pages/newsfeed_screen.dart';
+import '../../../note_service/presentation/pages/note_list_screen.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'dart:async';
 import '../../../../core/config/app_colors.dart';
@@ -474,10 +475,9 @@ class _DirectorHomeViewState extends State<DirectorHomeView>
           });
         }),
         _buildActionItem("Note", PhosphorIconsBold.notePencil, () {
-          CustomSnackBar.show(
+          Navigator.push(
             context,
-            title: "Note",
-            message: "Director notes feature.",
+            MaterialPageRoute(builder: (context) => const NoteListScreen()),
           );
         }),
         _buildActionItem("Assign Task", PhosphorIconsBold.clipboardText, () {

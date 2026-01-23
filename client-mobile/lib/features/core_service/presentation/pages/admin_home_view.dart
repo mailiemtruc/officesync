@@ -526,36 +526,43 @@ class _AdminHomeViewState extends State<AdminHomeView>
               );
             }),
             const SizedBox(width: 12),
-            _buildCircleIcon(PhosphorIconsBold.gear, () {}),
+            _buildCircleIcon(PhosphorIconsBold.gear, () {
+              CustomSnackBar.show(
+                context,
+                title: "Info",
+                message: "Settings feature is coming soon!",
+              );
+            }),
           ],
         ),
       ],
     );
   }
 
-  // [ĐÃ THÊM] CustomSnackBar cho các nút chức năng chưa phát triển
+  // Thay thế hàm _buildQuickActions cũ bằng hàm này
   Widget _buildQuickActions() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildActionItem("Add Company", PhosphorIconsBold.buildings, () {
-          // Logic thêm công ty (nếu có)
+        // 1. Manage Companies (Link tới màn hình AllCompaniesScreen)
+        _buildActionItem("Manage Co.", PhosphorIconsBold.buildings, () {
+          Navigator.pushNamed(context, '/admin_companies').then((_) {
+            _fetchData(); // Load lại dữ liệu khi quay về
+          });
         }),
-        _buildActionItem("Admins", PhosphorIconsBold.users, () {
-          CustomSnackBar.show(
-            context,
-            title: "Info",
-            message: "Admins management is coming soon!",
-          );
+
+        // 2. New Admin (Link tới màn hình CreateAdminScreen)
+        _buildActionItem("New Admin", PhosphorIconsBold.userPlus, () {
+          Navigator.pushNamed(context, '/create_admin');
         }),
-        _buildActionItem("Reports", PhosphorIconsBold.chartBar, () {
-          CustomSnackBar.show(
-            context,
-            title: "Info",
-            message: "Reports feature is coming soon!",
-          );
+
+        // 3. System Analytics (Link tới màn hình AnalyticsScreen)
+        _buildActionItem("Analytics", PhosphorIconsBold.chartLineUp, () {
+          Navigator.pushNamed(context, '/analytics');
         }),
+
+        // 4. Audit Logs (Giữ lại nút thứ 4 để bố cục không bị lệch - Layout cũ có 4 nút)
         _buildActionItem("Audit Logs", PhosphorIconsBold.shieldCheck, () {
           CustomSnackBar.show(
             context,

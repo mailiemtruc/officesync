@@ -4,7 +4,9 @@ import 'dart:async';
 import '../../../../core/config/app_colors.dart';
 import 'package:officesync/features/notification_service/presentation/pages/notification_list_screen.dart';
 import 'package:officesync/features/communication_service/presentation/pages/newsfeed_screen.dart';
+import '../../../hr_service/presentation/pages/manager_request_list_page.dart';
 import 'package:officesync/features/chat_service/presentation/pages/chat_screen.dart';
+import '../../../note_service/presentation/pages/note_list_screen.dart';
 import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../../../core/api/api_client.dart';
@@ -452,8 +454,20 @@ class _ManagerHomeViewState extends State<ManagerHomeView>
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildActionItem("Request", PhosphorIconsBold.calendarBlank, () {}),
-        _buildActionItem("Note", PhosphorIconsBold.notePencil, () {}),
+        _buildActionItem("Request", PhosphorIconsBold.calendarBlank, () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const ManagerRequestListPage(),
+            ),
+          );
+        }),
+        _buildActionItem("Note", PhosphorIconsBold.notePencil, () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const NoteListScreen()),
+          );
+        }),
         _buildActionItem("Assign Task", PhosphorIconsBold.clipboardText, () {
           Navigator.pushNamed(context, '/tasks', arguments: 'MANAGER');
         }),

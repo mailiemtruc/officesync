@@ -643,33 +643,37 @@ class _SmartAiFabState extends State<SmartAiFab> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    return Row(
+      // [SỬA 1] Đổi Column thành Row để xếp ngang
       mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.end,
+      crossAxisAlignment: CrossAxisAlignment.center, // Căn giữa theo chiều dọc
       children: [
+        // --- PHẦN BONG BÓNG TIN NHẮN ---
         FadeTransition(
           opacity: _bubbleAnimation,
           child: SlideTransition(
+            // [SỬA 2] Đổi hướng trượt: Từ phải sang trái (như chui ra từ nút)
             position: Tween<Offset>(
-              begin: const Offset(0, 0.2),
+              begin: const Offset(0.2, 0),
               end: Offset.zero,
             ).animate(_bubbleAnimation),
             child: Container(
-              margin: const EdgeInsets.only(bottom: 12, right: 2),
+              // [SỬA 3] Chỉnh margin: Bỏ bottom, thêm right để cách nút ra
+              margin: const EdgeInsets.only(right: 16),
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(30),
+                borderRadius: BorderRadius.circular(24),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 20,
-                    offset: const Offset(0, 10),
+                    color: Colors.black.withOpacity(0.08),
+                    blurRadius: 15,
+                    offset: const Offset(0, 5),
                   ),
                   BoxShadow(
                     color: const Color(0xFF2260FF).withOpacity(0.1),
                     blurRadius: 10,
-                    offset: const Offset(0, 4),
+                    offset: const Offset(0, 2),
                   ),
                 ],
               ),
@@ -677,8 +681,8 @@ class _SmartAiFabState extends State<SmartAiFab> with TickerProviderStateMixin {
                 _currentMessage,
                 style: const TextStyle(
                   color: Color(0xFF334155),
-                  fontWeight: FontWeight.w500,
-                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
                   fontFamily: 'Inter',
                   letterSpacing: 0.3,
                 ),
@@ -686,6 +690,8 @@ class _SmartAiFabState extends State<SmartAiFab> with TickerProviderStateMixin {
             ),
           ),
         ),
+
+        // --- PHẦN NÚT TRÒN (FAB) GIỮ NGUYÊN ---
         SizedBox(
           width: 64,
           height: 64,
