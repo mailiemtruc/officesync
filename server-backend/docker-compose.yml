@@ -272,6 +272,32 @@ services:
     networks:
       - officesync_net
 
+  # TASK SERVICE
+  task-service:
+    build:
+      context: ./task-service # Đường dẫn đến thư mục chứa source code task-service
+      dockerfile: Dockerfile
+    container_name: task-service
+    restart: unless-stopped
+    ports:
+      - "8086:8086"
+    environment:
+      - SERVER_PORT=8086
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql-db:3306/${DB_NAME_TASK:-task_service}?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=${DB_ROOT_PASSWORD}
+      - SPRING_RABBITMQ_HOST=rabbitmq
+      - SPRING_RABBITMQ_PORT=5672
+      - SPRING_RABBITMQ_USERNAME=${RABBITMQ_USER}
+      - SPRING_RABBITMQ_PASSWORD=${RABBITMQ_PASS}
+    depends_on:
+      mysql-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - officesync_net
+
 # =======================================================
 # 3. VOLUMES
 # =======================================================
