@@ -12,6 +12,7 @@ import '../../../task_service/widgets/task_detail_dialog.dart';
 import '../../../hr_service/data/datasources/employee_remote_data_source.dart';
 import '../../../hr_service/data/models/employee_model.dart';
 import '../../../../core/utils/user_update_event.dart';
+import '../../../hr_service/presentation/pages/my_requests_page.dart';
 import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../widgets/skeleton_staff_home.dart';
@@ -488,7 +489,12 @@ class _StaffHomeViewState extends State<StaffHomeView>
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildActionItem("Request", PhosphorIconsBold.calendarBlank, () {}),
+        _buildActionItem("Request", PhosphorIconsBold.calendarBlank, () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const MyRequestsPage()),
+          );
+        }),
         _buildActionItem("Note", PhosphorIconsBold.notePencil, () {
           Navigator.push(
             context,

@@ -76,13 +76,15 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
     }
   }
 
-  void _initListener(String userId) {
+  Future<void> _initListener(String userId) async {
     final topic = '/topic/user/$userId/requests';
 
     // URL chuẩn của HR Service
     final String hrSocketUrl = 'ws://10.0.2.2:8081/ws-hr';
 
-    _unsubscribeFn = WebSocketService().subscribe(topic, (data) {
+    // 2. Thêm từ khóa 'await' vào trước WebSocketService().subscribe
+    // Để đợi lấy hàm hủy đăng ký thực sự (Function) thay vì Future
+    _unsubscribeFn = await WebSocketService().subscribe(topic, (data) {
       if (!mounted) return;
 
       if (data is Map<String, dynamic>) {
