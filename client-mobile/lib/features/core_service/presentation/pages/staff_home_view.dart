@@ -16,6 +16,8 @@ import '../../../hr_service/presentation/pages/my_requests_page.dart';
 import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../widgets/skeleton_staff_home.dart';
+import '../../../../core/utils/custom_snackbar.dart';
+import 'package:officesync/features/attendance_service/presentation/pages/attendance_screen.dart';
 
 class StaffHomeView extends StatefulWidget {
   final int currentUserId;
@@ -458,7 +460,15 @@ class _StaffHomeViewState extends State<StaffHomeView>
           ),
           const SizedBox(height: 12),
           GestureDetector(
-            onTap: () {},
+            onTap: () {
+              // [THÊM MỚI] Hiển thị thông báo tính năng đang phát triển
+              CustomSnackBar.show(
+                context,
+                title: "Info",
+                message: "This feature is under development.",
+                isError: true,
+              );
+            },
             child: Row(
               children: [
                 const Text(
@@ -501,7 +511,13 @@ class _StaffHomeViewState extends State<StaffHomeView>
             MaterialPageRoute(builder: (context) => const NoteListScreen()),
           );
         }),
-        _buildActionItem("OT", PhosphorIconsBold.clock, () {}),
+        _buildActionItem("OT", PhosphorIconsBold.clock, () {
+          // [SỬA TẠI ĐÂY] Chuyển sang màn hình Chấm công
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const AttendanceScreen()),
+          );
+        }),
         _buildActionItem("News", PhosphorIconsBold.newspaper, () {
           Navigator.push(
             context,

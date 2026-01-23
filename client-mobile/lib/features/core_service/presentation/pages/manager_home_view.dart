@@ -16,6 +16,7 @@ import '../../../hr_service/data/datasources/employee_remote_data_source.dart';
 import '../../../hr_service/data/models/employee_model.dart';
 import '../../../../core/utils/user_update_event.dart';
 import '../../widgets/skeleton_manager_home.dart';
+import '../../../../core/utils/custom_snackbar.dart';
 
 class ManagerHomeView extends StatefulWidget {
   final int currentUserId;
@@ -423,7 +424,15 @@ class _ManagerHomeViewState extends State<ManagerHomeView>
           ),
           const SizedBox(height: 12),
           GestureDetector(
-            onTap: () {},
+            onTap: () {
+              // [THÊM MỚI] Hiển thị thông báo tính năng đang phát triển
+              CustomSnackBar.show(
+                context,
+                title: "Info",
+                message: "This feature is under development.",
+                isError: true,
+              );
+            },
             child: Row(
               children: [
                 const Text(

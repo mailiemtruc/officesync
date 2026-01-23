@@ -428,10 +428,13 @@ class _DirectorHomeViewState extends State<DirectorHomeView>
           const SizedBox(height: 12),
           GestureDetector(
             onTap: () {
+              // [ENGLISH VERSION]
               CustomSnackBar.show(
                 context,
-                title: "News",
-                message: "Showing details...",
+                title: "Info",
+                message:
+                    "This feature is under development.", // Hoặc dùng: "Coming soon!"
+                isError: true,
               );
             },
             child: Row(
