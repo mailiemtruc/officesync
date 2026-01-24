@@ -1,16 +1,16 @@
-// D:\officesync\client-mobile\lib\features\task_service\presentation\pages\staff_page.dart
-
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../../../core/api/api_client.dart';
 import '../../data/models/task_model.dart';
 import '../../widgets/task_detail_dialog.dart';
 import '../../data/task_session.dart';
 import '../../data/models/task_user.dart';
 import '../../data/network/task_stomp_service.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 class StaffPage extends StatefulWidget {
   const StaffPage({super.key});
+
   @override
   State<StaffPage> createState() => _StaffPageState();
 }
@@ -19,38 +19,33 @@ class _StaffPageState extends State<StaffPage> {
   final ApiClient api = ApiClient();
   List<TaskModel> tasks = [];
   bool loading = true;
-  TaskStatus? selectedStatus;
+
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = "";
+
+  // Lọc
+  TaskStatus? selectedStatus; // Null tương đương với 'All'
   bool showOverdueOnly = false;
 
-  late TaskStompService _taskStompService; // 1. Khai báo biến
+  late TaskStompService _taskStompService;
 
-  // Menu key để kích hoạt hiệu ứng Flash Border
-  final GlobalKey<PopupMenuButtonState<TaskStatus?>> _statusMenuKey =
-      GlobalKey();
-
-  final Color colorBlue = const Color(0xFF2260FF);
-  final Color colorGreen = const Color(0xFF4EE375);
-  final Color colorOrange = const Color(0xFFFFA322);
-  final Color colorWhite = const Color(0xFFFFFFFF);
-  final Color colorBlack = const Color(0xFF000000);
-  final Color colorBg = const Color.fromARGB(255, 238, 241, 251);
+  // Màu sắc chuẩn theo my_requests_page
+  final Color primaryColor = const Color(0xFF2260FF);
+  final Color backgroundColor = const Color(0xFFF9F9F9);
+  final Color textSecondary = const Color(0xFF9CA3AF);
+  final Color labelGray = const Color(0xFF655F5F);
 
   @override
   void initState() {
     super.initState();
     _initializeSessionAndData();
-    _setupRealtime(); // 2. Gọi hàm thiết lập
+    _setupRealtime();
   }
 
-  // 3. Logic Real-time cho Staff
   void _setupRealtime() {
     _taskStompService = TaskStompService(
       onTaskReceived: (data) {
-        if (mounted) {
-          setState(() {
-            fetchTasks(); // Staff tự động cập nhật lại List của mình
-          });
-        }
+        if (mounted) fetchTasks();
       },
     );
     _taskStompService.connect();
@@ -58,14 +53,14 @@ class _StaffPageState extends State<StaffPage> {
 
   @override
   void dispose() {
-    _taskStompService.disconnect(); // 4. Ngắt kết nối
+    _taskStompService.disconnect();
+    _searchController.dispose();
     super.dispose();
   }
 
   Future<void> _initializeSessionAndData() async {
     setState(() => loading = true);
     try {
-      // SỬA TẠI ĐÂY: Luôn đồng bộ lại session khi vào trang
       final profileResp = await api.get('${ApiClient.taskUrl}/tasks/me');
       if (profileResp.data != null) {
         TaskSession().setSession(
@@ -84,11 +79,13 @@ class _StaffPageState extends State<StaffPage> {
     try {
       final resp = await api.get('${ApiClient.taskUrl}/tasks/mine');
       final List data = resp.data as List;
-      setState(() {
-        tasks = data
-            .map((e) => TaskModel.fromJson(Map<String, dynamic>.from(e)))
-            .toList();
-      });
+      if (mounted) {
+        setState(() {
+          tasks = data
+              .map((e) => TaskModel.fromJson(Map<String, dynamic>.from(e)))
+              .toList();
+        });
+      }
     } catch (e) {
       debugPrint("Error fetch: $e");
     }
@@ -96,13 +93,20 @@ class _StaffPageState extends State<StaffPage> {
 
   List<TaskModel> _getFilteredTasks() {
     return tasks.where((t) {
+      // 1. Lọc theo Status
       bool matchStatus = selectedStatus == null || t.status == selectedStatus;
+
+      // 2. Lọc theo Overdue
       bool matchOverdue = true;
       if (showOverdueOnly) {
         final now = DateTime.now();
         matchOverdue = t.status != TaskStatus.DONE && t.dueDate.isBefore(now);
       }
-      return matchStatus && matchOverdue;
+
+      // 3. Lọc theo Search Query (Title)
+      bool matchSearch = t.title.toLowerCase().contains(_searchQuery);
+
+      return matchStatus && matchOverdue && matchSearch;
     }).toList();
   }
 
@@ -111,384 +115,404 @@ class _StaffPageState extends State<StaffPage> {
     final filteredList = _getFilteredTasks();
 
     return Scaffold(
-      backgroundColor: colorBg,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        centerTitle: true,
-        leadingWidth: 56, // Giống Admin
-        leading: Padding(
-          padding: const EdgeInsets.only(left: 16.0),
-          child: IconButton(
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
-            icon: Icon(
-              PhosphorIcons.caretLeft(
-                PhosphorIconsStyle.bold,
-              ), // Đổi icon giống Admin
-              color: colorBlue,
-              size: 24,
+      backgroundColor: backgroundColor,
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 600),
+            child: Column(
+              children: [
+                const SizedBox(height: 20),
+                _buildHeader(),
+                const SizedBox(height: 24),
+                _buildFilterRow(),
+                const SizedBox(height: 20),
+                _buildStatusTabs(),
+                const SizedBox(height: 24),
+                _buildSectionLabel("LIST TASKS"),
+                const SizedBox(height: 12),
+                Expanded(
+                  child: loading
+                      ? _buildLoadingState()
+                      : RefreshIndicator(
+                          onRefresh: fetchTasks,
+                          color: primaryColor,
+                          child: filteredList.isEmpty
+                              ? _buildEmptyState()
+                              : ListView.builder(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 24,
+                                    vertical: 8,
+                                  ),
+                                  itemCount: filteredList.length,
+                                  itemBuilder: (c, i) =>
+                                      _buildTaskCard(filteredList[i]),
+                                ),
+                        ),
+                ),
+              ],
             ),
-            onPressed: () => Navigator.pop(context),
-          ),
-        ),
-        title: Text(
-          'STAFF',
-          style: TextStyle(
-            color: colorBlue,
-            fontSize: 24, // Đồng bộ size 24
-            fontFamily: 'Inter',
-            fontWeight: FontWeight.w700,
           ),
         ),
       ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    );
+  }
+
+  Widget _buildHeader() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Stack(
+        alignment: Alignment.center,
         children: [
-          _buildFilterHeader(),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-            child: Text(
-              "List task",
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: colorBlack,
-                fontFamily: 'Inter', // Thêm đồng bộ font
+          Align(
+            alignment: Alignment.centerLeft,
+            child: IconButton(
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              icon: Icon(
+                PhosphorIcons.caretLeft(PhosphorIconsStyle.bold),
+                color: primaryColor,
+                size: 24,
               ),
+              onPressed: () => Navigator.pop(context),
             ),
           ),
-          Expanded(
-            child: loading
-                ? Center(child: CircularProgressIndicator(color: colorBlue))
-                : ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: filteredList.length,
-                    itemBuilder: (c, i) =>
-                        _buildCustomTaskCard(filteredList[i], i + 1),
-                  ),
+          Text(
+            'STAFF',
+            style: TextStyle(
+              color: primaryColor,
+              fontSize: 24,
+              fontFamily: 'Inter',
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildFilterHeader() {
+  // Row lọc Overdue (Thiết kế giống nút Filter của My Requests)
+  Widget _buildFilterRow() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Row(
         children: [
           Expanded(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
+            child: Container(
+              height: 45,
+              decoration: BoxDecoration(
+                color: const Color(0xFFF5F5F5),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFE0E0E0)),
+              ),
+              child: TextField(
+                controller: _searchController,
+                onChanged: (value) {
+                  setState(() {
+                    _searchQuery = value.trim().toLowerCase();
+                  });
+                },
+                decoration: InputDecoration(
+                  hintText: "Search tasks...",
+                  hintStyle: const TextStyle(
+                    color: Color(0xFF9E9E9E),
+                    fontSize: 14,
+                  ),
+                  prefixIcon: Icon(
+                    PhosphorIcons.magnifyingGlass(),
+                    color: Colors.grey,
+                    size: 20,
+                  ),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                  // Nút xóa nhanh text
+                  suffixIcon: _searchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear, size: 18),
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() => _searchQuery = "");
+                          },
+                        )
+                      : null,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          GestureDetector(
+            onTap: () => setState(() => showOverdueOnly = !showOverdueOnly),
+            child: Container(
+              height: 45,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: showOverdueOnly
+                    ? const Color(0xFFECF1FF)
+                    : const Color(0xFFF5F5F5),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: showOverdueOnly
+                      ? primaryColor
+                      : const Color(0xFFE0E0E0),
+                ),
+              ),
               child: Row(
                 children: [
-                  if (selectedStatus != null)
-                    _buildActiveFilterChip(
-                      selectedStatus!.name.replaceAll('_', ' '),
-                      () => setState(() => selectedStatus = null),
-                    ),
-                  if (showOverdueOnly)
-                    _buildActiveFilterChip(
+                  Icon(
+                    showOverdueOnly
+                        ? PhosphorIconsFill.clockAfternoon
+                        : PhosphorIconsRegular.clockAfternoon,
+                    color: showOverdueOnly
+                        ? primaryColor
+                        : const Color(0xFF555252),
+                    size: 20,
+                  ),
+                  if (showOverdueOnly) ...[
+                    const SizedBox(width: 8),
+                    Text(
                       "Overdue",
-                      () => setState(() => showOverdueOnly = false),
+                      style: TextStyle(
+                        color: primaryColor,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
                     ),
+                  ],
                 ],
               ),
             ),
           ),
-          const SizedBox(width: 10),
-          _buildStatusMenu(),
-          const SizedBox(width: 8),
-          _buildOverdueButton(),
         ],
       ),
     );
   }
 
-  Widget _buildActiveFilterChip(String label, VoidCallback onClear) {
-    return GestureDetector(
-      onTap: onClear,
-      child: Container(
-        margin: const EdgeInsets.only(right: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: colorWhite,
-          borderRadius: BorderRadius.circular(15),
-          border: Border.all(color: colorBlue.withOpacity(0.3)),
-          boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 2)],
-        ),
-        child: Row(
-          children: [
-            Text(
-              label,
-              style: TextStyle(
-                color: colorBlue,
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
+  Widget _buildStatusTabs() {
+    final statusOptions = [
+      {'label': 'All', 'value': null},
+      {'label': 'Todo', 'value': TaskStatus.TODO},
+      {'label': 'In Progress', 'value': TaskStatus.IN_PROGRESS},
+      {'label': 'Done', 'value': TaskStatus.DONE},
+    ];
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Row(
+        children: statusOptions.map((opt) {
+          final isSelected = selectedStatus == opt['value'];
+          return GestureDetector(
+            onTap: () =>
+                setState(() => selectedStatus = opt['value'] as TaskStatus?),
+            child: Container(
+              margin: const EdgeInsets.only(right: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? Colors.white
+                    : const Color(0xFFE5E5E5).withOpacity(0.5),
+                borderRadius: BorderRadius.circular(10),
+                boxShadow: isSelected
+                    ? [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ]
+                    : [],
+              ),
+              child: Text(
+                opt['label'] as String,
+                style: TextStyle(
+                  color: isSelected ? primaryColor : textSecondary,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
               ),
             ),
-            const SizedBox(width: 4),
-            Icon(Icons.close, size: 14, color: colorBlue),
-          ],
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildSectionLabel(String label) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(
+          label,
+          style: TextStyle(
+            color: labelGray,
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            fontFamily: 'Inter',
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildStatusMenu() {
-    return Theme(
-      data: Theme.of(context).copyWith(cardColor: colorWhite),
-      child: PopupMenuButton<TaskStatus?>(
-        key: _statusMenuKey,
-        color: colorWhite,
-        onSelected: (s) => setState(() => selectedStatus = s),
-        itemBuilder: (context) => [
-          PopupMenuItem(
-            value: null,
-            child: Text("All Status", style: TextStyle(color: colorBlack)),
-          ),
-          ...[TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.DONE].map(
-            (s) => PopupMenuItem(
-              value: s,
-              child: Text(s.name.replaceAll('_', ' ')),
-            ),
-          ),
-        ],
-        child: FlashBorderWrapper(
-          borderRadius: BorderRadius.circular(50),
-          borderColor: colorBlue,
-          onTap: () => _statusMenuKey.currentState?.showButtonMenu(),
-          child: _circularIconContainer(Icons.trending_up),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildOverdueButton() {
-    return FlashBorderWrapper(
-      borderRadius: BorderRadius.circular(50),
-      borderColor: colorBlue,
-      onTap: () => setState(() => showOverdueOnly = !showOverdueOnly),
-      child: _circularIconContainer(
-        Icons.hourglass_bottom,
-        active: showOverdueOnly,
-      ),
-    );
-  }
-
-  Widget _circularIconContainer(IconData icon, {bool active = false}) {
+  Widget _buildTaskCard(TaskModel task) {
     return Container(
-      width: 42,
-      height: 42,
+      margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        color: active ? colorBlue.withOpacity(0.1) : colorWhite,
-        shape: BoxShape.circle,
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
         boxShadow: [
           BoxShadow(
-            color: Color(0xFFFFFFFF),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
-      child: Icon(
-        icon,
-        color: active ? Colors.red : colorBlue,
-        size: 18,
-        fontWeight: FontWeight.bold,
-      ),
-    );
-  }
-
-  Widget _buildCustomTaskCard(TaskModel task, int index) {
-    return FlashBorderWrapper(
-      borderRadius: BorderRadius.circular(25),
-      borderColor: colorBlue,
-      onTap: () => showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: Colors.transparent,
-        builder: (_) => TaskDetailDialog(
-          task: task,
-          currentUserId: TaskSession().userId ?? 0,
-          role: 'STAFF',
-          onRefresh: fetchTasks,
-        ),
-      ),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 16),
-        padding: const EdgeInsets.fromLTRB(12, 8, 16, 16),
-        decoration: BoxDecoration(
-          color: colorWhite,
-          borderRadius: BorderRadius.circular(25),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              "#$index",
-              style: const TextStyle(
-                color: Colors.black,
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Row(
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(10),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => _showTaskDetail(task),
+          child: IntrinsicHeight(
+            child: Row(
               children: [
+                // Thanh màu trạng thái bên trái
+                Container(width: 6, color: task.statusColor),
                 Expanded(
-                  child: Text(
-                    task.title,
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: colorBlack,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                _buildSmallTag(task.priorityText, task.priorityColor),
-                const SizedBox(width: 6),
-                _buildSmallTag(task.statusText, task.statusColor),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              task.description,
-              style: const TextStyle(color: Color(0xFF000000), fontSize: 13),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 12),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        "Department: ${task.departmentName ?? '-'}",
-                        style: const TextStyle(
-                          color: Colors.grey,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                task.title,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.black,
+                                  fontFamily: 'Inter',
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            _buildStatusBadge(task),
+                          ],
                         ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        "Creator: ${task.creatorName ?? '-'} | Assignee: ${task.assigneeName ?? '-'}",
-                        style: const TextStyle(
-                          color: Colors.grey,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
+                        const SizedBox(height: 8),
+                        Text(
+                          task.description,
+                          style: const TextStyle(
+                            color: Color(0xFF52525B),
+                            fontSize: 13,
+                            height: 1.4,
+                            fontFamily: 'Inter',
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
+                        const SizedBox(height: 12),
+                        const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                        const SizedBox(height: 12),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              "Due: ${DateFormat('dd/MM/yyyy').format(task.dueDate)}",
+                              style: const TextStyle(
+                                color: Color(0xFFA1A1AA),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                fontFamily: 'Inter',
+                              ),
+                            ),
+                            Text(
+                              task.priorityText,
+                              style: TextStyle(
+                                color: task.priorityColor.withOpacity(0.7),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                fontFamily: 'Inter',
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      "Start: ${task.createdAt.toLocal().toString().split(" ").first}",
-                      style: const TextStyle(
-                        color: Colors.grey,
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Text(
-                      "Due: ${task.dueDate.toLocal().toString().split(" ").first}",
-                      style: const TextStyle(
-                        color: Colors.grey,
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
                 ),
               ],
             ),
-          ],
+          ),
         ),
       ),
     );
   }
 
-  // ĐÃ ĐỔI TÊN Ở ĐÂY ĐỂ TRÁNH LỖI UNDEFINED_METHOD
-  Widget _buildSmallTag(String text, Color color) {
+  Widget _buildStatusBadge(TaskModel task) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(15),
+        color: task.statusColor.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
-        text,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 10,
-          fontWeight: FontWeight.bold,
+        task.statusText,
+        style: TextStyle(
+          color: task.statusColor,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          fontFamily: 'Inter',
         ),
       ),
     );
   }
-}
 
-class FlashBorderWrapper extends StatefulWidget {
-  final Widget child;
-  final BorderRadius borderRadius;
-  final VoidCallback onTap;
-  final Color borderColor;
-  const FlashBorderWrapper({
-    super.key,
-    required this.child,
-    required this.borderRadius,
-    required this.onTap,
-    required this.borderColor,
-  });
-  @override
-  State<FlashBorderWrapper> createState() => _FlashBorderWrapperState();
-}
-
-class _FlashBorderWrapperState extends State<FlashBorderWrapper> {
-  bool _showBorder = false;
-  void _triggerFlash() {
-    if (mounted) {
-      setState(() => _showBorder = true);
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (mounted) setState(() => _showBorder = false);
-      });
-    }
-    widget.onTap();
+  void _showTaskDetail(TaskModel task) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => TaskDetailDialog(
+        task: task,
+        currentUserId: TaskSession().userId ?? 0,
+        role: 'STAFF',
+        onRefresh: fetchTasks,
+      ),
+    );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: _triggerFlash,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        decoration: BoxDecoration(
-          borderRadius: widget.borderRadius,
-          border: Border.all(
-            color: _showBorder ? widget.borderColor : Colors.transparent,
-            width: 2,
+  Widget _buildLoadingState() {
+    return const Center(child: CircularProgressIndicator());
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            PhosphorIcons.clipboardText(),
+            size: 64,
+            color: const Color(0xFFE5E7EB),
           ),
-        ),
-        child: widget.child,
+          const SizedBox(height: 16),
+          const Text(
+            "No tasks found",
+            style: TextStyle(
+              color: Color(0xFF9CA3AF),
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
       ),
     );
   }
