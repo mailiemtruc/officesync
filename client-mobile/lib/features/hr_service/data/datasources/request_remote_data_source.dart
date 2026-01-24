@@ -5,8 +5,8 @@ import 'package:http/http.dart' as http;
 import '../models/request_model.dart'; // Giả sử bạn có model này hoặc dùng Map
 
 class RequestRemoteDataSource {
-  static const String baseUrl = 'http://10.0.2.2:8081/api/requests';
-  static const String storageUrl = 'http://10.0.2.2:8090/api/files/upload';
+  static const String baseUrl = 'http://10.0.2.2:8000/api/requests';
+  static const String storageUrl = 'http://10.0.2.2:8000/api/files/upload';
 
   // 1. TẠO ĐƠN (Giữ nguyên, thêm evidenceUrl nếu cần)
   Future<bool> createRequest({

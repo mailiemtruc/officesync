@@ -3,7 +3,7 @@ import 'package:http/http.dart' as http;
 import '../models/department_model.dart';
 
 class DepartmentRemoteDataSource {
-  static const String baseUrl = 'http://10.0.2.2:8081/api/departments';
+  static const String baseUrl = 'http://10.0.2.2:8000/api/departments';
 
   Future<bool> createDepartment(
     DepartmentModel department,

@@ -9,9 +9,9 @@ import '../models/employee_model.dart';
 
 class EmployeeRemoteDataSource {
   final ApiClient _apiClient = ApiClient();
-  static const String baseUrl = 'http://10.0.2.2:8081/api';
-  static const String _baseUrl = 'http://10.0.2.2:8081/api/employees';
-  static const String storageUrl = 'http://10.0.2.2:8090/api/files/upload';
+  static const String baseUrl = 'http://10.0.2.2:8000/api';
+  static const String _baseUrl = 'http://10.0.2.2:8000/api/employees';
+  static const String storageUrl = 'http://10.0.2.2:8000/api/files/upload';
 
   Future<String?> createEmployee(
     EmployeeModel employee,

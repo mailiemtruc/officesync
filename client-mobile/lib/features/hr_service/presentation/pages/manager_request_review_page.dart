@@ -48,7 +48,7 @@ class _ManagerRequestReviewPageState extends State<ManagerRequestReviewPage> {
     final topic = '/topic/request/${widget.request.id}';
 
     // URL chuẩn của HR Service
-    final String hrSocketUrl = 'ws://10.0.2.2:8081/ws-hr';
+    final String hrSocketUrl = 'ws://10.0.2.2:8000/ws-hr';
 
     // [ĐÃ SỬA] Thêm tham số forceUrl
     _unsubscribeFn = WebSocketService().subscribe(

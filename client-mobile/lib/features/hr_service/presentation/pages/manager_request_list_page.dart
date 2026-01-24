@@ -78,7 +78,7 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
       _currentCompanyId = userMap['companyId']?.toString();
     }
 
-    final String hrSocketUrl = 'ws://10.0.2.2:8081/ws-hr';
+    final String hrSocketUrl = 'ws://10.0.2.2:8000/ws-hr';
 
     if (_currentCompanyId != null) {
       final topic = '/topic/company/$_currentCompanyId/requests';

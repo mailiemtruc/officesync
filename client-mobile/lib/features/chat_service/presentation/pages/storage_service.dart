@@ -4,7 +4,7 @@ import 'dart:convert';
 
 class StorageService {
   // Thay PORT_CUA_BAN bằng port của Storage Service (VD: 8080 hoặc 9090)
-  static const String uploadUrl = 'http://10.0.2.2:8090/api/files/upload';
+  static const String uploadUrl = 'http://10.0.2.2:8000/api/files/upload';
 
   Future<String?> uploadImage(File imageFile) async {
     try {

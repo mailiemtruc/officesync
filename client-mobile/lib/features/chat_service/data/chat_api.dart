@@ -8,10 +8,10 @@ class ChatApi {
   // ⚠️ QUAN TRỌNG:
   // - Máy ảo Android: 10.0.2.2
   // - Máy thật: Nhập IP LAN của máy tính (VD: 192.168.1.10)
-  static const String baseUrl = 'http://10.0.2.2:8092';
+  static const String baseUrl = 'http://10.0.2.2:8000';
 
   // URL Socket (không cần /websocket ở cuối nếu cấu hình Spring Boot là /ws)
-  static const String wsUrl = 'ws://10.0.2.2:8092/ws/websocket';
+  static const String wsUrl = 'ws://10.0.2.2:8000/ws/websocket';
   final _storage = const FlutterSecureStorage();
 
   // Helper lấy Header chứa Token

@@ -34,8 +34,8 @@ class NotificationService {
   final _requestDataSource = RequestRemoteDataSource();
 
   final String _backendUrl =
-      "http://10.0.2.2:8089/api/notifications/register-device";
-  final String _notiBaseUrl = "http://10.0.2.2:8089/api/notifications";
+      "http://10.0.2.2:8000/api/notifications/register-device";
+  final String _notiBaseUrl = "http://10.0.2.2:8000/api/notifications";
 
   Future<void> initNotifications(int userId) async {
     NotificationSettings settings = await _firebaseMessaging.requestPermission(

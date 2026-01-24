@@ -7,7 +7,7 @@ import 'models/comment_model.dart';
 
 class NewsfeedApi {
   // 🔴 LƯU Ý: Đổi IP nếu chạy máy thật (vd: 192.168.1.x)
-  static const String baseUrl = "http://10.0.2.2:8088/api/v1/newsfeed";
+  static const String baseUrl = "http://10.0.2.2:8000/api/v1/newsfeed";
 
   final _storage = const FlutterSecureStorage();
 
@@ -38,7 +38,7 @@ class NewsfeedApi {
       var request = http.MultipartRequest(
         'POST',
         Uri.parse(
-          'http://10.0.2.2:8090/api/files/upload',
+          'http://10.0.2.2:8000/api/files/upload',
         ), // URL của Storage Service
       );
       request.files.add(await http.MultipartFile.fromPath('file', file.path));

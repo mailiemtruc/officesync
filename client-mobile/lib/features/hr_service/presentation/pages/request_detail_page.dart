@@ -35,7 +35,7 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
   dynamic _unsubscribeFn;
 
   // [SỬA] Định nghĩa URL HR Service chuẩn (Raw WebSocket)
-  final String _hrSocketUrl = 'ws://10.0.2.2:8081/ws-hr';
+  final String _hrSocketUrl = 'ws://10.0.2.2:8000/ws-hr';
 
   @override
   void initState() {
