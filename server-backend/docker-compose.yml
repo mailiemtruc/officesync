@@ -99,7 +99,7 @@ services:
       - "8000:8000" 
     environment:
       - SERVER_PORT=8000
-      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://discovery-service:8761/eureka/
+      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://admin:OfficeSync2026@discovery-service:8761/eureka/
     depends_on:
       discovery-service:
         condition: service_healthy # Chỉ chạy Gateway khi Discovery đã khỏe
@@ -125,7 +125,7 @@ services:
       - SPRING_RABBITMQ_PASSWORD=${RABBITMQ_PASS}
       - SPRING_DATA_REDIS_HOST=redis
 
-      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://discovery-service:8761/eureka/
+      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://admin:OfficeSync2026@discovery-service:8761/eureka/
       - JWT_SECRET=OfficeSync_Super_Secure_Secret_Key_For_Enterprise_Level_Security_Version_2025_Longer_Is_Better
     depends_on:
       mysql-db:
@@ -158,7 +158,7 @@ services:
       - SPRING_RABBITMQ_PASSWORD=${RABBITMQ_PASS}
       - SPRING_DATA_REDIS_HOST=redis
 
-      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://discovery-service:8761/eureka/
+      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://admin:OfficeSync2026@discovery-service:8761/eureka/
       - JWT_SECRET=OfficeSync_Super_Secure_Secret_Key_For_Enterprise_Level_Security_Version_2025_Longer_Is_Better
     depends_on:
       mysql-db:
@@ -191,7 +191,7 @@ services:
       - SPRING_RABBITMQ_PASSWORD=${RABBITMQ_PASS}
       - SPRING_DATA_REDIS_HOST=redis
 
-      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://discovery-service:8761/eureka/
+      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://admin:OfficeSync2026@discovery-service:8761/eureka/
       - JWT_SECRET=OfficeSync_Super_Secure_Secret_Key_For_Enterprise_Level_Security_Version_2025_Longer_Is_Better
     depends_on:
       mysql-db:
@@ -268,7 +268,7 @@ services:
       - SPRING_RABBITMQ_PASSWORD=${RABBITMQ_PASS}
       - SPRING_DATA_REDIS_HOST=redis
 
-      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://discovery-service:8761/eureka/
+      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://admin:OfficeSync2026@discovery-service:8761/eureka/
       
       - JWT_SECRET=OfficeSync_Super_Secure_Secret_Key_For_Enterprise_Level_Security_Version_2025_Longer_Is_Better
     depends_on:
@@ -301,7 +301,7 @@ services:
       - SPRING_DATA_REDIS_HOST=redis
       - GOOGLE_APPLICATION_CREDENTIALS=${FIREBASE_KEY_PATH}
 
-      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://discovery-service:8761/eureka/
+      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://admin:OfficeSync2026@discovery-service:8761/eureka/
       - JWT_SECRET=OfficeSync_Super_Secure_Secret_Key_For_Enterprise_Level_Security_Version_2025_Longer_Is_Better
     depends_on:
       mysql-db:
@@ -360,7 +360,7 @@ services:
       - SPRING_RABBITMQ_PASSWORD=${RABBITMQ_PASS}
       - SPRING_DATA_REDIS_HOST=redis
 
-      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://discovery-service:8761/eureka/
+      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://admin:OfficeSync2026@discovery-service:8761/eureka/
       - JWT_SECRET=OfficeSync_Super_Secure_Secret_Key_For_Enterprise_Level_Security_Version_2025_Longer_Is_Better
     depends_on:
       mysql-db:
@@ -391,7 +391,7 @@ services:
       - SPRING_DATASOURCE_USERNAME=root
       - SPRING_DATASOURCE_PASSWORD=${DB_ROOT_PASSWORD}
       # --- KẾT NỐI DISCOVERY SERVICE ---
-      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://discovery-service:8761/eureka/
+      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://admin:OfficeSync2026@discovery-service:8761/eureka/
       # --- MESSAGE BROKER & CACHE ---
       - SPRING_RABBITMQ_HOST=rabbitmq
       - SPRING_RABBITMQ_USERNAME=${RABBITMQ_USER}
@@ -423,7 +423,6 @@ services:
     environment:
       - SERVER_PORT=8761
     healthcheck:
-      # ĐÃ SỬA: Dùng wget thay vì curl
       test:
         [
           "CMD",
@@ -431,6 +430,8 @@ services:
           "--no-verbose",
           "--tries=1",
           "--spider",
+          "--header",
+          "Authorization: Basic YWRtaW46T2ZmaWNlU3luYzIwMjY=",
           "http://localhost:8761/actuator/health",
         ]
       interval: 30s
