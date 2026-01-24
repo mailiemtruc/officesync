@@ -11,14 +11,13 @@ import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
-import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
+// Bỏ import ServletUriComponentsBuilder vì không dùng nữa
 
 @Service
 public class FileStorageService {
 
     private final Path fileStorageLocation;
 
-    // Constructor: Khởi tạo thư mục lưu trữ
     public FileStorageService() {
         this.fileStorageLocation = Paths.get("img").toAbsolutePath().normalize();
         try {
@@ -28,7 +27,6 @@ public class FileStorageService {
         }
     }
 
-    // Hàm xử lý chính: Lưu file và trả về URL
     public String storeFile(MultipartFile file) {
         try {
             // 1. Làm sạch tên file
@@ -41,18 +39,15 @@ public class FileStorageService {
             Path targetLocation = this.fileStorageLocation.resolve(uniqueFileName);
             Files.copy(file.getInputStream(), targetLocation, StandardCopyOption.REPLACE_EXISTING);
 
-            // 4. Tạo đường dẫn URL
-            return ServletUriComponentsBuilder.fromCurrentContextPath()
-                    .path("/img/")
-                    .path(uniqueFileName)
-                    .toUriString();
+            // 🔴 4. [SỬA ĐOẠN NÀY] Trả về link cứng trỏ vào Gateway (Port 8000)
+            // Lưu ý: Đây là hardcode, chỉ dùng tốt cho dev/test trên máy tính
+            return "http://localhost:8000/img/" + uniqueFileName;
 
         } catch (IOException ex) {
             throw new RuntimeException("Could not upload file: " + ex.getMessage());
         }
     }
 
-    // [MỚI] Hàm xóa file
     public void deleteFile(String fileName) {
         try {
             Path filePath = this.fileStorageLocation.resolve(fileName).normalize();
