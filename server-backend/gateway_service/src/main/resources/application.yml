@@ -81,6 +81,12 @@ spring:
           uri: lb://STORAGE-SERVICE
           predicates:
             - Path=/api/files/**, /img/**
+
+        # 10. TASK SERVICE
+        - id: task-service
+          uri: lb://TASK-SERVICE # Tên service in hoa (đăng ký trên Eureka)
+          predicates:
+            - Path=/api/tasks/**, /ws-task/**
 # Cấu hình Eureka Client (Nằm sát lề trái)
 eureka:
   client:

@@ -344,10 +344,15 @@ services:
       - SPRING_RABBITMQ_PORT=5672
       - SPRING_RABBITMQ_USERNAME=${RABBITMQ_USER}
       - SPRING_RABBITMQ_PASSWORD=${RABBITMQ_PASS}
+
+      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://admin:OfficeSync2026@discovery-service:8761/eureka/
+      - EUREKA_INSTANCE_PREFER_IP_ADDRESS=true
     depends_on:
       mysql-db:
         condition: service_healthy
       rabbitmq:
+        condition: service_healthy
+      discovery-service:
         condition: service_healthy
     networks:
       - officesync_net
