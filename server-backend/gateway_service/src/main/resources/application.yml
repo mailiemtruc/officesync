@@ -62,13 +62,19 @@ spring:
         - id: communication-service
           uri: lb://COMMUNICATION-SERVICE
           predicates:
-            - Path=/api/v1/newsfeed/**, /api/notifications/**, /ws-comm/**
+            - Path=/api/v1/newsfeed/**, /ws-comm/**
 
         # 7. HR SERVICE
         - id: hr-service
           uri: lb://HR-SERVICE
           predicates:
             - Path=/api/hr/**, /api/employees/**, /api/departments/**, /api/requests/**,/ws-hr/**
+
+        # 8. NOTIFICATION SERVICE
+        - id: notification-service
+          uri: lb://NOTIFICATION-SERVICE
+          predicates:
+            - Path=/api/notifications/**
 # Cấu hình Eureka Client (Nằm sát lề trái)
 eureka:
   client:

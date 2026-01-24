@@ -31,6 +31,8 @@ public class SecurityConfig {
             .csrf(csrf -> csrf.disable())
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
+
+                .requestMatchers("/v3/api-docs/**", "/swagger-ui/**").permitAll()
                 // 1. Cho phép API đăng nhập/đăng ký (Đã có)
                 .requestMatchers("/api/auth/**").permitAll()
                 

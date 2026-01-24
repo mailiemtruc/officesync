@@ -1,15 +1,14 @@
-package com.officesync.note_service.config;
+package com.officesync.notification_service.config;
 
-import com.officesync.note_service.security.JwtAuthenticationFilter; // Nhớ import filter
+// ✅ Import filter từ package security
+import com.officesync.notification_service.security.JwtAuthenticationFilter; 
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
@@ -21,21 +20,20 @@ public class SecurityConfig {
     private JwtAuthenticationFilter jwtAuthenticationFilter;
 
     @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
-    }
-
-    @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-            .csrf(AbstractHttpConfigurer::disable)
-            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .csrf(csrf -> csrf.disable()) // Tắt CSRF để Mobile/Postman gọi được
+            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)) // Không dùng Session
             .authorizeHttpRequests(auth -> auth
+                // 1. Cho phép Docs/Swagger
                 .requestMatchers("/v3/api-docs/**", "/swagger-ui/**").permitAll()
-                // ✅ CHỈ CHO PHÉP người có Token hợp lệ gọi API ghi chú
-                .anyRequest().authenticated() 
+
+                .requestMatchers("/api/notifications/**").authenticated()
+                
+                // 2. Các API thông báo bắt buộc phải có Token hợp lệ
+                .anyRequest().authenticated()
             )
-            // Thêm "người gác cổng" JWT vào trước
+            // 3. Thêm bộ lọc JWT vào trước bộ lọc xác thực mặc định của Spring
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
             
         return http.build();

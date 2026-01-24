@@ -126,6 +126,7 @@ services:
       - SPRING_DATA_REDIS_HOST=redis
 
       - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://discovery-service:8761/eureka/
+      - JWT_SECRET=OfficeSync_Super_Secure_Secret_Key_For_Enterprise_Level_Security_Version_2025_Longer_Is_Better
     depends_on:
       mysql-db:
         condition: service_healthy
@@ -158,6 +159,7 @@ services:
       - SPRING_DATA_REDIS_HOST=redis
 
       - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://discovery-service:8761/eureka/
+      - JWT_SECRET=OfficeSync_Super_Secure_Secret_Key_For_Enterprise_Level_Security_Version_2025_Longer_Is_Better
     depends_on:
       mysql-db:
         condition: service_healthy
@@ -190,6 +192,7 @@ services:
       - SPRING_DATA_REDIS_HOST=redis
 
       - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://discovery-service:8761/eureka/
+      - JWT_SECRET=OfficeSync_Super_Secure_Secret_Key_For_Enterprise_Level_Security_Version_2025_Longer_Is_Better
     depends_on:
       mysql-db:
         condition: service_healthy
@@ -297,10 +300,15 @@ services:
       - SPRING_RABBITMQ_HOST=rabbitmq
       - SPRING_DATA_REDIS_HOST=redis
       - GOOGLE_APPLICATION_CREDENTIALS=${FIREBASE_KEY_PATH}
+
+      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://discovery-service:8761/eureka/
+      - JWT_SECRET=OfficeSync_Super_Secure_Secret_Key_For_Enterprise_Level_Security_Version_2025_Longer_Is_Better
     depends_on:
       mysql-db:
         condition: service_healthy
       rabbitmq:
+        condition: service_healthy
+      discovery-service:
         condition: service_healthy
     volumes:
       - ./notification_service/src/main/resources/service-account.json:/app/service-account.json
