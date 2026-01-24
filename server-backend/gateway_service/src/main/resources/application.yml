@@ -64,6 +64,11 @@ spring:
           predicates:
             - Path=/api/v1/newsfeed/**, /api/notifications/**, /ws-comm/**
 
+        # 7. HR SERVICE
+        - id: hr-service
+          uri: lb://HR-SERVICE
+          predicates:
+            - Path=/api/hr/**, /api/employees/**, /api/departments/**, /api/requests/**,/ws-hr/**
 # Cấu hình Eureka Client (Nằm sát lề trái)
 eureka:
   client:
