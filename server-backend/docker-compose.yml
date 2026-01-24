@@ -100,6 +100,7 @@ services:
     environment:
       - SERVER_PORT=8000
       - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://admin:OfficeSync2026@discovery-service:8761/eureka/
+      - JWT_SECRET=OfficeSync_Super_Secure_Secret_Key_For_Enterprise_Level_Security_Version_2025_Longer_Is_Better
     depends_on:
       discovery-service:
         condition: service_healthy # Chỉ chạy Gateway khi Discovery đã khỏe

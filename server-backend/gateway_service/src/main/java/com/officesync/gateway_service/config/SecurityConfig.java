@@ -8,8 +8,10 @@ import org.springframework.security.config.web.server.ServerHttpSecurity;
 import org.springframework.security.oauth2.jwt.NimbusReactiveJwtDecoder;
 import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
 import org.springframework.security.web.server.SecurityWebFilterChain;
+import org.springframework.security.oauth2.jose.jws.MacAlgorithm; // 👈 Nhớ import cái này
 
 import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets; // 👈 Nhớ import cái này
 
 import static org.springframework.security.config.Customizer.withDefaults;
 
@@ -35,17 +37,23 @@ public class SecurityConfig {
                 // 3. Các request khác bắt buộc phải có Token hợp lệ
                 .anyExchange().authenticated()
             )
-            // Cấu hình Gateway thành Resource Server để kiểm tra JWT
             .oauth2ResourceServer(oauth2 -> oauth2.jwt(withDefaults()));
 
         return http.build();
     }
 
-    // ✅ THÊM BEAN NÀY: Để Gateway tự giải mã JWT bằng Secret Key thủ công
+    // ✅ ĐÃ SỬA: Đồng bộ Encoding và Thuật toán với Core Service
     @Bean
     public ReactiveJwtDecoder jwtDecoder() {
-        byte[] keyBytes = jwtSecret.getBytes();
-        SecretKeySpec spec = new SecretKeySpec(keyBytes, "HmacSHA256");
-        return NimbusReactiveJwtDecoder.withSecretKey(spec).build();
+        // 1. Dùng UTF_8 để đồng bộ với Core Service
+        byte[] keyBytes = jwtSecret.getBytes(StandardCharsets.UTF_8);
+        
+        // 2. Tạo SecretKeySpec
+        SecretKeySpec spec = new SecretKeySpec(keyBytes, "HmacSHA512");
+        
+        // 3. Cấu hình Decoder đúng chuẩn WebFlux
+        return NimbusReactiveJwtDecoder.withSecretKey(spec)
+                .macAlgorithm(MacAlgorithm.HS512) // Chỉ định thuật toán 512
+                .build();
     }
 }
