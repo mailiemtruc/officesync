@@ -265,34 +265,34 @@ Quy trình chuẩn để khởi chạy hệ thống (Backend & Mobile):
 
 - Bước 4 - Cài đặt ứng dụng: Build ứng dụng lên thiết bị di động thực tế và cấu hình kết nối tới Gateway (Port 8000).
 
-**Hướng dẫn sử dụng**
+**Hướng Dẫn Sử Dụng**
 
-1. Quản trị & Truy cập
+**1. Quản trị & Truy cập**
 
-Đăng nhập: Truy cập bằng tài khoản email doanh nghiệp được cấp.
+- Đăng nhập: Truy cập bằng tài khoản email doanh nghiệp được cấp.
 
-Phân quyền: Hệ thống tự động hiển thị tính năng theo vai trò (Admin, Manager, Staff).
+- Phân quyền: Hệ thống tự động hiển thị tính năng theo vai trò (Admin, Manager, Staff).
 
-2. Nhân sự & Chấm công
+**2. Nhân sự & Chấm công**
 
-Chấm công: Thực hiện Check-in/Check-out trên điện thoại (Xác thực GPS/WiFi).
+- Chấm công: Thực hiện Check-in/Check-out trên điện thoại (Xác thực GPS/WiFi).
 
-Nghỉ phép: Tạo đơn nghỉ và nhận kết quả phê duyệt trực tuyến.
+- Nghỉ phép: Tạo đơn nghỉ và nhận kết quả phê duyệt trực tuyến.
 
-3. Quản lý công việc
+**3. Quản lý công việc**
 
-Giao việc: Tạo nhiệm vụ mới, gán người phụ trách và đặt hạn hoàn thành.
+- Giao việc: Tạo nhiệm vụ mới, gán người phụ trách và đặt hạn hoàn thành.
 
-Tiến độ: Cập nhật trạng thái công việc (Chưa làm -> Đang làm -> Hoàn thành).
+- Tiến độ: Cập nhật trạng thái công việc (Chưa làm -> Đang làm -> Hoàn thành).
 
-4. Truyền thông nội bộ
+**4. Truyền thông nội bộ**
 
-Bảng tin: Xem thông báo công ty, tương tác (Like/Comment) tin tức.
+- Bảng tin: Xem thông báo công ty, tương tác (Like/Comment) tin tức.
 
-Chat: Nhắn tin trao đổi công việc cá nhân hoặc theo nhóm (Realtime).
+- Chat: Nhắn tin trao đổi công việc cá nhân hoặc theo nhóm (Realtime).
 
-5. Tiện ích thông minh (AI)
+**5. Tiện ích thông minh (AI)**
 
-Trợ lý ảo: Tra cứu thông tin, hỏi đáp nhanh với Chatbot.
+- Trợ lý ảo: Tra cứu thông tin, hỏi đáp nhanh với Chatbot.
 
-Ghi chú: Tạo ghi chú nhanh bằng giọng nói (Voice-to-Text) thay vì gõ phím.
+- Ghi chú: Tạo ghi chú nhanh bằng giọng nói (Voice-to-Text) thay vì gõ phím.
