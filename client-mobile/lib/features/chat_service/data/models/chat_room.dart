@@ -1,9 +1,11 @@
+// File: chat_room.dart
+
 class ChatRoom {
   final int id;
   final String roomName;
-  final String type; // PRIVATE, GROUP
+  final String type;
   final String? avatarUrl;
-  final String updatedAt;
+  final String updatedAt; // 👈 Cái này cần được update
 
   ChatRoom({
     required this.id,
@@ -16,11 +18,27 @@ class ChatRoom {
   factory ChatRoom.fromJson(Map<String, dynamic> json) {
     return ChatRoom(
       id: json['id'],
-      // Xử lý null safety: Nếu tên phòng null thì hiển thị tạm
       roomName: json['roomName'] ?? "Cuộc hội thoại",
       type: json['type'] ?? "PRIVATE",
       avatarUrl: json['roomAvatarUrl'],
       updatedAt: json['updatedAt'] ?? "",
+    );
+  }
+
+  // ✅ [THÊM MỚI] Hàm này giúp tạo ra bản sao mới với thời gian mới
+  ChatRoom copyWith({
+    String? updatedAt,
+    String?
+    lastMessage, // Sau này bạn có thể muốn hiện cả nội dung tin nhắn ngắn
+  }) {
+    return ChatRoom(
+      id: this.id,
+      roomName: this.roomName,
+      type: this.type,
+      avatarUrl: this.avatarUrl,
+      updatedAt:
+          updatedAt ??
+          this.updatedAt, // Nếu có giờ mới thì lấy, không thì giữ cũ
     );
   }
 }

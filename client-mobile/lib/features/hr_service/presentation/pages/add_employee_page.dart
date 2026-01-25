@@ -379,24 +379,43 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
       }
     } catch (e) {
       if (mounted) {
-        String errorMessage = e.toString();
-        if (errorMessage.contains("Server Error:")) {
+        // 1. Loại bỏ prefix "Exception: " mặc định của Dart
+        String errorMessage = e.toString().replaceAll("Exception: ", "");
+
+        // 2. Tìm xem trong lỗi có chứa chuỗi JSON không (bắt đầu bằng { và kết thúc bằng })
+        final int jsonStartIndex = errorMessage.indexOf('{');
+        final int jsonEndIndex = errorMessage.lastIndexOf('}');
+
+        if (jsonStartIndex != -1 &&
+            jsonEndIndex != -1 &&
+            jsonEndIndex > jsonStartIndex) {
           try {
-            final String jsonPart = errorMessage
-                .split("Server Error:")[1]
-                .trim();
-            final Map<String, dynamic> errorMap = jsonDecode(jsonPart);
-            if (errorMap.containsKey('message')) {
+            // 3. Cắt chuỗi JSON ra: {"message":"Email ... exists!"}
+            final String jsonString = errorMessage.substring(
+              jsonStartIndex,
+              jsonEndIndex + 1,
+            );
+
+            // 4. Parse JSON
+            final Map<String, dynamic> errorMap = jsonDecode(jsonString);
+
+            // 5. Nếu có key 'message', lấy nó làm thông báo lỗi chính
+            if (errorMap.containsKey('message') &&
+                errorMap['message'] != null) {
               errorMessage = errorMap['message'];
             }
           } catch (_) {
-            errorMessage = errorMessage
-                .replaceAll("Exception: ", "")
-                .replaceAll("Server Error: ", "");
+            // Nếu cắt chuỗi hoặc parse JSON lỗi, giữ nguyên message gốc (đã xóa Exception:)
           }
-        } else {
-          errorMessage = errorMessage.replaceAll("Exception: ", "");
         }
+
+        if (errorMessage.contains("Failed to create employee:")) {
+          errorMessage = errorMessage
+              .replaceAll("Failed to create employee:", "")
+              .trim();
+        }
+
+        // Hiển thị message đã được làm sạch
         _showErrorSnackBar(errorMessage);
       }
     } finally {

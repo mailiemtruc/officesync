@@ -1,36 +1,52 @@
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart'; // ✅ 1. Import thêm cái này
 
 class StorageService {
-  // Thay PORT_CUA_BAN bằng port của Storage Service (VD: 8080 hoặc 9090)
+  // Thay IP nếu cần (Máy ảo: 10.0.2.2, Máy thật: IP LAN)
   static const String uploadUrl = 'http://10.0.2.2:8000/api/files/upload';
+
+  // ✅ 2. Khởi tạo Storage để lấy Token
+  final _storage = const FlutterSecureStorage();
 
   Future<String?> uploadImage(File imageFile) async {
     try {
-      // 1. Tạo request Multipart (để gửi file)
+      print("🚀 [Storage] Đang upload ảnh: ${imageFile.path}");
+
+      // ✅ 3. Lấy Token
+      String? token = await _storage.read(key: 'auth_token');
+      if (token == null) {
+        print("❌ [Storage] Lỗi: Chưa có Token!");
+        return null;
+      }
+
       var request = http.MultipartRequest('POST', Uri.parse(uploadUrl));
 
-      // 2. Đính kèm file vào request
+      // ✅ 4. Gắn Token vào Header (QUAN TRỌNG NHẤT)
+      request.headers.addAll({'Authorization': 'Bearer $token'});
+
+      // Đính kèm file
       request.files.add(
         await http.MultipartFile.fromPath('file', imageFile.path),
       );
 
-      // 3. Gửi đi
+      // Gửi đi
       var streamedResponse = await request.send();
       var response = await http.Response.fromStream(streamedResponse);
 
+      print("👉 [Storage] Status Code: ${response.statusCode}");
+
       if (response.statusCode == 200) {
-        // 4. Lấy URL trả về
-        // Server trả về JSON: {"url": "http://..."}
         final data = json.decode(response.body);
+        print("✅ [Storage] Upload thành công: ${data['url']}");
         return data['url'];
       } else {
-        print("❌ Upload lỗi: ${response.body}");
+        print("❌ [Storage] Upload thất bại: ${response.body}");
         return null;
       }
     } catch (e) {
-      print("❌ Lỗi kết nối Storage: $e");
+      print("❌ [Storage] Exception: $e");
       return null;
     }
   }

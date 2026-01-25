@@ -2,6 +2,10 @@ server:
   port: 8000
 
 spring:
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 20MB
   application:
     name: gateway-service
 

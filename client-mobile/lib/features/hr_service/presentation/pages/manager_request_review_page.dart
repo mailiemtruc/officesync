@@ -44,14 +44,14 @@ class _ManagerRequestReviewPageState extends State<ManagerRequestReviewPage> {
     _initListener();
   }
 
-  void _initListener() {
+  void _initListener() async {
     final topic = '/topic/request/${widget.request.id}';
 
     // URL chuẩn của HR Service
     final String hrSocketUrl = 'ws://10.0.2.2:8000/ws-hr';
 
     // [ĐÃ SỬA] Thêm tham số forceUrl
-    _unsubscribeFn = WebSocketService().subscribe(
+    _unsubscribeFn = await WebSocketService().subscribe(
       topic,
       (data) {
         if (!mounted) return;

@@ -47,12 +47,10 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
     _connectWebSocket();
   }
 
-  void _connectWebSocket() {
+  void _connectWebSocket() async {
     final topic = '/topic/request/${widget.request.id}';
 
-    // [LOGIC MỚI] Dùng WebSocketService chung
-    // forceUrl: Đảm bảo kết nối đúng tới HR Service (cổng 8081)
-    _unsubscribeFn = WebSocketService().subscribe(
+    _unsubscribeFn = await WebSocketService().subscribe(
       topic,
       (data) {
         if (!mounted) return;
@@ -247,20 +245,39 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
 
     final status = _currentRequest.status;
 
-    // Format thời gian gửi đơn
+    // --- HÀM HỖ TRỢ FIX GIỜ UTC ---
+    // Giúp xử lý trường hợp DateTime bị hiểu nhầm là Local
+    DateTime fixToLocal(DateTime date) {
+      if (date.isUtc) return date.toLocal();
+      // Tạo lại DateTime với zone là UTC từ các giá trị ngày tháng hiện tại
+      // Sau đó mới chuyển sang Local
+      return DateTime.utc(
+        date.year,
+        date.month,
+        date.day,
+        date.hour,
+        date.minute,
+        date.second,
+      ).toLocal();
+    }
+    // -----------------------------
+
+    // Xử lý thời gian Submitted
     String submittedTime = 'Submitted';
     if (_currentRequest.createdAt != null) {
+      // Dùng hàm fixToLocal thay vì .toLocal() thường
       submittedTime = DateFormat(
         'HH:mm, dd/MM/yyyy',
-      ).format(_currentRequest.createdAt!);
+      ).format(fixToLocal(_currentRequest.createdAt!));
     }
 
-    // Format thời gian duyệt/xử lý
+    // Xử lý thời gian Processed
     String processedTime = 'Waiting...';
     if (_currentRequest.updatedAt != null && status != RequestStatus.PENDING) {
+      // Dùng hàm fixToLocal ở đây luôn
       processedTime = DateFormat(
         'HH:mm, dd/MM/yyyy',
-      ).format(_currentRequest.updatedAt!);
+      ).format(fixToLocal(_currentRequest.updatedAt!));
     }
 
     // Tên người duyệt
@@ -305,7 +322,7 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
       steps.add({
         'title': 'Request Approved',
         'time': processedTime,
-        'actor': 'By $actorName', // [HIỆN TÊN NGƯỜI DUYỆT]
+        'actor': 'By $actorName',
         'dotColor': const Color(0xFF10B981),
         'lineColor': Colors.transparent,
         'isLast': true,
@@ -315,8 +332,7 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
       steps.add({
         'title': 'Request Rejected',
         'time': processedTime,
-        'actor':
-            'By $actorName • Tap to see reason', // [HIỆN TÊN NGƯỜI TỪ CHỐI]
+        'actor': 'By $actorName • Tap to see reason',
         'dotColor': colorRed,
         'lineColor': Colors.transparent,
         'isLast': true,
@@ -337,12 +353,26 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
   }
 
   void _showRejectionDialog(BuildContext context) {
-    // Format ngày giờ duyệt
+    // --- HÀM HỖ TRỢ FIX GIỜ UTC (Copy từ workflow qua) ---
+    DateTime fixToLocal(DateTime date) {
+      if (date.isUtc) return date.toLocal();
+      return DateTime.utc(
+        date.year,
+        date.month,
+        date.day,
+        date.hour,
+        date.minute,
+        date.second,
+      ).toLocal();
+    }
+    // ----------------------------------------------------
+
+    // Format ngày giờ duyệt (Đã áp dụng fixToLocal)
     String approvedTime = '';
     if (_currentRequest.updatedAt != null) {
       approvedTime = DateFormat(
         'MMM dd, HH:mm',
-      ).format(_currentRequest.updatedAt!);
+      ).format(fixToLocal(_currentRequest.updatedAt!)); // <--- Đã sửa ở đây
     }
 
     // Tên người duyệt (hoặc mặc định Manager)
@@ -433,8 +463,6 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
                         fontSize: 14,
                         fontFamily: 'Inter',
                         fontWeight: FontWeight.w500,
-                        // [ĐÃ XÓA] decoration: TextDecoration.underline,
-                        // [ĐÃ XÓA] decorationColor: Color(0xFF334155),
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -453,7 +481,7 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
                           ),
                         ),
                         Text(
-                          approvedTime,
+                          approvedTime, // Giờ đã được fix
                           style: const TextStyle(
                             color: Color(0xFF94A3B8),
                             fontSize: 12,
@@ -879,72 +907,58 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
   }
 
   Widget _buildInfoGrid(RequestModel req) {
-    // TRƯỜNG HỢP 1: Đơn nghỉ phép (ANNUAL_LEAVE) -> Giao diện MỚI (Nét đứt)
-    if (req.type == RequestType.ANNUAL_LEAVE) {
-      final dateFormat = DateFormat('MMM dd, yyyy');
+    // Format ngày cho trường hợp Annual Leave
+    final dateFormat = DateFormat('MMM dd, yyyy');
 
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          children: [
-            // From Date
+    // Sử dụng chung 1 Container duy nhất để đồng bộ Padding và Decoration
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          // TRƯỜNG HỢP 1: Đơn nghỉ phép (ANNUAL_LEAVE)
+          if (req.type == RequestType.ANNUAL_LEAVE) ...[
             _buildDetailRow('From Date', dateFormat.format(req.startTime)),
             _buildDottedLine(),
-
-            // To Date
             _buildDetailRow('To Date', dateFormat.format(req.endTime)),
             _buildDottedLine(),
-
-            // Total Duration
             _buildDetailRow('Total Duration', req.duration, isBlue: true),
-          ],
-        ),
-      );
-    }
-    // TRƯỜNG HỢP 2: Các loại đơn khác (Overtime, Late...) -> Giao diện CŨ (Kẻ liền)
-    else {
-      return Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
+          ]
+          // TRƯỜNG HỢP 2: Các loại đơn khác (Overtime, Late, WFH...)
+          // Giữ nguyên logic lấy dữ liệu, chỉ thay đổi UI hiển thị sang _buildDetailRow và _buildDottedLine
+          else ...[
+            _buildDetailRow('Date', req.dateRange.split('•')[0].trim()),
+
+            _buildDottedLine(), // Dùng nét đứt thay vì Divider
+
+            _buildDetailRow(
+              'Duration',
+              req.duration,
+              isBlue: true, // Highlight màu xanh cho Duration để đồng bộ
             ),
-          ],
-        ),
-        child: Column(
-          children: [
-            _buildSimpleInfoRow('Date', req.dateRange.split('•')[0].trim()),
-            const Divider(height: 24, color: Color(0xFFF1F5F9)),
 
-            _buildSimpleInfoRow('Duration', req.duration),
-            const Divider(height: 24, color: Color(0xFFF1F5F9)),
+            _buildDottedLine(), // Dùng nét đứt thay vì Divider
 
-            _buildSimpleInfoRow(
+            _buildDetailRow(
               'Time',
               req.dateRange.contains('•')
                   ? req.dateRange.split('•')[1].trim()
                   : "N/A",
             ),
           ],
-        ),
-      );
-    }
+        ],
+      ),
+    );
   }
 
   // Widget hiển thị dòng chi tiết cho giao diện MỚI

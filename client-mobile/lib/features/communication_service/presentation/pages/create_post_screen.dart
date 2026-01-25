@@ -108,7 +108,17 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
             padding: const EdgeInsets.only(right: 16),
             child: TextButton(
               onPressed: _isValid
-                  ? () {
+                  ? () async {
+                      // Thêm async
+                      print("--> Bắt đầu Upload ảnh...");
+
+                      // 1. Log xem file ảnh có tồn tại không
+                      if (_selectedImage != null) {
+                        print("--> File path: ${_selectedImage!.path}");
+                        print(
+                          "--> File size: ${await _selectedImage!.length()} bytes",
+                        );
+                      }
                       widget.onPost(_contentCtrl.text, _selectedImage);
                       Navigator.pop(context);
                     }
