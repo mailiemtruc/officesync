@@ -28,25 +28,21 @@ public class FileStorageService {
     }
 
     public String storeFile(MultipartFile file) {
-        try {
-            // 1. Làm sạch tên file
-            String originalFileName = StringUtils.cleanPath(Objects.requireNonNull(file.getOriginalFilename()));
-            
-            // 2. Tạo tên file duy nhất
-            String uniqueFileName = UUID.randomUUID().toString() + "_" + originalFileName;
+    try {
+        String originalFileName = StringUtils.cleanPath(Objects.requireNonNull(file.getOriginalFilename()));
+        String uniqueFileName = UUID.randomUUID().toString() + "_" + originalFileName;
 
-            // 3. Lưu file vào ổ cứng
-            Path targetLocation = this.fileStorageLocation.resolve(uniqueFileName);
-            Files.copy(file.getInputStream(), targetLocation, StandardCopyOption.REPLACE_EXISTING);
+        Path targetLocation = this.fileStorageLocation.resolve(uniqueFileName);
+        Files.copy(file.getInputStream(), targetLocation, StandardCopyOption.REPLACE_EXISTING);
 
-            // 🔴 4. [SỬA ĐOẠN NÀY] Trả về link cứng trỏ vào Gateway (Port 8000)
-            // Lưu ý: Đây là hardcode, chỉ dùng tốt cho dev/test trên máy tính
-            return "http://localhost:8000/img/" + uniqueFileName;
+        // [SỬA ĐOẠN NÀY] 
+        // Thay localhost bằng 10.0.2.2 để Emulator hiểu được server
+        return "http://10.0.2.2:8000/img/" + uniqueFileName;
 
-        } catch (IOException ex) {
-            throw new RuntimeException("Could not upload file: " + ex.getMessage());
-        }
+    } catch (IOException ex) {
+        throw new RuntimeException("Could not upload file: " + ex.getMessage());
     }
+}
 
     public void deleteFile(String fileName) {
         try {

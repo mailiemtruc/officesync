@@ -74,7 +74,7 @@ class RequestRemoteDataSource {
       var request = http.MultipartRequest('POST', Uri.parse(storageUrl));
 
       // [FIX] Thêm token vào header của MultipartRequest
-      String? token = await _storage.read(key: 'accessToken');
+      String? token = await _storage.read(key: 'auth_token');
       if (token != null) {
         request.headers['Authorization'] = 'Bearer $token';
       }

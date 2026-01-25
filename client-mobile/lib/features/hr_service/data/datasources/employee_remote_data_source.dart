@@ -216,7 +216,7 @@ class EmployeeRemoteDataSource {
       print("--> Fetching Members for Dept ID: $departmentId");
 
       // [FIX] Cần thêm Token để bảo mật
-      String? token = await _storage.read(key: 'accessToken');
+      String? token = await _storage.read(key: 'auth_token');
       final headers = {
         "Content-Type": "application/json",
         "Authorization": "Bearer $token",
@@ -268,7 +268,7 @@ class EmployeeRemoteDataSource {
       var request = http.MultipartRequest('POST', url);
 
       // [MỚI] Thêm Token vào MultipartRequest
-      String? token = await _storage.read(key: 'accessToken');
+      String? token = await _storage.read(key: 'auth_token');
       if (token != null) {
         request.headers['Authorization'] = 'Bearer $token';
       }
@@ -294,7 +294,7 @@ class EmployeeRemoteDataSource {
   Future<bool> checkHrPermission(int userId) async {
     try {
       // [FIX] Thêm token vào Dio Options
-      String? token = await _storage.read(key: 'accessToken');
+      String? token = await _storage.read(key: 'auth_token');
 
       final response = await _apiClient.get(
         '$_baseUrl/check-hr-permission',
