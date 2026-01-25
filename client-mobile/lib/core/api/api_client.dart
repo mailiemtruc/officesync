@@ -134,11 +134,18 @@ class ApiClient {
   // --- STORAGE SERVICE METHODS ---
   Future<String> uploadImageToStorage(String filePath) async {
     try {
+      // 1. Lấy Token từ storage (GIỐNG CÁC HÀM GET/POST KHÁC)
+      String? token = await _storage.read(key: 'auth_token');
+
       final storageDio = Dio(
         BaseOptions(
           baseUrl: storageUrl,
           connectTimeout: const Duration(seconds: 60),
-          headers: {'Content-Type': 'multipart/form-data'},
+          headers: {
+            'Content-Type': 'multipart/form-data',
+            // 2. QUAN TRỌNG: Gắn Token vào Header nếu có
+            if (token != null) 'Authorization': 'Bearer $token',
+          },
         ),
       );
 
@@ -158,6 +165,7 @@ class ApiClient {
 
       throw Exception("Invalid response from Storage Service");
     } on DioException catch (e) {
+      // Sử dụng hàm handle error chung để bắt lỗi 401/403 nếu có
       throw Exception(_handleError(e));
     }
   }
