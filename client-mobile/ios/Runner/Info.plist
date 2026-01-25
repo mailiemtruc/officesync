@@ -41,9 +41,35 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+	<string>https</string>
+	<string>http</string>
+	<string>tel</string>
+	<string>mailto</string>
+	</array>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>OfficeSync cần quyền truy cập vị trí để chấm công.</string>
+
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>OfficeSync cần truy cập ảnh để bạn cập nhật ảnh đại diện hoặc gửi tài liệu.</string>
+
+	<key>NSCameraUsageDescription</key>
+	<string>OfficeSync cần quyền truy cập camera để chụp ảnh hồ sơ và tài liệu.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>OfficeSync cần quyền truy cập micro để thực hiện tính năng chuyển giọng nói thành văn bản.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>OfficeSync cần quyền nhận dạng giọng nói để hỗ trợ nhập liệu nhanh.</string>
+
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
 </dict>
 </plist>
