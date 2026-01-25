@@ -109,16 +109,21 @@ class _ChatScreenState extends State<ChatScreen> {
               ? data['roomId']
               : int.tryParse(data['roomId'].toString()) ?? 0;
 
+          // Lấy thời gian từ tin nhắn vừa nhận (hoặc lấy giờ hiện tại luôn cho nhanh)
+          String newTime =
+              data['timestamp'] ?? DateTime.now().toIso8601String();
+
           int index = _allRooms.indexWhere((r) => r.id == roomId);
           if (index != -1) {
-            // Có rồi -> Bốc lên đầu
             ChatRoom existingRoom = _allRooms[index];
+
+            // ✅ [SỬA ĐOẠN NÀY] Tạo room mới với thời gian mới nhất
+            ChatRoom updatedRoom = existingRoom.copyWith(updatedAt: newTime);
+
             _allRooms.removeAt(index);
-            _allRooms.insert(0, existingRoom);
+            _allRooms.insert(0, updatedRoom); // Đẩy room ĐÃ UPDATE lên đầu
           } else {
-            // Có tin nhắn từ phòng lạ (chưa có trong list) -> Load lại cho chắc
             _loadData();
-            return;
           }
         }
 
