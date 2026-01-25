@@ -275,10 +275,21 @@ class _NewsfeedScreenState extends State<NewsfeedScreen> {
                           builder: (context) => CreatePostScreen(
                             myAvatarUrl: _currentAvatar,
                             onPost: (content, imageFile) async {
-                              // Logic đăng bài giữ nguyên
                               String imageUrl = "";
                               if (imageFile != null) {
+                                print("--> Đang gọi API Upload...");
                                 imageUrl = await _api.uploadImage(imageFile);
+                                print(
+                                  "--> KẾT QUẢ UPLOAD: '$imageUrl'",
+                                ); // 👈 QUAN TRỌNG: Xem nó in ra cái gì?
+                              }
+
+                              if (imageUrl.isEmpty && imageFile != null) {
+                                print(
+                                  "❌ LỖI: Upload thất bại, không tạo bài viết!",
+                                );
+                                // Có thể hiện thông báo lỗi cho user tại đây
+                                return;
                               }
                               await _api.createPost(
                                 content,

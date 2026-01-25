@@ -35,23 +35,40 @@ class NewsfeedApi {
   // 1. ✅ THÊM HÀM UPLOAD ẢNH (Mới)
   Future<String> uploadImage(File file) async {
     try {
+      print("--> Bắt đầu gửi request upload...");
+
+      // 1. Lấy Token từ bộ nhớ (Giống các hàm khác)
+      final token = await _storage.read(key: 'auth_token') ?? "";
+
       var request = http.MultipartRequest(
         'POST',
-        Uri.parse(
-          'http://10.0.2.2:8000/api/files/upload',
-        ), // URL của Storage Service
+        Uri.parse('http://10.0.2.2:8000/api/files/upload'),
       );
+
+      // 2. ✅ THÊM DÒNG NÀY: Gắn Token vào Header
+      request.headers.addAll({
+        "Authorization": "Bearer $token",
+        // Không cần Content-Type, thư viện http tự lo vụ multipart
+      });
+
+      // 3. Add file
       request.files.add(await http.MultipartFile.fromPath('file', file.path));
 
-      var response = await request.send();
-      var responseData = await http.Response.fromStream(response);
+      // 4. Gửi request
+      var streamResponse = await request.send();
+      var response = await http.Response.fromStream(streamResponse);
+
+      print("--> Status Code: ${response.statusCode}");
+      print("--> Body Server trả về: ${response.body}");
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(responseData.body);
-        return data['url'] ?? ""; // Trả về link ảnh từ server
+        final data = jsonDecode(response.body);
+        return data['url'] ?? "";
+      } else {
+        print("❌ Upload thất bại với mã lỗi: ${response.statusCode}");
       }
     } catch (e) {
-      print("Upload error: $e");
+      print("❌ Upload error (Exception): $e");
     }
     return "";
   }

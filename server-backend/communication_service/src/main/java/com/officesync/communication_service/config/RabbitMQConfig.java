@@ -6,6 +6,7 @@ import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import com.fasterxml.jackson.databind.ObjectMapper; // <--- Nhớ import dòng này
+import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule; // <--- Import để parse ngày tháng (LocalDate)
 
 @Configuration
@@ -41,6 +42,7 @@ public class RabbitMQConfig {
         ObjectMapper mapper = new ObjectMapper();
         // Đăng ký module để xử lý LocalDate/LocalDateTime (tránh lỗi parse ngày tháng sau này)
         mapper.registerModule(new JavaTimeModule());
+        mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
         return mapper;
     }
 }
