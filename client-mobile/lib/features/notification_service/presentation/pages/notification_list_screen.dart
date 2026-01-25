@@ -233,12 +233,19 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
     String timeStr = "";
     if (noti.createdAt.isNotEmpty) {
       try {
-        timeStr = DateFormat(
-          'HH:mm dd/MM',
-        ).format(DateTime.parse(noti.createdAt));
-      } catch (_) {}
+        // Thêm check xem chuỗi có đúng format ISO không trước khi parse
+        if (noti.createdAt.contains('T') || noti.createdAt.contains('-')) {
+          timeStr = DateFormat(
+            'HH:mm dd/MM',
+          ).format(DateTime.parse(noti.createdAt));
+        } else {
+          // Fallback nếu server trả về định dạng lạ
+          timeStr = "Mới";
+        }
+      } catch (e) {
+        print("Lỗi parse ngày: ${noti.createdAt}"); // Log để debug
+      }
     }
-
     return Dismissible(
       key: Key(noti.id.toString()),
       direction: DismissDirection.endToStart,

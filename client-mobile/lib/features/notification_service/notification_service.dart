@@ -220,11 +220,27 @@ class NotificationService {
 
   Future<void> _registerDeviceToken(int userId, String token) async {
     try {
+      // Lấy JWT từ storage (vì Gateway/Service cần xác thực)
+      String? jwt = await _storage.read(
+        key: 'auth_token',
+      ); // hoặc key đúng của bạn
+      print(
+        "👉 TOKEN ĐÃ LẤY ĐƯỢC: ${jwt != null ? jwt.substring(0, 10) + '...' : 'VẪN NULL'}",
+      );
+
+      if (jwt == null) return;
       final response = await http.post(
         Uri.parse(_backendUrl),
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $jwt', // PHẢI CÓ DÒNG NÀY
+        },
         body: jsonEncode({"userId": userId, "token": token}),
       );
+
+      print(
+        "Response nộp token: ${response.statusCode}",
+      ); // Thêm log này để debug
       if (response.statusCode == 200) {
         print("✅ Backend đã lưu Token thành công!");
       }
@@ -236,17 +252,51 @@ class NotificationService {
   Future<List<NotificationModel>> fetchNotifications(int userId) async {
     final url = Uri.parse("$_notiBaseUrl/user/$userId");
     try {
-      final response = await http.get(url);
+      // 1. Lấy Token
+      String? jwt = await _storage.read(key: 'auth_token');
+
+      // --- [DEBUG LOG] ---
+      print("============== DEBUG FETCH NOTIFICATION ==============");
+      print("1. URL: $url");
+      print("2. UserID requested: $userId");
+      if (jwt == null || jwt.isEmpty) {
+        print("❌ LỖI NGHIÊM TRỌNG: Token bị NULL hoặc Rỗng!");
+        return []; // Dừng ngay nếu không có token
+      } else {
+        // In 10 ký tự cuối của token để kiểm tra xem có bị thừa chữ 'Bearer' không
+        print("3. Token (Last 10 chars): ...${jwt.substring(jwt.length - 10)}");
+      }
+      // -------------------
+
+      // 2. Gửi request
+      final response = await http.get(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $jwt',
+        },
+      );
+
+      print("4. Response Status: ${response.statusCode}");
+
+      // 3. Xử lý kết quả
       if (response.statusCode == 200) {
+        // Decode utf8
         final List<dynamic> rawList = jsonDecode(
           utf8.decode(response.bodyBytes),
         );
+        print("✅ Thành công! Tìm thấy ${rawList.length} thông báo.");
         return rawList.map((e) => NotificationModel.fromJson(e)).toList();
+      } else {
+        // In body lỗi ra để xem Backend nói gì (Ví dụ: "Access Denied")
+        print("❌ Lỗi Server trả về (Body): ${response.body}");
+        return [];
       }
-      return [];
     } catch (e) {
-      print("❌ Lỗi tải thông báo: $e");
+      print("❌ Lỗi Exception: $e");
       return [];
+    } finally {
+      print("======================================================");
     }
   }
 

@@ -34,7 +34,8 @@ public class SecurityConfig {
                 .pathMatchers("/img/**").permitAll()
                 // 2. Mở cửa cho WebSocket
                 .pathMatchers("/ws-**", "/ws/**").permitAll()
-                
+                .pathMatchers("/api/notifications/register-device").permitAll()
+                .pathMatchers("/api/notifications/**").permitAll()
                 // 3. Các request khác bắt buộc phải có Token hợp lệ
                 .anyExchange().authenticated()
             )

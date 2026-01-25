@@ -25,17 +25,21 @@ class _PostCardState extends State<PostCard> {
     super.initState();
     _isLiked = widget.post.myReaction != null;
     _reactionCount = widget.post.reactionCount;
+    _commentCount = widget.post.commentCount;
   }
 
   @override
   void didUpdateWidget(covariant PostCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Nếu ID bài viết thay đổi (tức là cell này đang hiển thị một bài khác)
-    // thì phải reset lại trạng thái Like/Count theo bài mới đó.
-    if (widget.post.id != oldWidget.post.id) {
+
+    // Kiểm tra nếu dữ liệu từ Cha (NewsfeedScreen) truyền xuống có sự thay đổi
+    // thì phải cập nhật lại biến local (_reactionCount, _commentCount) ngay.
+    if (widget.post != oldWidget.post) {
       setState(() {
         _isLiked = widget.post.myReaction != null;
         _reactionCount = widget.post.reactionCount;
+        // 👇 Đừng quên dòng này, nãy bạn thiếu nên comment không nhảy số
+        _commentCount = widget.post.commentCount;
       });
     }
   }

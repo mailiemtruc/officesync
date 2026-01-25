@@ -71,10 +71,10 @@ public class RabbitMQConfig {
         return BindingBuilder.bind(notificationQueue).to(notificationExchange).with(NOTIFICATION_ROUTING_KEY);
     }
  
-    @Bean
-    public ObjectMapper objectMapper() {
-        return new ObjectMapper();
-    }
+    // @Bean
+    // public ObjectMapper objectMapper() {
+    //     return new ObjectMapper();
+    // }
 
     // ❌❌❌ XÓA HOẶC COMMENT ĐOẠN NÀY ĐI ❌❌❌
     // Khi xóa bean này, Spring sẽ dùng "SimpleMessageConverter" mặc định.

@@ -25,7 +25,7 @@ class NotificationModel {
       type: json['type'] ?? 'GENERAL',
       referenceId: json['referenceId'] ?? 0,
       isRead: json['isRead'] ?? false,
-      createdAt: json['createdAt'] ?? '',
+      createdAt: json['createdAt']?.toString() ?? '',
     );
   }
 

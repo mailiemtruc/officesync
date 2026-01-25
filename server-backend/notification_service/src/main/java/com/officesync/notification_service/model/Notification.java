@@ -1,5 +1,6 @@
 package com.officesync.notification_service.model;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -23,11 +24,13 @@ public class Notification {
     private Long referenceId;   // ID liên quan
     
     private boolean isRead = false; 
-
+@JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime createdAt;
 
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
+        
     }
+    
 }
