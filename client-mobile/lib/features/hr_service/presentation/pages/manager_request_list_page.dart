@@ -4,8 +4,6 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:intl/intl.dart';
 import 'dart:async';
-
-// Import các file của bạn (Giữ nguyên)
 import '../../../../core/services/websocket_service.dart';
 import '../../../../core/config/app_colors.dart';
 import '../../data/models/request_model.dart';
@@ -32,7 +30,7 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
   dynamic _unsubscribeFn;
   String? _currentCompanyId;
 
-  // [LOGIC MỚI 1] Biến lưu Role người dùng hiện tại
+  // Biến lưu Role người dùng hiện tại
   String _currentUserRole = '';
 
   List<Map<String, dynamic>> _requestList = [];
@@ -83,7 +81,7 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
     if (_currentCompanyId != null) {
       final topic = '/topic/company/$_currentCompanyId/requests';
 
-      // [SỬA LỖI TẠI ĐÂY] Thêm từ khóa 'await' vào trước WebSocketService().subscribe
+      // Thêm từ khóa 'await' vào trước WebSocketService().subscribe
       _unsubscribeFn = await WebSocketService().subscribe(topic, (data) {
         if (!mounted) return;
         print("--> Socket received update. Reloading list...");
@@ -106,7 +104,7 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
           final userMap = jsonDecode(userInfoStr);
           userId = userMap['id']?.toString();
 
-          // [LOGIC MỚI 2] Lấy Role từ token/storage
+          // Lấy Role từ token/storage
           // Nếu không có key 'role', mặc định là EMPLOYEE
           _currentUserRole = userMap['role']?.toString() ?? 'STAFF';
         } catch (e) {
@@ -174,7 +172,7 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
     }
   }
 
-  // [CẬP NHẬT] Hàm kiểm tra quyền duyệt đơn (An toàn hơn)
+  // Hàm kiểm tra quyền duyệt đơn
   bool _canReview(RequestModel req) {
     // 1. Chỉ quan tâm đơn PENDING
     if (req.status != RequestStatus.PENDING) return false;
@@ -183,9 +181,7 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
     final myRoleClean = _currentUserRole.toUpperCase().trim();
     if (myRoleClean == 'COMPANY_ADMIN') return true;
 
-    // [FIX QUAN TRỌNG] Xử lý trường hợp role bị null do lỗi backend
-    // Nếu role người gửi bị null/empty -> Mặc định coi là nguy hiểm -> Trả về FALSE (về History)
-    // Để tránh việc HR lỡ tay duyệt đơn của Manager
+    // Xử lý trường hợp role bị null do lỗi backend
     if (req.requesterRole == null || req.requesterRole!.isEmpty) {
       print(
         "--> WARNING: Request ID ${req.id} has missing Role data. Moved to History for safety.",
@@ -606,26 +602,38 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
 
   @override
   Widget build(BuildContext context) {
-    // [LOGIC MỚI 4] Lọc danh sách hiển thị dựa trên cả Status và Quyền hạn
+    // Lọc danh sách hiển thị dựa trên cả Status và Quyền hạn
     final displayList = _requestList.where((item) {
       final req = item['request'] as RequestModel;
-
-      // Sử dụng hàm _canReview để check quyền
       final bool hasPermission = _canReview(req);
 
       if (_isToReviewTab) {
-        // Tab TO REVIEW: Chỉ hiện đơn PENDING và CÓ QUYỀN DUYỆT
-        // (Đơn Manager sẽ bị loại bỏ ở đây)
         return req.status == RequestStatus.PENDING && hasPermission;
       } else {
-        // Tab HISTORY: Hiện đơn ĐÃ XỬ LÝ hoặc đơn PENDING MÀ KHÔNG CÓ QUYỀN (View only)
-        // (Đơn Manager sẽ hiện ở đây)
         return req.status != RequestStatus.PENDING ||
             (req.status == RequestStatus.PENDING && !hasPermission);
       }
     }).toList();
 
-    // [LOGIC MỚI 5] Đếm badge chỉ cho những đơn cần mình duyệt
+    // --- [ĐÃ SỬA] LOGIC SẮP XẾP TẠI ĐÂY ---
+    displayList.sort((a, b) {
+      final reqA = a['request'] as RequestModel;
+      final reqB = b['request'] as RequestModel;
+
+      final dateA = reqA.createdAt ?? reqA.startTime;
+      final dateB = reqB.createdAt ?? reqB.startTime;
+
+      if (_isToReviewTab) {
+        // Tab CHỜ DUYỆT: Cũ nhất lên đầu (ASC)
+        return dateA.compareTo(dateB);
+      } else {
+        // Tab LỊCH SỬ: Mới nhất lên đầu (DESC)
+        return dateB.compareTo(dateA);
+      }
+    });
+    // --------------------------------------
+
+    // Đếm badge
     final int pendingCount = _requestList.where((item) {
       final req = item['request'] as RequestModel;
       return req.status == RequestStatus.PENDING && _canReview(req);
@@ -944,7 +952,6 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
       ),
       child: TextField(
         controller: _searchController,
-        // [FIX] Bỏ setState ở đây
         onChanged: (val) => _onSearchChanged(val),
         decoration: InputDecoration(
           hintText: 'Search requests...',
@@ -959,7 +966,6 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
             color: const Color(0xFF757575),
             size: 20,
           ),
-          // [FIX] Dùng ValueListenableBuilder cho nút X
           suffixIcon: ValueListenableBuilder<TextEditingValue>(
             valueListenable: _searchController,
             builder: (context, value, child) {
