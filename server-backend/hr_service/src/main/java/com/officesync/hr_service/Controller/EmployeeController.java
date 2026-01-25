@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties; 
 import com.officesync.hr_service.Model.Employee; // Nhớ import List
 import com.officesync.hr_service.Model.EmployeeRole;
 import com.officesync.hr_service.Repository.EmployeeRepository;
@@ -49,6 +49,7 @@ public class EmployeeController {
     }
      
     @Data
+    @JsonIgnoreProperties(ignoreUnknown = true) // <--- THÊM DÒNG NÀY
     public static class CreateEmployeeRequest {
         private String fullName;
         private String email;
