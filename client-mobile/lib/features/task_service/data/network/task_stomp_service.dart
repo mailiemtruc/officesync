@@ -6,29 +6,19 @@ import 'package:stomp_dart_client/stomp_frame.dart';
 import '../task_session.dart';
 
 class TaskStompService {
-  StompClient? client;
+  StompClient? client; // Dùng dấu ? vì phiên bản 1.0.0 có thể khởi tạo sau
   final Function(dynamic) onTaskReceived;
 
   TaskStompService({required this.onTaskReceived});
 
   void connect() {
-    // 1. Đổi IP sang 10.0.2.2 (Dành cho Android Emulator)
+    // Địa chỉ IP máy tính chạy backend của bạn
     const String serverIp = '10.0.2.2';
-
-    // 2. Cấu hình URL
-    // LƯU Ý: Nếu API Gateway (Port 8000) của bạn đã cấu hình forward WebSocket cho Task Service,
-    // hãy đổi '8086' thành '8000' để đồng bộ với các service khác (Core, HR).
-    // Nếu không, giữ nguyên 8086 để kết nối trực tiếp.
-
-    // Cách 1: Kết nối trực tiếp (như code cũ)
-    const String wsUrl = 'ws://$serverIp:8080/ws-task';
-
-    // Cách 2: Kết nối qua Gateway (Khuyên dùng nếu đã cấu hình Gateway)
-    // const String wsUrl = 'ws://$serverIp:8000/ws-task';
 
     client = StompClient(
       config: StompConfig(
-        url: wsUrl, // Sử dụng biến wsUrl đã tạo ở trên
+        // Cổng 8086 dành riêng cho Task Service
+        url: 'ws://$serverIp:8000/ws-task',
         onConnect: (StompFrame frame) {
           _onConnectCallback(frame);
         },
