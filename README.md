@@ -242,24 +242,24 @@ server-backend/
 ##SCREENSHOOT
 **Yêu cầu môi trường và cài đặt**
 
-Quy trình triển khai hệ thống:
+1. Yêu cầu môi trường & Phần mềm
 
-1 Yêu cầu phần mềm:
+Java Development Kit (JDK): Phiên bản 21 trở lên.
 
-Java Development Kit (JDK) 21.
+Docker Desktop: Đã cài đặt sẵn (kèm Docker Compose).
 
-Docker Desktop (kèm Docker Compose).
+Flutter SDK: Phiên bản Stable mới nhất.
 
-Flutter SDK (Phiên bản Stable mới nhất).
+Python: Phiên bản 3.10+ (Hỗ trợ AI/Script).
 
-Python 3.10+.
+2. Quy trình Cài đặt & Triển khai
 
-2 Quy trình cài đặt:
+Quy trình chuẩn để khởi chạy hệ thống (Backend & Mobile):
 
-Bước 1: Clone mã nguồn từ Repository.
+Bước 1 - Chuẩn bị mã nguồn: Clone toàn bộ source code từ Repository về máy cá nhân.
 
-Bước 2: Cấu hình biến môi trường (.env) cho Database, RabbitMQ và API Keys (Google AI, Firebase).
+Bước 2 - Cấu hình biến môi trường (.env): Thiết lập thông số kết nối Database, RabbitMQ và điền các API Keys (Google AI, Firebase).
 
-Bước 3: Khởi chạy hạ tầng (MySQL, Redis, RabbitMQ, Eureka) và các Services thông qua lệnh: docker-compose up -d –build
+Bước 3 - Khởi chạy hạ tầng: Thực hiện lệnh docker-compose up -d --build để kích hoạt đồng bộ MySQL, Redis, RabbitMQ, Eureka và các Services.
 
-Bước 4: Cài đặt ứng dụng lên thiết bị di động và kết nối tới Gateway (Port 8000)
+Bước 4 - Cài đặt ứng dụng: Build ứng dụng lên thiết bị di động thực tế và cấu hình kết nối tới Gateway (Port 8000).
