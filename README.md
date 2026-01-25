@@ -8,19 +8,21 @@
 
 **OfficeSync** là nền tảng quản lý vận hành và cộng tác doanh nghiệp toàn diện, tích hợp các phân hệ chuyên sâu như HR, Attendance, Task, **Chat nội bộ thời gian thực (Real-time)** và trợ lý ảo AI.
 
-Ứng dụng di động (Flutter) được thiết kế theo kiến trúc **Feature-First**, tối ưu hóa khả năng mở rộng. 
+Ứng dụng di động (Flutter) được thiết kế theo kiến trúc **Feature-First**, tối ưu hóa khả năng mở rộng.
 Hệ thống Backend vận hành theo mô hình Microservices trên nền tảng **Java 21 & Spring Boot**, kết hợp **Docker** để triển khai linh hoạt các dịch vụ (Gateway, Database, Redis...), đảm bảo hiệu năng cao và tính ổn định.
 
 ## TECH STACK
 
 ### Client (Mobile)
+
 ![Dart](https://img.shields.io/badge/Language-Dart_3.0+-0175C2?style=flat-square&logo=dart&logoColor=white)
 ![Flutter](https://img.shields.io/badge/Framework-Flutter_3.10+-02569B?style=flat-square&logo=flutter&logoColor=white)
 ![Architecture](https://img.shields.io/badge/Architecture-Feature_First-purple?style=flat-square)
-![State](https://img.shields.io/badge/State_Management-Native_(setState)-orange?style=flat-square)
+![State](<https://img.shields.io/badge/State_Management-Native_(setState)-orange?style=flat-square>)
 ![UI](https://img.shields.io/badge/UI-Material_3-purple?style=flat-square&logo=material-design&logoColor=white)
 
 ### Backend (Server)
+
 ![Java](https://img.shields.io/badge/Language-Java_21-ED8B00?style=flat-square&logo=openjdk&logoColor=white)
 ![Spring Boot](https://img.shields.io/badge/Framework-Spring_Boot_3.x-6DB33F?style=flat-square&logo=spring-boot&logoColor=white)
 ![Microservices](https://img.shields.io/badge/Architecture-Microservices-red?style=flat-square)
@@ -28,16 +30,19 @@ Hệ thống Backend vận hành theo mô hình Microservices trên nền tảng
 ![Security](https://img.shields.io/badge/Security-Spring_Security_%26_JWT-6DB33F?style=flat-square&logo=spring-security&logoColor=white)
 
 ### Database & Storage
-![MySQL](https://img.shields.io/badge/Database-MySQL_(Docker)-4479A1?style=flat-square&logo=mysql&logoColor=white)
-![Redis](https://img.shields.io/badge/Cache-Redis_(Docker)-DC382D?style=flat-square&logo=redis&logoColor=white)
+
+![MySQL](<https://img.shields.io/badge/Database-MySQL_(Docker)-4479A1?style=flat-square&logo=mysql&logoColor=white>)
+![Redis](<https://img.shields.io/badge/Cache-Redis_(Docker)-DC382D?style=flat-square&logo=redis&logoColor=white>)
 ![Storage](https://img.shields.io/badge/Mobile_Storage-Secure_Storage-blue?style=flat-square)
 
 ### Async & Realtime
+
 ![RabbitMQ](https://img.shields.io/badge/Message_Queue-RabbitMQ-FF6600?style=flat-square&logo=rabbitmq&logoColor=white)
-![Socket](https://img.shields.io/badge/Realtime-WebSocket_(Stomp)-00c853?style=flat-square&logo=socket.io&logoColor=white)
+![Socket](<https://img.shields.io/badge/Realtime-WebSocket_(Stomp)-00c853?style=flat-square&logo=socket.io&logoColor=white>)
 ![FCM](https://img.shields.io/badge/Notification-Firebase_Cloud_Messaging-FFCA28?style=flat-square&logo=firebase&logoColor=black)
 
 ### Infrastructure & DevOps
+
 ![Docker](https://img.shields.io/badge/Container-Docker_Compose-2496ED?style=flat-square&logo=docker&logoColor=white)
 ![Firebase](https://img.shields.io/badge/Service-Firebase_Core-FFCA28?style=flat-square&logo=firebase&logoColor=black)
 
@@ -92,7 +97,6 @@ Dành cho Company Admin và Manager.
 - Quản lý Cơ cấu tổ chức: Tạo/Sửa/Xóa phòng ban, Bổ nhiệm Trưởng phòng (Manager), Điều chuyển nhân sự.
 
 - Quản lý Hồ sơ nhân viên:
-
   - Tạo tài khoản mới (cấp email/pass mặc định).
 
   - Cập nhật thông tin, chức vụ.
@@ -104,7 +108,6 @@ Dành cho Company Admin và Manager.
 **5. Phân hệ Quản lý Chấm công (Attendance)**
 
 - Cấu hình (Company Admin):
-
   - Thiết lập vị trí văn phòng (GPS/Geofencing) và bán kính cho phép.
 
   - Thiết lập mạng Wifi hợp lệ (SSID/MAC Address).
@@ -114,7 +117,6 @@ Dành cho Company Admin và Manager.
 - Thực hiện Chấm công (Staff): Check-in/Check-out thông minh, hệ thống tự động validate vị trí và mạng internet.
 
 - Quản lý & Theo dõi (Manager/Admin):
-
   - Xem lịch sử chấm công của nhân viên cấp dưới.
 
   - Báo cáo tình trạng đi muộn/về sớm.
@@ -128,7 +130,6 @@ Quy trình xin phép và phê duyệt điện tử.
 - Tạo đơn (Staff): Tạo đơn nghỉ phép, tăng ca, đi muộn/về sớm. Đính kèm ảnh/video minh chứng (Storage Service).
 
 - Xử lý đơn (Manager):
-
   - Nhận thông báo khi có đơn mới.
 
   - Xem chi tiết lý do và minh chứng.
@@ -152,7 +153,6 @@ Mô hình giao việc phân cấp: Admin -> Manager -> Staff.
 **8. Phân hệ Truyền thông & Cộng tác (Communication)**
 
 - Newsfeed (Bảng tin nội bộ):
-
   - Company Admin: Đăng thông báo quan trọng, ghim tin, xem thống kê tương tác.
 
   - Manager: Đăng tin nội bộ.
@@ -160,7 +160,6 @@ Mô hình giao việc phân cấp: Admin -> Manager -> Staff.
   - Staff: Xem tin, nhận thông báo, thả cảm xúc (Reaction).
 
 - Chat (Tin nhắn):
-
   - Đồng bộ: Tự động thêm nhân viên vào nhóm chat chung/nhóm phòng ban khi tạo tài khoản hoặc chuyển phòng.
 
   - Tính năng: Chat cá nhân (1-1), Chat nhóm, gửi tin nhắn văn bản/đa phương tiện.
@@ -174,12 +173,12 @@ Mô hình giao việc phân cấp: Admin -> Manager -> Staff.
 - Hồ sơ cá nhân: Cập nhật Avatar, số điện thoại, đổi mật khẩu.
 
 **10. Các tính năng chung (General Features)**
+
 - Phân quyền (RBAC): Cơ chế kế thừa quyền hạn (Super Admin > Company Admin > Manager > Staff).
 
 - Tìm kiếm & Bộ lọc nâng cao: Áp dụng cho mọi danh sách (Nhân sự, Công việc, Đơn từ) theo từ khóa, thời gian, trạng thái.
 
 - Hệ thống Thông báo (Notification):
-
   - Thông báo đẩy (Push Notification) tới ứng dụng di động.
 
   - Các luồng thông báo: Duyệt đơn, Có tin mới, Có task mới, Tin nhắn chat.
@@ -187,25 +186,26 @@ Mô hình giao việc phân cấp: Admin -> Manager -> Staff.
 ## CẤU TRÚC DỰ ÁN
 
 **Client Mobile (Flutter App)**
+
 ```
 client-mobile/lib
 ├── 📂 core/                  # CÁC THÀNH PHẦN CỐT LÕI (CORE)
-│   ├── 📂 api/               
-│   ├── 📂 config/           
-│   ├── 📂 services/          
-│   ├── 📂 utils/             
-│   └── 📂 widgets/           
+│   ├── 📂 api/
+│   ├── 📂 config/
+│   ├── 📂 services/
+│   ├── 📂 utils/
+│   └── 📂 widgets/
 │
 ├── 📂 features/              # CÁC MODULE CHỨC NĂNG (FEATURES)
-│   ├── 📂 ai_service/            
-│   ├── 📂 attendance_service/   
-│   ├── 📂 chat_service/          
-│   ├── 📂 communication_service/ 
-│   ├── 📂 core_service/          
-│   ├── 📂 hr_service/           
-│   ├── 📂 note_service/         
-│   ├── 📂 notification_service/  
-│   └── 📂 task_service/         
+│   ├── 📂 ai_service/
+│   ├── 📂 attendance_service/
+│   ├── 📂 chat_service/
+│   ├── 📂 communication_service/
+│   ├── 📂 core_service/
+│   ├── 📂 hr_service/
+│   ├── 📂 note_service/
+│   ├── 📂 notification_service/
+│   └── 📂 task_service/
 │
 ├── 📄 main.dart              # Entry point (Khởi tạo App, Config)
 ├── 📄 dashboard_screen.dart  # Màn hình chính điều hướng
@@ -213,6 +213,7 @@ client-mobile/lib
 ```
 
 **Server Backend (Microservices System)**
+
 ```
 server-backend/
 ├── 🌐 INFRASTRUCTURE SERVICES (HẠ TẦNG)
@@ -228,14 +229,37 @@ server-backend/
 │   └── 📂 communication_service/   # Internal Comms: Newsfeed, Tin tức
 │
 ├── 💬 FEATURE & UTILITY SERVICES (TIỆN ÍCH)
-│   ├── 📂 chat_service/            # Real-time Messaging 
+│   ├── 📂 chat_service/            # Real-time Messaging
 │   ├── 📂 note_service/            # Personal Notes
 │   ├── 📂 ai_service/              # AI Integration
-│   ├── 📂 notification_service/    # Push Notification System 
-│   └── 📂 storage_service/         # File Storage 
+│   ├── 📂 notification_service/    # Push Notification System
+│   └── 📂 storage_service/         # File Storage
 │
 ├── 📂 init-sql/                # Scripts khởi tạo Database ban đầu
 └── 📄 .env                     # Biến môi trường (Environment Variables)
 ```
 
 ##SCREENSHOOT
+**Yêu cầu môi trường và cài đặt**
+
+Quy trình triển khai hệ thống:
+
+1 Yêu cầu phần mềm:
+
+Java Development Kit (JDK) 21.
+
+Docker Desktop (kèm Docker Compose).
+
+Flutter SDK (Phiên bản Stable mới nhất).
+
+Python 3.10+.
+
+2 Quy trình cài đặt:
+
+Bước 1: Clone mã nguồn từ Repository.
+
+Bước 2: Cấu hình biến môi trường (.env) cho Database, RabbitMQ và API Keys (Google AI, Firebase).
+
+Bước 3: Khởi chạy hạ tầng (MySQL, Redis, RabbitMQ, Eureka) và các Services thông qua lệnh: docker-compose up -d –build
+
+Bước 4: Cài đặt ứng dụng lên thiết bị di động và kết nối tới Gateway (Port 8000)
