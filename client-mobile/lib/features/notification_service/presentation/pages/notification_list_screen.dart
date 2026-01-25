@@ -401,10 +401,7 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
         children: const [
           Icon(Icons.notifications_off_outlined, size: 60, color: Colors.grey),
           SizedBox(height: 16),
-          Text(
-            "Bạn chưa có thông báo nào",
-            style: TextStyle(color: Colors.grey),
-          ),
+          Text("No Notifications", style: TextStyle(color: Colors.grey)),
         ],
       ),
     );
