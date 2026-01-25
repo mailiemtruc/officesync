@@ -101,6 +101,7 @@ services:
       - SERVER_PORT=8000
       - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://admin:OfficeSync2026@discovery-service:8761/eureka/
       - JWT_SECRET=OfficeSync_Super_Secure_Secret_Key_For_Enterprise_Level_Security_Version_2025_Longer_Is_Better
+      - EUREKA_INSTANCE_PREFER_IP_ADDRESS=true
     depends_on:
       discovery-service:
         condition: service_healthy # Chỉ chạy Gateway khi Discovery đã khỏe
@@ -128,6 +129,7 @@ services:
 
       - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://admin:OfficeSync2026@discovery-service:8761/eureka/
       - JWT_SECRET=OfficeSync_Super_Secure_Secret_Key_For_Enterprise_Level_Security_Version_2025_Longer_Is_Better
+      - EUREKA_INSTANCE_PREFER_IP_ADDRESS=true
     depends_on:
       mysql-db:
         condition: service_healthy
@@ -161,6 +163,7 @@ services:
 
       - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://admin:OfficeSync2026@discovery-service:8761/eureka/
       - JWT_SECRET=OfficeSync_Super_Secure_Secret_Key_For_Enterprise_Level_Security_Version_2025_Longer_Is_Better
+      - EUREKA_INSTANCE_PREFER_IP_ADDRESS=true
     depends_on:
       mysql-db:
         condition: service_healthy
@@ -194,6 +197,7 @@ services:
 
       - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://admin:OfficeSync2026@discovery-service:8761/eureka/
       - JWT_SECRET=OfficeSync_Super_Secure_Secret_Key_For_Enterprise_Level_Security_Version_2025_Longer_Is_Better
+      - EUREKA_INSTANCE_PREFER_IP_ADDRESS=true
     depends_on:
       mysql-db:
         condition: service_healthy
@@ -282,6 +286,7 @@ services:
       - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://admin:OfficeSync2026@discovery-service:8761/eureka/
       
       - JWT_SECRET=OfficeSync_Super_Secure_Secret_Key_For_Enterprise_Level_Security_Version_2025_Longer_Is_Better
+      - EUREKA_INSTANCE_PREFER_IP_ADDRESS=true
     depends_on:
       mysql-db:
         condition: service_healthy
@@ -314,6 +319,7 @@ services:
 
       - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://admin:OfficeSync2026@discovery-service:8761/eureka/
       - JWT_SECRET=OfficeSync_Super_Secure_Secret_Key_For_Enterprise_Level_Security_Version_2025_Longer_Is_Better
+      - EUREKA_INSTANCE_PREFER_IP_ADDRESS=true
     depends_on:
       mysql-db:
         condition: service_healthy
@@ -345,6 +351,7 @@ services:
       - SPRING_RABBITMQ_USERNAME=${RABBITMQ_USER}
       - SPRING_RABBITMQ_PASSWORD=${RABBITMQ_PASS}
 
+      - JWT_SECRET=OfficeSync_Super_Secure_Secret_Key_For_Enterprise_Level_Security_Version_2025_Longer_Is_Better
       - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://admin:OfficeSync2026@discovery-service:8761/eureka/
       - EUREKA_INSTANCE_PREFER_IP_ADDRESS=true
     depends_on:
@@ -378,6 +385,7 @@ services:
 
       - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://admin:OfficeSync2026@discovery-service:8761/eureka/
       - JWT_SECRET=OfficeSync_Super_Secure_Secret_Key_For_Enterprise_Level_Security_Version_2025_Longer_Is_Better
+      - EUREKA_INSTANCE_PREFER_IP_ADDRESS=true
     depends_on:
       mysql-db:
         condition: service_healthy
@@ -408,6 +416,7 @@ services:
       - SPRING_DATASOURCE_PASSWORD=${DB_ROOT_PASSWORD}
       # --- KẾT NỐI DISCOVERY SERVICE ---
       - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://admin:OfficeSync2026@discovery-service:8761/eureka/
+      - EUREKA_INSTANCE_PREFER_IP_ADDRESS=true
       # --- MESSAGE BROKER & CACHE ---
       - SPRING_RABBITMQ_HOST=rabbitmq
       - SPRING_RABBITMQ_USERNAME=${RABBITMQ_USER}
