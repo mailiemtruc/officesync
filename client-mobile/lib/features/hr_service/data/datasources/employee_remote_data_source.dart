@@ -5,13 +5,27 @@ import '../models/employee_model.dart';
 import '../models/department_model.dart';
 import '../../../../core/api/api_client.dart';
 import 'package:dio/dio.dart';
-import '../models/employee_model.dart';
+// [MỚI] Import Storage để lấy Token
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class EmployeeRemoteDataSource {
   final ApiClient _apiClient = ApiClient();
   static const String baseUrl = 'http://10.0.2.2:8000/api';
   static const String _baseUrl = 'http://10.0.2.2:8000/api/employees';
   static const String storageUrl = 'http://10.0.2.2:8000/api/files/upload';
+
+  // [MỚI] Khai báo Storage
+  final _storage = const FlutterSecureStorage();
+
+  // [MỚI] Hàm Helper lấy Header chuẩn (kèm Token)
+  Future<Map<String, String>> _getHeaders(String userId) async {
+    String? token = await _storage.read(key: 'auth_token');
+    return {
+      "Content-Type": "application/json",
+      "X-User-Id": userId,
+      "Authorization": "Bearer $token", // Quan trọng: Thêm Bearer Token
+    };
+  }
 
   Future<String?> createEmployee(
     EmployeeModel employee,
@@ -20,16 +34,19 @@ class EmployeeRemoteDataSource {
     String password,
   ) async {
     try {
-      final url = Uri.parse('$baseUrl/employees?departmentId=$deptId');
+      final url = Uri.parse('$_baseUrl?departmentId=$deptId');
 
       print("--> Creating Employee by User ID: $creatorId");
 
       Map<String, dynamic> bodyData = employee.toJson();
       bodyData['password'] = password;
 
+      // [SỬA] Dùng hàm _getHeaders
+      final headers = await _getHeaders(creatorId);
+
       final response = await http.post(
         url,
-        headers: {"Content-Type": "application/json", "X-User-Id": creatorId},
+        headers: headers,
         body: jsonEncode(bodyData),
       );
 
@@ -38,7 +55,7 @@ class EmployeeRemoteDataSource {
         if (data.containsKey('id')) {
           return data['id'].toString();
         }
-        return null; // Tạo thành công nhưng server không trả về ID
+        return null;
       } else {
         throw Exception('Failed to create employee: ${response.body}');
       }
@@ -47,21 +64,16 @@ class EmployeeRemoteDataSource {
     }
   }
 
-  // 2. LẤY DANH SÁCH PHÒNG BAN (Đã sửa bảo mật)
+  // 2. LẤY DANH SÁCH PHÒNG BAN
   Future<List<DepartmentModel>> getDepartments(String currentUserId) async {
-    // [MỚI] Thêm tham số
     try {
       final url = Uri.parse('$baseUrl/departments');
       print("--> Fetching Departments from: $url");
 
-      final response = await http.get(
-        url,
-        headers: {
-          "Content-Type": "application/json",
-          "X-User-Id":
-              currentUserId, // [QUAN TRỌNG] Gửi ID để Backend lọc công ty
-        },
-      );
+      // [SỬA] Dùng hàm _getHeaders
+      final headers = await _getHeaders(currentUserId);
+
+      final response = await http.get(url, headers: headers);
 
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
@@ -78,17 +90,13 @@ class EmployeeRemoteDataSource {
   // 3. LẤY DANH SÁCH NHÂN VIÊN
   Future<List<EmployeeModel>> getEmployees(String currentUserId) async {
     try {
-      // Backend có thể lọc theo công ty dựa trên X-User-Id
-      final url = Uri.parse('$baseUrl/employees');
+      final url = Uri.parse(_baseUrl);
       print("--> Fetching Employees via: $url");
 
-      final response = await http.get(
-        url,
-        headers: {
-          "Content-Type": "application/json",
-          "X-User-Id": currentUserId,
-        },
-      );
+      // [SỬA] Dùng hàm _getHeaders
+      final headers = await _getHeaders(currentUserId);
+
+      final response = await http.get(url, headers: headers);
 
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
@@ -103,7 +111,7 @@ class EmployeeRemoteDataSource {
   }
 
   Future<bool> updateEmployee(
-    String updaterId, // [MỚI] Thêm tham số này để biết ai là người sửa
+    String updaterId,
     String id,
     String fullName,
     String phone,
@@ -115,7 +123,7 @@ class EmployeeRemoteDataSource {
     int? departmentId,
   }) async {
     try {
-      final url = Uri.parse('$baseUrl/employees/$id');
+      final url = Uri.parse('$_baseUrl/$id');
 
       final Map<String, dynamic> body = {
         "fullName": fullName,
@@ -128,13 +136,12 @@ class EmployeeRemoteDataSource {
         if (departmentId != null) "departmentId": departmentId,
       };
 
+      // [SỬA] Dùng hàm _getHeaders
+      final headers = await _getHeaders(updaterId);
+
       final response = await http.put(
         url,
-        headers: {
-          "Content-Type": "application/json",
-          "X-User-Id":
-              updaterId, // [QUAN TRỌNG] Gửi ID người thực hiện lên Header
-        },
+        headers: headers,
         body: jsonEncode(body),
       );
 
@@ -155,17 +162,13 @@ class EmployeeRemoteDataSource {
     String keyword,
   ) async {
     try {
-      // Gọi vào endpoint /search
-      final url = Uri.parse('$baseUrl/employees/search?keyword=$keyword');
+      final url = Uri.parse('$_baseUrl/search?keyword=$keyword');
       print("--> Searching Employees: $url");
 
-      final response = await http.get(
-        url,
-        headers: {
-          "Content-Type": "application/json",
-          "X-User-Id": currentUserId, // Backend dùng cái này để lọc công ty
-        },
-      );
+      // [SỬA] Dùng hàm _getHeaders
+      final headers = await _getHeaders(currentUserId);
+
+      final response = await http.get(url, headers: headers);
 
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
@@ -179,24 +182,19 @@ class EmployeeRemoteDataSource {
     }
   }
 
-  /// [MỚI - QUAN TRỌNG] Hàm Suggestion dùng cho Select Manager / Add Members
+  /// Suggestion
   Future<List<EmployeeModel>> getEmployeeSuggestions(
     String currentUserId,
     String keyword,
   ) async {
     try {
-      // SỬA LẠI DÒNG NÀY: Thêm /employees
-      final url = Uri.parse('$baseUrl/employees/suggestion?keyword=$keyword');
+      final url = Uri.parse('$_baseUrl/suggestion?keyword=$keyword');
+      print("--> Fetching Suggestions: $url");
 
-      print("--> Fetching Suggestions: $url"); // In ra log để kiểm tra
+      // [SỬA] Dùng hàm _getHeaders
+      final headers = await _getHeaders(currentUserId);
 
-      final response = await http.get(
-        url,
-        headers: {
-          "Content-Type": "application/json",
-          "X-User-Id": currentUserId,
-        },
-      );
+      final response = await http.get(url, headers: headers);
 
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
@@ -211,15 +209,20 @@ class EmployeeRemoteDataSource {
     }
   }
 
-  // [MỚI] Lấy nhân viên theo ID phòng ban (Server-side filter)
+  // Lấy nhân viên theo ID phòng ban
   Future<List<EmployeeModel>> getEmployeesByDepartment(int departmentId) async {
     try {
-      final url = Uri.parse('$baseUrl/employees/department/$departmentId');
+      final url = Uri.parse('$_baseUrl/department/$departmentId');
       print("--> Fetching Members for Dept ID: $departmentId");
 
-      final response = await http.get(
-        url,
-      ); // API này public trong nội bộ cty, hoặc thêm header nếu cần
+      // [FIX] Cần thêm Token để bảo mật
+      String? token = await _storage.read(key: 'accessToken');
+      final headers = {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      };
+
+      final response = await http.get(url, headers: headers);
 
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
@@ -233,17 +236,16 @@ class EmployeeRemoteDataSource {
     }
   }
 
-  // [SỬA LẠI] Thêm tham số deleterId
+  // Xóa nhân viên
   Future<bool> deleteEmployee(String deleterId, String targetId) async {
     try {
-      final url = Uri.parse('$baseUrl/employees/$targetId');
+      final url = Uri.parse('$_baseUrl/$targetId');
       print("--> Deleting Employee ID: $targetId by User: $deleterId");
 
-      final response = await http.delete(
-        url,
-        // [QUAN TRỌNG] Bổ sung Header X-User-Id
-        headers: {"Content-Type": "application/json", "X-User-Id": deleterId},
-      );
+      // [SỬA] Dùng hàm _getHeaders
+      final headers = await _getHeaders(deleterId);
+
+      final response = await http.delete(url, headers: headers);
 
       if (response.statusCode == 200) {
         return true;
@@ -257,13 +259,20 @@ class EmployeeRemoteDataSource {
     }
   }
 
-  // [MỚI] Hàm Upload File chuẩn chỉnh
+  // Upload File
   Future<String> uploadFile(File file) async {
     try {
       final url = Uri.parse(storageUrl);
       print("--> Uploading file to: $storageUrl");
 
       var request = http.MultipartRequest('POST', url);
+
+      // [MỚI] Thêm Token vào MultipartRequest
+      String? token = await _storage.read(key: 'accessToken');
+      if (token != null) {
+        request.headers['Authorization'] = 'Bearer $token';
+      }
+
       request.files.add(await http.MultipartFile.fromPath('file', file.path));
 
       var streamedResponse = await request.send();
@@ -271,7 +280,7 @@ class EmployeeRemoteDataSource {
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = jsonDecode(response.body);
-        return data['url']; // Trả về URL ảnh
+        return data['url'];
       } else {
         throw Exception('Upload failed: ${response.body}');
       }
@@ -281,15 +290,22 @@ class EmployeeRemoteDataSource {
     }
   }
 
-  // [MỚI] Hàm kiểm tra quyền HR Manager
+  // Kiểm tra quyền HR
   Future<bool> checkHrPermission(int userId) async {
     try {
+      // [FIX] Thêm token vào Dio Options
+      String? token = await _storage.read(key: 'accessToken');
+
       final response = await _apiClient.get(
         '$_baseUrl/check-hr-permission',
-        options: Options(headers: {'X-User-Id': userId}),
+        options: Options(
+          headers: {
+            'X-User-Id': userId,
+            'Authorization': 'Bearer $token', // Thêm token
+          },
+        ),
       );
 
-      // Backend trả về: { "canAccessAttendance": true/false }
       if (response.data != null &&
           response.data['canAccessAttendance'] != null) {
         return response.data['canAccessAttendance'] as bool;
@@ -297,7 +313,7 @@ class EmployeeRemoteDataSource {
       return false;
     } catch (e) {
       print("Error checking HR permission: $e");
-      return false; // Mặc định chặn nếu lỗi mạng
+      return false;
     }
   }
 }

@@ -1,14 +1,28 @@
-// File: lib/data/datasources/request_remote_data_source.dart
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
-import '../models/request_model.dart'; // Giả sử bạn có model này hoặc dùng Map
+import '../models/request_model.dart';
+// [MỚI] Import Storage
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class RequestRemoteDataSource {
   static const String baseUrl = 'http://10.0.2.2:8000/api/requests';
   static const String storageUrl = 'http://10.0.2.2:8000/api/files/upload';
 
-  // 1. TẠO ĐƠN (Giữ nguyên, thêm evidenceUrl nếu cần)
+  // [MỚI] Khai báo Storage
+  final _storage = const FlutterSecureStorage();
+
+  // [MỚI] Hàm Helper lấy Header
+  Future<Map<String, String>> _getHeaders(String userId) async {
+    String? token = await _storage.read(key: 'auth_token');
+    return {
+      "Content-Type": "application/json",
+      "X-User-Id": userId,
+      "Authorization": "Bearer $token", // QUAN TRỌNG
+    };
+  }
+
+  // 1. TẠO ĐƠN
   Future<bool> createRequest({
     required String userId,
     required String type,
@@ -17,7 +31,7 @@ class RequestRemoteDataSource {
     required String reason,
     double? durationVal,
     String? durationUnit,
-    String? evidenceUrl, // [MỚI] Nhận chuỗi URL ảnh
+    String? evidenceUrl,
   }) async {
     try {
       final url = Uri.parse(baseUrl);
@@ -28,14 +42,17 @@ class RequestRemoteDataSource {
         "reason": reason,
         "durationVal": durationVal,
         "durationUnit": durationUnit,
-        "evidenceUrl": evidenceUrl, // Gửi lên server HR
+        "evidenceUrl": evidenceUrl,
       };
 
       print("--> Sending Request Payload: $body");
 
+      // [SỬA]
+      final headers = await _getHeaders(userId);
+
       final response = await http.post(
         url,
-        headers: {"Content-Type": "application/json", "X-User-Id": userId},
+        headers: headers,
         body: jsonEncode(body),
       );
 
@@ -49,12 +66,19 @@ class RequestRemoteDataSource {
     }
   }
 
-  // 2. [MỚI] UPLOAD FILE (Gọi sang Storage Service 8090)
+  // 2. UPLOAD FILE
   Future<String> uploadFile(File file) async {
     try {
       print("--> Uploading to Storage: $storageUrl");
 
       var request = http.MultipartRequest('POST', Uri.parse(storageUrl));
+
+      // [FIX] Thêm token vào header của MultipartRequest
+      String? token = await _storage.read(key: 'accessToken');
+      if (token != null) {
+        request.headers['Authorization'] = 'Bearer $token';
+      }
+
       request.files.add(await http.MultipartFile.fromPath('file', file.path));
 
       var streamedResponse = await request.send();
@@ -62,7 +86,6 @@ class RequestRemoteDataSource {
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = jsonDecode(response.body);
-
         return data['url'];
       } else {
         throw Exception("Upload failed: ${response.body}");
@@ -73,16 +96,15 @@ class RequestRemoteDataSource {
     }
   }
 
-  // [CẬP NHẬT] LẤY DANH SÁCH ĐƠN CỦA TÔI (Có lọc)
+  // 3. LẤY DANH SÁCH ĐƠN CỦA TÔI
   Future<List<RequestModel>> getMyRequests(
     String userId, {
     String? search,
-    int? day, // <-- Thêm tham số day
+    int? day,
     int? month,
     int? year,
   }) async {
     try {
-      // Tạo map chứa tham số
       final queryParams = <String, String>{};
       if (search != null && search.trim().isNotEmpty) {
         queryParams['search'] = search.trim();
@@ -91,14 +113,12 @@ class RequestRemoteDataSource {
       if (month != null) queryParams['month'] = month.toString();
       if (year != null) queryParams['year'] = year.toString();
 
-      // Ghép tham số vào URL: /api/requests?search=abc&month=10...
-      // Lưu ý: baseUrl là '.../api/requests'
       final uri = Uri.parse(baseUrl).replace(queryParameters: queryParams);
 
-      final response = await http.get(
-        uri,
-        headers: {"Content-Type": "application/json", "X-User-Id": userId},
-      );
+      // [SỬA]
+      final headers = await _getHeaders(userId);
+
+      final response = await http.get(uri, headers: headers);
 
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
@@ -112,17 +132,15 @@ class RequestRemoteDataSource {
     }
   }
 
-  // [SỬA] Gọi API Xóa đơn (DELETE)
+  // 4. HỦY ĐƠN
   Future<bool> cancelRequest(String requestId, String userId) async {
     try {
-      // Endpoint mới: DELETE /api/requests/{id}
       final url = Uri.parse('$baseUrl/$requestId');
 
-      final response = await http.delete(
-        // Đổi thành http.delete
-        url,
-        headers: {"Content-Type": "application/json", "X-User-Id": userId},
-      );
+      // [SỬA]
+      final headers = await _getHeaders(userId);
+
+      final response = await http.delete(url, headers: headers);
 
       if (response.statusCode == 200) {
         return true;
@@ -134,7 +152,7 @@ class RequestRemoteDataSource {
     }
   }
 
-  // [MỚI] Hàm xử lý Duyệt/Từ chối
+  // 5. DUYỆT ĐƠN
   Future<bool> processRequest(
     String requestId,
     String approverId,
@@ -145,20 +163,18 @@ class RequestRemoteDataSource {
       final url = Uri.parse('$baseUrl/$requestId/process');
       print("--> Processing Request $requestId: $status");
 
+      // [SỬA]
+      final headers = await _getHeaders(approverId);
+
       final response = await http.post(
         url,
-        headers: {"Content-Type": "application/json", "X-User-Id": approverId},
+        headers: headers,
         body: jsonEncode({"status": status, "comment": comment}),
       );
 
       if (response.statusCode == 200) {
         return true;
       } else {
-        // [SỬA] Đọc tin nhắn lỗi từ Backend trả về
-        // Backend trả về: ResponseEntity.badRequest().body(Map.of("message", e.getMessage())); (Cần check lại Controller Backend có bọc JSON không)
-        // Nếu Controller Backend trả về string thô hoặc JSON, hãy parse ở đây.
-
-        // Giả sử backend trả JSON { "message": "Lỗi gì đó..." } hoặc text thô
         String errorMessage = "Failed to process request";
         try {
           final errorJson = jsonDecode(response.body);
@@ -166,31 +182,26 @@ class RequestRemoteDataSource {
             errorMessage = errorJson['message'];
           }
         } catch (_) {
-          errorMessage = response.body; // Nếu không phải JSON thì lấy text thô
+          errorMessage = response.body;
         }
-
-        throw Exception(
-          errorMessage,
-        ); // Ném lỗi để UI bắt được và hiện SnackBar
+        throw Exception(errorMessage);
       }
     } catch (e) {
       print("Error processing request: $e");
-      rethrow; // Ném tiếp lỗi ra ngoài
+      rethrow;
     }
   }
 
-  // [THÊM MỚI] Lấy chi tiết 1 request theo ID để phục vụ Notification
+  // 6. LẤY CHI TIẾT ĐƠN
   Future<RequestModel?> getRequestById(String requestId, String userId) async {
     try {
-      final url = Uri.parse(
-        '$baseUrl/$requestId',
-      ); // Giả sử Backend có endpoint GET /api/requests/{id}
+      final url = Uri.parse('$baseUrl/$requestId');
       print("--> Fetching Request Detail: $url");
 
-      final response = await http.get(
-        url,
-        headers: {"Content-Type": "application/json", "X-User-Id": userId},
-      );
+      // [SỬA]
+      final headers = await _getHeaders(userId);
+
+      final response = await http.get(url, headers: headers);
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -205,11 +216,11 @@ class RequestRemoteDataSource {
     }
   }
 
-  // [CẬP NHẬT] LẤY DANH SÁCH DUYỆT (Manager) (Có lọc)
+  // 7. LẤY DANH SÁCH DUYỆT (MANAGER) - ĐÂY LÀ CHỖ GÂY LỖI 401 TRONG LOG CỦA BẠN
   Future<List<RequestModel>> getManagerRequests(
     String managerId, {
     String? search,
-    int? day, // [MỚI]
+    int? day,
     int? month,
     int? year,
   }) async {
@@ -222,17 +233,16 @@ class RequestRemoteDataSource {
       if (month != null) queryParams['month'] = month.toString();
       if (year != null) queryParams['year'] = year.toString();
 
-      // URL: .../api/requests/manager?search=...
       final uri = Uri.parse(
         '$baseUrl/manager',
       ).replace(queryParameters: queryParams);
 
       print("--> [API CALL] GET $uri with User-Id: $managerId");
 
-      final response = await http.get(
-        uri,
-        headers: {"Content-Type": "application/json", "X-User-Id": managerId},
-      );
+      // [SỬA] Dùng hàm _getHeaders (Đã bao gồm Token)
+      final headers = await _getHeaders(managerId);
+
+      final response = await http.get(uri, headers: headers);
 
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);

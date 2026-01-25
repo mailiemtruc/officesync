@@ -1,9 +1,24 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/department_model.dart';
+// [MỚI] Import Storage
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class DepartmentRemoteDataSource {
   static const String baseUrl = 'http://10.0.2.2:8000/api/departments';
+
+  // [MỚI] Khai báo Storage
+  final _storage = const FlutterSecureStorage();
+
+  // [MỚI] Hàm Helper lấy Header
+  Future<Map<String, String>> _getHeaders(String userId) async {
+    String? token = await _storage.read(key: 'auth_token');
+    return {
+      "Content-Type": "application/json",
+      "X-User-Id": userId,
+      "Authorization": "Bearer $token",
+    };
+  }
 
   Future<bool> createDepartment(
     DepartmentModel department,
@@ -13,14 +28,13 @@ class DepartmentRemoteDataSource {
       final url = Uri.parse(baseUrl);
 
       print("--> Creating Dept: ${department.name} by User: $creatorId");
-      print("--> Payload: ${jsonEncode(department.toJson())}");
+
+      // [SỬA]
+      final headers = await _getHeaders(creatorId);
 
       final response = await http.post(
         url,
-        headers: {
-          "Content-Type": "application/json",
-          "X-User-Id": creatorId, // Header quan trọng
-        },
+        headers: headers,
         body: jsonEncode(department.toJson()),
       );
 
@@ -34,28 +48,27 @@ class DepartmentRemoteDataSource {
     }
   }
 
-  // [SỬA] Thêm tham số userId để gửi Header
   Future<bool> updateDepartment(
-    String userId, // [MỚI]
+    String userId,
     int id,
     String name,
     String? managerId,
-    bool isHr, // [MỚI] Thêm tham số
+    bool isHr,
   ) async {
     try {
       final url = Uri.parse('$baseUrl/$id');
       final body = {
         "name": name,
         "managerId": managerId != null ? int.tryParse(managerId) : null,
-        "isHr": isHr, // [MỚI] Gửi lên
+        "isHr": isHr,
       };
+
+      // [SỬA]
+      final headers = await _getHeaders(userId);
 
       final response = await http.put(
         url,
-        headers: {
-          "Content-Type": "application/json",
-          "X-User-Id": userId, // [MỚI]
-        },
+        headers: headers,
         body: jsonEncode(body),
       );
 
@@ -65,38 +78,31 @@ class DepartmentRemoteDataSource {
     }
   }
 
-  // [SỬA] Thêm tham số userId
   Future<bool> deleteDepartment(String userId, int id) async {
     try {
       final url = Uri.parse('$baseUrl/$id');
-      final response = await http.delete(
-        url,
-        headers: {"X-User-Id": userId}, // [MỚI]
-      );
+      // [SỬA]
+      final headers = await _getHeaders(userId);
+
+      final response = await http.delete(url, headers: headers);
       return response.statusCode == 200;
     } catch (e) {
       rethrow;
     }
   }
 
-  // [MỚI] Tìm kiếm phòng ban
   Future<List<DepartmentModel>> searchDepartments(
     String currentUserId,
     String keyword,
   ) async {
     try {
-      final url = Uri.parse(
-        '$baseUrl/search?keyword=$keyword',
-      ); // Lưu ý endpoint là /search
+      final url = Uri.parse('$baseUrl/search?keyword=$keyword');
       print("--> Searching Departments: $url");
 
-      final response = await http.get(
-        url,
-        headers: {
-          "Content-Type": "application/json",
-          "X-User-Id": currentUserId,
-        },
-      );
+      // [SỬA]
+      final headers = await _getHeaders(currentUserId);
+
+      final response = await http.get(url, headers: headers);
 
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
@@ -110,17 +116,15 @@ class DepartmentRemoteDataSource {
     }
   }
 
-  // [MỚI] Lấy thông tin phòng HR từ Server
   Future<DepartmentModel?> getHrDepartment(String userId) async {
     try {
-      // Gọi vào endpoint /hr vừa tạo ở Backend
       final url = Uri.parse('$baseUrl/hr');
       print("--> Fetching HR Department info...");
 
-      final response = await http.get(
-        url,
-        headers: {"Content-Type": "application/json", "X-User-Id": userId},
-      );
+      // [SỬA]
+      final headers = await _getHeaders(userId);
+
+      final response = await http.get(url, headers: headers);
 
       if (response.statusCode == 200) {
         return DepartmentModel.fromJson(jsonDecode(response.body));
