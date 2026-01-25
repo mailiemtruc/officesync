@@ -24,6 +24,15 @@ class PostModel {
   });
 
   factory PostModel.fromJson(Map<String, dynamic> json) {
+    // ✅ [THÊM MỚI] Xử lý chuỗi thời gian: Cắt bỏ phần nano giây thừa
+    String rawDate = json['createdAt'] ?? "";
+
+    // Ví dụ Server trả về: 2026-01-25T23:45:06.46564592 (quá dài)
+    // Dart chỉ hiểu đến:   2026-01-25T23:45:06.465645 (26 ký tự)
+    if (rawDate.length > 26) {
+      rawDate = rawDate.substring(0, 26);
+    }
+
     return PostModel(
       id: json['id'],
       content: json['content'] ?? "",
@@ -33,7 +42,10 @@ class PostModel {
       authorAvatar:
           json['authorAvatar'] ??
           "https://ui-avatars.com/api/?name=${json['authorName']}&background=random",
-      createdAt: json['createdAt'] ?? "",
+
+      createdAt:
+          rawDate, // 👈 Thay json['createdAt'] bằng biến rawDate vừa xử lý
+
       reactionCount: json['reactionCount'] ?? 0,
       commentCount: json['commentCount'] ?? 0,
       myReaction: json['myReaction'],
