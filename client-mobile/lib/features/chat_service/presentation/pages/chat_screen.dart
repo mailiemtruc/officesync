@@ -456,18 +456,11 @@ class _ChatScreenState extends State<ChatScreen> {
   String _formatDate(String timestamp) {
     if (timestamp.isEmpty) return "";
     try {
-      DateTime dt;
-
-      // Trường hợp 1: Backend gửi chuẩn có chữ 'Z' (Vừa sửa ở trên)
-      if (timestamp.endsWith('Z')) {
-        dt = DateTime.parse(timestamp).toLocal(); // Tự động cộng 7 tiếng
-      }
-      // Trường hợp 2: API cũ gửi thiếu 'Z'
-      else {
-        dt = DateTime.parse(
-          timestamp + "Z",
-        ).toLocal(); // Ép thêm Z rồi cộng 7 tiếng
-      }
+      // [SỬA] Đơn giản hóa logic:
+      // DateTime.parse() đủ thông minh để hiểu:
+      // - Nếu có 'Z' -> Là UTC -> .toLocal() sẽ cộng 7h.
+      // - Nếu KHÔNG có 'Z' -> Dart hiểu là Local Time -> .toLocal() sẽ giữ nguyên.
+      DateTime dt = DateTime.parse(timestamp).toLocal();
 
       DateTime now = DateTime.now();
 

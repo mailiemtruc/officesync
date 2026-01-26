@@ -260,22 +260,10 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
 
     final status = _currentRequest.status;
 
-    // --- HÀM HỖ TRỢ FIX GIỜ UTC ---
-    // Giúp xử lý trường hợp DateTime bị hiểu nhầm là Local
+    // --- HÀM HỖ TRỢ FIX GIỜ UTC---
     DateTime fixToLocal(DateTime date) {
-      if (date.isUtc) return date.toLocal();
-      // Tạo lại DateTime với zone là UTC từ các giá trị ngày tháng hiện tại
-      // Sau đó mới chuyển sang Local
-      return DateTime.utc(
-        date.year,
-        date.month,
-        date.day,
-        date.hour,
-        date.minute,
-        date.second,
-      ).toLocal();
+      return date.toLocal();
     }
-    // -----------------------------
 
     // Xử lý thời gian Submitted
     String submittedTime = 'Submitted';
@@ -368,17 +356,8 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
   }
 
   void _showRejectionDialog(BuildContext context) {
-    // --- HÀM HỖ TRỢ FIX GIỜ UTC (Copy từ workflow qua) ---
     DateTime fixToLocal(DateTime date) {
-      if (date.isUtc) return date.toLocal();
-      return DateTime.utc(
-        date.year,
-        date.month,
-        date.day,
-        date.hour,
-        date.minute,
-        date.second,
-      ).toLocal();
+      return date.toLocal();
     }
     // ----------------------------------------------------
 
