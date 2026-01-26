@@ -260,7 +260,7 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
 
     final status = _currentRequest.status;
 
-    // --- HÀM HỖ TRỢ FIX GIỜ UTC---
+    // --- HÀM HỖ TRỢ FIX GIỜ UTC (Đã chuẩn) ---
     DateTime fixToLocal(DateTime date) {
       return date.toLocal();
     }
@@ -268,7 +268,6 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
     // Xử lý thời gian Submitted
     String submittedTime = 'Submitted';
     if (_currentRequest.createdAt != null) {
-      // Dùng hàm fixToLocal thay vì .toLocal() thường
       submittedTime = DateFormat(
         'HH:mm, dd/MM/yyyy',
       ).format(fixToLocal(_currentRequest.createdAt!));
@@ -277,7 +276,6 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
     // Xử lý thời gian Processed
     String processedTime = 'Waiting...';
     if (_currentRequest.updatedAt != null && status != RequestStatus.PENDING) {
-      // Dùng hàm fixToLocal ở đây luôn
       processedTime = DateFormat(
         'HH:mm, dd/MM/yyyy',
       ).format(fixToLocal(_currentRequest.updatedAt!));
@@ -301,9 +299,10 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
         'time': status == RequestStatus.PENDING
             ? 'Processing...'
             : processedTime,
+        // [ĐÃ SỬA] Hiển thị "Reviewed by Tên" thay vì chỉ "Reviewed"
         'actor': status == RequestStatus.PENDING
             ? 'Waiting for Manager'
-            : 'Reviewed',
+            : 'Reviewed by $actorName',
         'dotColor': status == RequestStatus.PENDING ? colorBlue : colorGreen,
         'lineColor': colorGrey,
         'isLast': false,
