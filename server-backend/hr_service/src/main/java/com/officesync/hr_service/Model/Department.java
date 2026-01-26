@@ -42,7 +42,7 @@ public class Department extends BaseEntity {
     @Column(name = "color", length = 10)
     private String color;
   
-// THAY BẰNG:
+
 @Transient
 private long memberCount = 0;
 
@@ -56,7 +56,7 @@ private long memberCount = 0;
 
     @OneToMany(mappedBy = "department", fetch = FetchType.LAZY)
     @JsonIgnore
-    @EqualsAndHashCode.Exclude // [QUAN TRỌNG]
-    @ToString.Exclude          // [QUAN TRỌNG]
+    @EqualsAndHashCode.Exclude 
+    @ToString.Exclude          
     private List<Employee> employees;
 }

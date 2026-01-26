@@ -36,7 +36,7 @@ public class DepartmentController {
         private String name;
         private Long managerId;
         private List<Long> memberIds;
-        private Boolean isHr; // [MỚI]
+        private Boolean isHr;
     }
 
     // 2. Cập nhật API Create
@@ -54,7 +54,7 @@ public class DepartmentController {
                     request.getName(), 
                     request.getManagerId(), 
                     request.getMemberIds(),
-                    request.getIsHr() // [MỚI] Truyền tham số này vào
+                    request.getIsHr() 
             );
             return ResponseEntity.ok(created);
         } catch (RuntimeException e) {
@@ -76,7 +76,7 @@ public ResponseEntity<List<Department>> getAllDepartments(@RequestHeader("X-User
     public static class UpdateDepartmentRequest {
         private String name;
         private Long managerId;
-        private Boolean isHr; // [MỚI]
+        private Boolean isHr; 
     }
 
     // 3. Cập nhật API Update
@@ -95,7 +95,7 @@ public ResponseEntity<List<Department>> getAllDepartments(@RequestHeader("X-User
                 id, 
                 request.getName(), 
                 request.getManagerId(),
-                request.getIsHr() // [MỚI] Truyền tham số này vào
+                request.getIsHr()
             );
             return ResponseEntity.ok(updated);
         } catch (RuntimeException e) {
@@ -105,7 +105,7 @@ public ResponseEntity<List<Department>> getAllDepartments(@RequestHeader("X-User
 
     @DeleteMapping("/{id}")
     public ResponseEntity<?> deleteDepartment(
-            @RequestHeader("X-User-Id") Long deleterId, // [MỚI] Header bắt buộc
+            @RequestHeader("X-User-Id") Long deleterId, // Header bắt buộc
             @PathVariable Long id
     ) {
         try {

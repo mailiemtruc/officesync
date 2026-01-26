@@ -15,10 +15,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties; 
-import com.officesync.hr_service.Model.Employee; // Nhớ import List
+import com.officesync.hr_service.Model.Employee;
 import com.officesync.hr_service.Model.EmployeeRole;
 import com.officesync.hr_service.Repository.EmployeeRepository;
-import com.officesync.hr_service.Service.EmployeeService; // [MỚI]
+import com.officesync.hr_service.Service.EmployeeService; 
 
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
@@ -49,19 +49,19 @@ public class EmployeeController {
     }
      
     @Data
-    @JsonIgnoreProperties(ignoreUnknown = true) // <--- THÊM DÒNG NÀY
+    @JsonIgnoreProperties(ignoreUnknown = true) 
     public static class CreateEmployeeRequest {
         private String fullName;
         private String email;
         private String phone;
         private String dateOfBirth; // Nhận dạng String "yyyy-MM-dd"
         private String role;
-        private String password;    // [QUAN TRỌNG] Hứng mật khẩu
+        private String password;    
     }
 
  @PutMapping("/{id}")
     public ResponseEntity<?> updateEmployee(
-            @RequestHeader("X-User-Id") Long updaterId, // [MỚI] Lấy ID người thực hiện
+            @RequestHeader("X-User-Id") Long updaterId, 
             @PathVariable Long id,
             @RequestBody UpdateEmployeeRequest request
     ) {
@@ -72,7 +72,7 @@ public class EmployeeController {
 
             // 2. Gọi Service truyền updater vào để kiểm tra quyền
             Employee updated = employeeService.updateEmployee(
-                updater, // <--- Tham số quan trọng nhất
+                updater,
                 id,
                 request.getFullName(),
                 request.getPhone(),
@@ -103,7 +103,7 @@ public class EmployeeController {
             
             return ResponseEntity.ok(Map.of("message", "Xóa nhân viên thành công"));
         } catch (RuntimeException e) {
-            // Trả về lỗi 400 kèm thông báo lý do (ví dụ: "Truy cập bị từ chối...")
+           
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }
     }
@@ -150,7 +150,7 @@ public class EmployeeController {
                 newEmployee.setRole(com.officesync.hr_service.Model.EmployeeRole.STAFF);
             }
 
-            // 3. [SỬA] GỌI SERVICE - Truyền object 'creator'
+            // 3 GỌI SERVICE - Truyền object 'creator'
             Employee created = employeeService.createEmployee(
                 newEmployee, 
                 creator,      // <--- Thay đổi quan trọng
@@ -168,20 +168,19 @@ public class EmployeeController {
 
 
 
-    // API TÌM KIẾM NHÂN VIÊN (Đã chuẩn hóa)
+    // API TÌM KIẾM NHÂN VIÊN 
     @GetMapping("/search")
     public ResponseEntity<List<Employee>> searchEmployees(
             @RequestHeader("X-User-Id") Long requesterId,
             @RequestParam String keyword
     ) {
-        // Controller chỉ điều phối, không xử lý logic
+        
         List<Employee> results = employeeService.searchEmployees(requesterId, keyword);
         
         return ResponseEntity.ok(results);
     }
 
-    // [MỚI] API 2: TÌM KIẾM ĐỂ CHỌN (Select Manager / Add Member)
-    // Logic: Active only, Exclude Me, Exclude Admin
+
     @GetMapping("/suggestion")
     public ResponseEntity<List<Employee>> searchEmployeeSuggestion(
             @RequestHeader("X-User-Id") Long requesterId,
@@ -192,7 +191,7 @@ public class EmployeeController {
         return ResponseEntity.ok(results);
     }
 
-     // [MỚI - CHUẨN DOANH NGHIỆP] Lấy danh sách nhân viên theo Department ID
+     // Lấy danh sách nhân viên theo Department ID
     @GetMapping("/department/{deptId}")
     public ResponseEntity<List<Employee>> getEmployeesByDepartment(@PathVariable Long deptId) {
         // Gọi Repository đã có sẵn hàm findByDepartmentId

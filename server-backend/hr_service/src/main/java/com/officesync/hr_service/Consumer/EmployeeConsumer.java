@@ -1,11 +1,11 @@
 package com.officesync.hr_service.Consumer;
 
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
-import org.springframework.amqp.support.AmqpHeaders; // [MỚI] Để lấy Routing Key
-import org.springframework.messaging.handler.annotation.Header; // [MỚI]
+import org.springframework.amqp.support.AmqpHeaders; 
+import org.springframework.messaging.handler.annotation.Header; 
 import org.springframework.stereotype.Service;
 
-import com.fasterxml.jackson.databind.ObjectMapper; // [MỚI]
+import com.fasterxml.jackson.databind.ObjectMapper; 
 import com.officesync.hr_service.Config.RabbitMQConfig;
 import com.officesync.hr_service.DTO.UserCreatedEvent;
 import com.officesync.hr_service.DTO.UserStatusChangedEvent;
@@ -20,9 +20,9 @@ import lombok.extern.slf4j.Slf4j;
 public class EmployeeConsumer {
 
     private final EmployeeService employeeService;
-    private final ObjectMapper objectMapper; // [MỚI] Inject ObjectMapper
+    private final ObjectMapper objectMapper; 
 
-    // [QUAN TRỌNG] Chỉ dùng 1 hàm duy nhất nhận String
+    //  Chỉ dùng 1 hàm duy nhất nhận String
     @RabbitListener(queues = RabbitMQConfig.QUEUE_COMPANY_CREATE)
     public void receiveMessage(String jsonMessage, @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey) {
         try {

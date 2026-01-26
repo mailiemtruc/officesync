@@ -30,7 +30,7 @@ public class RedisConfig {
         objectMapper.registerModule(new JavaTimeModule());
         objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
-        // Bảo mật Type Validator (Giữ nguyên như bạn làm là tốt)
+        // Bảo mật Type Validator
         objectMapper.activateDefaultTyping(
             BasicPolymorphicTypeValidator.builder()
                 .allowIfBaseType(Object.class)
@@ -65,10 +65,10 @@ public class RedisConfig {
         // 3. Request Detail - 1 ngày
         configMap.put("request_detail", cacheConfiguration().entryTtl(Duration.ofDays(1))); 
         // Thêm config cho 2 loại cache mới
-       configMap.put("departments_metadata", cacheConfiguration().entryTtl(Duration.ofHours(24))); // Lưu lâu
-       configMap.put("departments_stats", cacheConfiguration().entryTtl(Duration.ofHours(2)));    // Lưu ngắn hơn
+       configMap.put("departments_metadata", cacheConfiguration().entryTtl(Duration.ofHours(24))); 
+       configMap.put("departments_stats", cacheConfiguration().entryTtl(Duration.ofHours(2)));    
         // 4. Request List (User & Manager) - Short Lived (2 phút)
-        // [FIX] Phải khai báo rõ ràng tên cache được dùng trong Service
+        // Phải khai báo rõ ràng tên cache được dùng trong Service
         RedisCacheConfiguration shortLivedConfig = cacheConfiguration().entryTtl(Duration.ofMinutes(2));
         configMap.put("request_list_user", shortLivedConfig);
         configMap.put("request_list_manager", shortLivedConfig);

@@ -58,16 +58,16 @@ public class Employee extends BaseEntity {
 
     @ManyToOne
     @JoinColumn(name = "department_id")
-    @EqualsAndHashCode.Exclude // [QUAN TRỌNG] Ngắt vòng lặp hashCode
+    @EqualsAndHashCode.Exclude // ư Ngắt vòng lặp hashCode
     @ToString.Exclude  
-    @JsonIgnoreProperties({"employees", "manager", "hibernateLazyInitializer", "handler"})        // [QUAN TRỌNG] Ngắt vòng lặp toString
+    @JsonIgnoreProperties({"employees", "manager", "hibernateLazyInitializer", "handler"})        //  Ngắt vòng lặp toString
     private Department department;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "role", nullable = false)
     private EmployeeRole role;
 
-    // [MỚI] THÊM HÀM NÀY ĐỂ JSON TRẢ VỀ CÓ TÊN PHÒNG BAN
+ \
     public String getDepartmentName() {
         return department != null ? department.getName() : null;
     }

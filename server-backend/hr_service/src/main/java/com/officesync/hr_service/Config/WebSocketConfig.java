@@ -20,9 +20,6 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
    @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
-        // [QUAN TRỌNG] Chỉ giữ lại dòng này.
-        // URL kết nối từ Flutter sẽ là: ws://IP:8081/ws-hr
-        // Đã bỏ .withSockJS()
         registry.addEndpoint("/ws-hr")
                 .setAllowedOriginPatterns("*");
     }

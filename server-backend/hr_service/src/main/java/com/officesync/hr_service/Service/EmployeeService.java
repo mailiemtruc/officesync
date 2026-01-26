@@ -51,7 +51,7 @@ public class EmployeeService {
     private final SnowflakeIdGenerator idGenerator;
     private final EmployeeProducer employeeProducer;
     
-    // [FIX] Inject CacheManager để xóa cache thủ công
+    // Inject CacheManager để xóa cache thủ công
     private final CacheManager cacheManager;
     
     private final SimpMessagingTemplate messagingTemplate;
@@ -83,7 +83,7 @@ public class EmployeeService {
         }
     }
 
-    // 2. [QUAN TRỌNG] Xóa cache danh sách nhân viên toàn công ty
+    // 2. Xóa cache danh sách nhân viên toàn công ty
     // Hàm này giải quyết lỗi: Tạo nhân viên xong nhưng không hiện lên list của Admin
     private void evictCompanyCache(Long companyId) {
         if (companyId != null) {
@@ -101,7 +101,7 @@ public class EmployeeService {
                     statsCache.evict(companyId);
                 }
                 
-                // Xóa cache metadata phòng ban (nếu có)
+                // Xóa cache metadata phòng ban 
                 var metaCache = cacheManager.getCache("departments_metadata");
                 if (metaCache != null) {
                     metaCache.evict(companyId);
@@ -191,7 +191,7 @@ public class EmployeeService {
         Employee savedEmployee = saveEmployeeWithRetry(newEmployee);
         
         // =================================================================================
-        // [FIX - START] LOGIC TỰ ĐỘNG SET MANAGER VÀ GIÁNG CHỨC CŨ
+        // LOGIC TỰ ĐỘNG SET MANAGER VÀ GIÁNG CHỨC CŨ
         // =================================================================================
         if (savedEmployee != null && savedEmployee.getRole() == EmployeeRole.MANAGER && targetDept != null) {
             
@@ -230,10 +230,7 @@ public class EmployeeService {
             
             log.info("--> [Department] Đã cập nhật Manager cho phòng {} là {}", targetDept.getName(), savedEmployee.getFullName());
         }
-        // =================================================================================
-        // [FIX - END]
-        // =================================================================================
-
+      
         
         // 5. Xử lý Cache & Event sau khi lưu
         if (savedEmployee != null) {
@@ -297,7 +294,7 @@ public class EmployeeService {
         Long oldDeptId = (targetEmployee.getDepartment() != null) ? targetEmployee.getDepartment().getId() : null;
         EmployeeRole oldRole = targetEmployee.getRole(); // <-- LƯU ROLE CŨ
         
-        // [FIX] Xác định xem có phải tự sửa chính mình không
+        //  Xác định xem có phải tự sửa chính mình không
         boolean isSelfUpdate = updater.getId().equals(targetEmployee.getId());
 
         // 2. Permission Check
@@ -363,7 +360,7 @@ public class EmployeeService {
         }
 
         // 5. Logic Sync Manager
-        String previousManagedDeptName = null; // [FIX] Biến lưu tên phòng cũ nếu họ là quản lý
+        String previousManagedDeptName = null; //  Biến lưu tên phòng cũ nếu họ là quản lý
         EmployeeRole newRole = targetEmployee.getRole();
         Department newDepartment = targetEmployee.getDepartment();
 
@@ -392,7 +389,7 @@ public class EmployeeService {
         // 6. Save
         Employee savedEmployee = employeeRepository.save(targetEmployee);
 
-        // [FIX] Xử lý xóa Cache Thủ Công
+        //  Xử lý xóa Cache Thủ Công
         try {
             var detailCache = cacheManager.getCache("employee_detail");
             if (detailCache != null) detailCache.evict(id);
@@ -411,7 +408,7 @@ public class EmployeeService {
         Long currentDeptId = (savedEmployee.getDepartment() != null) ? savedEmployee.getDepartment().getId() : null;
         String currentDeptName = (savedEmployee.getDepartment() != null) ? savedEmployee.getDepartment().getName() : "Unassigned";
          
-        // --- [NEW] NOTIFICATION CHO ROLE CHANGE (Thăng chức / Giáng chức) ---
+        // ---  NOTIFICATION CHO ROLE CHANGE (Thăng chức / Giáng chức) ---
         if (oldRole != savedEmployee.getRole()) {
             String title = "Role Update";
             String body = "Your role has been updated to: " + savedEmployee.getRole().name();
@@ -434,7 +431,7 @@ public class EmployeeService {
         // -------------------------------------------------------------------
 
         if (!Objects.equals(oldDeptId, currentDeptId)) {
-            // [FIX] Kiểm tra nếu là Manager chuyển phòng -> Gửi thông báo Reassignment
+            //  Kiểm tra nếu là Manager chuyển phòng -> Gửi thông báo Reassignment
             if (savedEmployee.getRole() == EmployeeRole.MANAGER && previousManagedDeptName != null) {
                 sendNotification(savedEmployee, "Manager Reassignment", 
                     "You have been reassigned from Manager of " + previousManagedDeptName + " to Manager of " + currentDeptName + ".");
@@ -556,7 +553,7 @@ public class EmployeeService {
         // 3. Delete DB
         employeeRepository.delete(targetEmployee);
 
-        // [FIX] Xóa cache thủ công
+        //  Xóa cache thủ công
         try {
             var detailCache = cacheManager.getCache("employee_detail");
             if (detailCache != null) detailCache.evict(targetId);
@@ -573,7 +570,7 @@ public class EmployeeService {
     }
 
     // =================================================================
-    // CÁC HÀM GET LIST (ĐÃ TỐI ƯU CACHE)
+    // CÁC HÀM GET LIST
     // =================================================================
     
     @Cacheable(value = "employees_by_company", key = "#companyId", sync = true)
@@ -649,7 +646,7 @@ public class EmployeeService {
                 departmentRepository.saveAndFlush(managedDept);
             }
             // [Chat] ==========================================
-            // FIX: Bắn lệnh xóa Member TẠM (ID dài) khỏi nhóm chat trước khi xóa User
+            // Bắn lệnh xóa Member TẠM (ID dài) khỏi nhóm chat trước khi xóa User
             if (memberOfDept != null) {
                 try {
                     DepartmentSyncEvent removeTempEvent = new DepartmentSyncEvent();
@@ -703,7 +700,7 @@ public class EmployeeService {
 
         if (finalEmployee != null) {
             syncToAttendanceService(finalEmployee);
-            // [FIX] Xóa cache công ty để list cập nhật ID mới
+            // Xóa cache công ty để list cập nhật ID mới
             evictCompanyCache(finalEmployee.getCompanyId());
             if (finalEmployee.getDepartment() != null) {
                 evictDepartmentCache(finalEmployee.getDepartment().getId());

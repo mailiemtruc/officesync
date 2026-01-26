@@ -38,8 +38,7 @@ public class RequestController {
     }
 
     // 2. Duyệt đơn (Dành cho Manager/Admin)
-    // URL: POST /api/v1/requests/{id}/approve
-    // Body: { "status": "APPROVED", "comment": "Ok em" }
+
     @PostMapping("/{requestId}/process")
     public ResponseEntity<Request> processRequest(
             @PathVariable Long requestId,
@@ -58,16 +57,16 @@ public class RequestController {
 @GetMapping
 public ResponseEntity<List<Request>> getMyRequests(
         @RequestHeader("X-User-Id") Long userId,
-        @RequestParam(required = false) String search, // Thêm
-        @RequestParam(required = false) Integer day,   // [MỚI]
-        @RequestParam(required = false) Integer month, // Thêm
-        @RequestParam(required = false) Integer year   // Thêm
+        @RequestParam(required = false) String search, 
+        @RequestParam(required = false) Integer day,  
+        @RequestParam(required = false) Integer month, 
+        @RequestParam(required = false) Integer year   
 ) {
     List<Request> requests = requestService.getMyRequests(userId, search,day, month, year);
     return ResponseEntity.ok(requests);
 }
 
-   // [SỬA] Đổi thành DeleteMapping
+   // Đổi thành DeleteMapping
     @DeleteMapping("/{requestId}")
     public ResponseEntity<?> cancelRequest(
             @PathVariable Long requestId,
@@ -88,7 +87,7 @@ public ResponseEntity<List<Request>> getMyRequests(
      public ResponseEntity<List<Request>> getManagerRequests(
         @RequestHeader("X-User-Id") Long managerId,
         @RequestParam(required = false) String search,
-        @RequestParam(required = false) Integer day,   // [MỚI]
+        @RequestParam(required = false) Integer day,  
         @RequestParam(required = false) Integer month,
         @RequestParam(required = false) Integer year
 ) {

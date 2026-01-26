@@ -14,8 +14,7 @@ import com.officesync.hr_service.Model.EmployeeRole;
 @Repository
 public interface EmployeeRepository extends JpaRepository<Employee, Long> {
 
-    // --- CÁC HÀM CƠ BẢN (Ít dùng hoặc trả về 1 Entity thì không quá lo N+1) ---
-    
+   
     // Tìm nhân viên theo mã code
     Optional<Employee> findByEmployeeCode(String employeeCode);
 
@@ -28,7 +27,7 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
 
     // --- CÁC HÀM TRẢ VỀ LIST (CẦN TỐI ƯU JOIN FETCH) ---
 
-    // [TỐI ƯU] Thay thế hàm findByCompanyId mặc định
+   
     // Dùng JOIN FETCH để lấy luôn Department, tránh việc load 100 nhân viên thì bắn thêm 100 query lấy phòng ban
     @Query("SELECT e FROM Employee e LEFT JOIN FETCH e.department WHERE e.companyId = :companyId")
     List<Employee> findByCompanyId(@Param("companyId") Long companyId);
@@ -41,12 +40,12 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
 
     @Query("SELECT e FROM Employee e LEFT JOIN FETCH e.department WHERE e.id IN :ids")
     List<Employee> findByIdInFetchDepartment(@Param("ids") List<Long> ids);
-    // [TỐI ƯU] Lấy nhân viên theo phòng ban
+  
     // Mặc dù đã biết phòng ban, nhưng vẫn fetch để object Employee đầy đủ data nếu dùng ở nơi khác
     @Query("SELECT e FROM Employee e LEFT JOIN FETCH e.department WHERE e.department.id = :departmentId")
     List<Employee> findByDepartmentId(@Param("departmentId") Long departmentId);
 
-    // [TỐI ƯU] Lấy theo role
+    //  Lấy theo role
     @Query("SELECT e FROM Employee e LEFT JOIN FETCH e.department WHERE e.companyId = :companyId AND e.role = :role")
     List<Employee> findByCompanyIdAndRole(@Param("companyId") Long companyId, @Param("role") EmployeeRole role);
 
@@ -55,8 +54,8 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
     @Query("SELECT e FROM Employee e LEFT JOIN FETCH e.department WHERE e.companyId = :companyId " +
            "AND (LOWER(e.fullName) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
            "OR LOWER(e.employeeCode) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
-           "OR LOWER(e.department.name) LIKE LOWER(CONCAT('%', :keyword, '%')) " +           // [SỬA] Dùng e.department
-           "OR LOWER(e.department.departmentCode) LIKE LOWER(CONCAT('%', :keyword, '%')))")  // [SỬA] Dùng e.department
+           "OR LOWER(e.department.name) LIKE LOWER(CONCAT('%', :keyword, '%')) " +           
+           "OR LOWER(e.department.departmentCode) LIKE LOWER(CONCAT('%', :keyword, '%')))")  
     List<Employee> searchEmployees(@Param("companyId") Long companyId, @Param("keyword") String keyword);
 
  
@@ -67,8 +66,8 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
            "AND e.role <> 'COMPANY_ADMIN' " + 
            "AND (LOWER(e.fullName) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
            "OR LOWER(e.employeeCode) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
-           "OR LOWER(e.department.name) LIKE LOWER(CONCAT('%', :keyword, '%')) " +           // [SỬA] Dùng e.department
-           "OR LOWER(e.department.departmentCode) LIKE LOWER(CONCAT('%', :keyword, '%')))")  // [SỬA] Dùng e.department
+           "OR LOWER(e.department.name) LIKE LOWER(CONCAT('%', :keyword, '%')) " +          
+           "OR LOWER(e.department.departmentCode) LIKE LOWER(CONCAT('%', :keyword, '%')))")  
     List<Employee> searchStaffForSelection(
         @Param("companyId") Long companyId, 
         @Param("requesterId") Long requesterId, 

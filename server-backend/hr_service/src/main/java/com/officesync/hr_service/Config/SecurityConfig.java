@@ -21,8 +21,8 @@ public class SecurityConfig {
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/v3/api-docs/**", "/swagger-ui/**").permitAll()
-                
-                // ✅ CHO PHÉP WEBSOCKET (Phải khớp với endpoint /ws-hr trong WebSocketConfig)
+            
+                // CHO PHÉP WEBSOCKET (Phải khớp với endpoint /ws-hr trong WebSocketConfig)
                 .requestMatchers("/ws-hr/**").permitAll() 
                 
                 .anyRequest().authenticated()

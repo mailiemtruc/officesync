@@ -37,8 +37,7 @@ public class SyncAspect {
         }
     }
 
-    // 3. [SỬA LỖI QUAN TRỌNG] Đảm bảo gửi ID thật ngay sau khi Swap
-    // Chúng ta nhắm vào kết thúc của hàm tạo hoặc đồng bộ trong Service
+    // 3.  Đảm bảo gửi ID thật ngay sau khi Swap
     @AfterReturning(pointcut = "execution(* com.officesync.hr_service.Service.EmployeeService.*(..))", returning = "result")
     public void afterServiceMethodReturn(Object result) {
         // Nếu hàm trả về Employee (đã swap ID xong), gửi ngay bản đó sang Task

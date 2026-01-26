@@ -4,7 +4,7 @@ import java.time.LocalDateTime;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
-import jakarta.persistence.Column; // Sử dụng * cho gọn
+import jakarta.persistence.Column; 
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -77,7 +77,7 @@ public class Request extends BaseEntity {
     private String evidenceUrl;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "requests"}) // Thêm ignore cho approver
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "requests"}) 
     @JoinColumn(name = "approver_id")
     private Employee approver; 
 

@@ -8,7 +8,7 @@ import java.util.Random;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.cache.CacheManager; // [IMPORT QUAN TRỌNG]
+import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -40,7 +40,7 @@ public class DepartmentService {
     private final EmployeeProducer employeeProducer;
     private final RequestRepository requestRepository;
     
-    // [FIX] Inject CacheManager để quản lý cache thủ công
+    //  Inject CacheManager để quản lý cache thủ công
     private final CacheManager cacheManager;
     
     private DepartmentService self;
@@ -122,13 +122,13 @@ public class DepartmentService {
                 throw new RuntimeException("LỖI BẢO MẬT: Nhân viên này không thuộc công ty của bạn!");
             }
 
-            // [FIX LOGIC THÔNG BÁO] Lưu tên phòng ban cũ nếu họ đang làm quản lý ở đó
+            // Lưu tên phòng ban cũ nếu họ đang làm quản lý ở đó
             String previousManagedDeptName = null;
             Optional<Department> oldManagedDeptOpt = departmentRepository.findByManagerId(managerId);
             if (oldManagedDeptOpt.isPresent()) {
                 Department oldDept = oldManagedDeptOpt.get();
                 if (!oldDept.getId().equals(savedDept.getId())) {
-                    previousManagedDeptName = oldDept.getName(); // <-- Lưu tên phòng cũ
+                    previousManagedDeptName = oldDept.getName(); 
                     oldDept.setManager(null);
                     departmentRepository.saveAndFlush(oldDept);
                 }
@@ -144,7 +144,7 @@ public class DepartmentService {
             syncEmployeeToCore(newManager);
             savedDept.setManager(newManager);
             
-            // [FIX] Kiểm tra để gửi thông báo phù hợp
+            // Kiểm tra để gửi thông báo phù hợp
             if (previousManagedDeptName != null) {
                 // Trường hợp chuyển từ quản lý phòng này sang phòng khác
                 sendNotification(newManager, "Manager Reassignment", 
@@ -192,7 +192,7 @@ public class DepartmentService {
 
         Department finalDept = departmentRepository.save(savedDept);
 
-        // [FIX] Xóa cache thủ công
+        // Xóa cache thủ công
         evictCompanyStructureCache(companyId);
         evictDepartmentMembersCache(finalDept.getId());
 
@@ -257,7 +257,7 @@ public class DepartmentService {
                     throw new RuntimeException("LỖI BẢO MẬT: Nhân viên được chọn không thuộc công ty này!");
                 }
 
-                // [FIX LOGIC THÔNG BÁO] Kiểm tra xem Manager mới này có đang quản lý phòng nào khác không
+                // Kiểm tra xem Manager mới này có đang quản lý phòng nào khác không
                 String previousManagedDeptName = null;
                 Optional<Department> oldManagedDeptOpt = departmentRepository.findByManagerId(managerId);
                 if (oldManagedDeptOpt.isPresent()) {
@@ -279,7 +279,7 @@ public class DepartmentService {
                 sendProfileRefreshSocket(newManager.getId());
                 currentDept.setManager(newManager);
                 
-                // [FIX] Gửi thông báo theo ngữ cảnh
+                //  Gửi thông báo theo ngữ cảnh
                 if (previousManagedDeptName != null) {
                     // Nếu trước đó họ là quản lý phòng khác -> Thông báo điều chuyển
                     sendNotification(newManager, "Manager Reassignment", 
@@ -307,7 +307,7 @@ public class DepartmentService {
 
         Department updated = departmentRepository.saveAndFlush(currentDept);
 
-        // [FIX] Xóa cache thủ công
+        //  Xóa cache thủ công
         evictCompanyStructureCache(updater.getCompanyId());
         evictDepartmentMembersCache(deptId);
 
@@ -328,7 +328,7 @@ public class DepartmentService {
         if (!dept.getCompanyId().equals(deleter.getCompanyId())) {
              throw new RuntimeException("Access Denied.");
         }
-// [MỚI] Bắn sự kiện XÓA
+//  Bắn sự kiện XÓA
              try {
                 DepartmentSyncEvent event = new DepartmentSyncEvent();
                 event.setEvent(DepartmentSyncEvent.ACTION_DELETE);
@@ -340,7 +340,7 @@ public class DepartmentService {
              }
         
     
-        // --- [TỐI ƯU HIỆU NĂNG] Batch Update ---
+        
         // 1. Gỡ Request (Dùng saveAll để Hibernate batch update)
         List<Request> requests = requestRepository.findByDepartmentIdOrderByCreatedAtDesc(deptId);
         if (!requests.isEmpty()) {
@@ -373,12 +373,12 @@ public class DepartmentService {
             // Gỡ nhân viên ra trước khi xóa để tránh lỗi DB
             employeeRepository.unlinkEmployeesFromDepartment(deptId);
         } catch (Exception e) { e.printStackTrace(); }
-        // [HẾT ĐOẠN THÊM]
+       
         
         // 3. Xóa phòng ban
         departmentRepository.delete(dept);
 
-        // [FIX] Xóa cache thủ công
+        //  Xóa cache thủ công
         evictCompanyStructureCache(deleter.getCompanyId());
         evictDepartmentMembersCache(deptId);
     }

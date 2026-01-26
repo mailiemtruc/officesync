@@ -13,7 +13,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class EmployeeSyncEvent {
-    private Long id; // [MỚI] Thêm trường này để đồng bộ Update/Delete
+    private Long id; //  Thêm trường này để đồng bộ Update/Delete
     private String email;
     private String fullName;
     private String phone;
@@ -21,7 +21,7 @@ public class EmployeeSyncEvent {
     private Long companyId;
     private String role;
     private String status;
-    private String password; // [MỚI] Khôi phục lại trường này
+    private String password;
     private String departmentName;
     private Long departmentId;
 }

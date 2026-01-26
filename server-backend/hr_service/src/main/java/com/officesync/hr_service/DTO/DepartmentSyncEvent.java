@@ -9,7 +9,7 @@ import java.util.List;
 @AllArgsConstructor
 @NoArgsConstructor
 public class DepartmentSyncEvent {
-    // Các hành động
+    \
     public static final String ACTION_CREATE = "DEPT_CREATED";
     public static final String ACTION_DELETE = "DEPT_DELETED";
     public static final String ACTION_ADD_MEMBER = "MEMBER_ADDED";

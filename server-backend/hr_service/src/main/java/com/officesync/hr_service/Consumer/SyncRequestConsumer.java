@@ -18,7 +18,6 @@ public class SyncRequestConsumer {
     public void handleSyncRequest(String message) {
         if ("START_SYNC_ALL".equals(message)) {
             log.info("📩 [MQ] Nhận tín hiệu yêu cầu đồng bộ từ Task Service.");
-            // Gọi hàm có sẵn của bạn để bắn toàn bộ dữ liệu qua MQ
             employeeService.forceSyncAllDataToMQ();
             log.info("✅ [MQ] Đã hoàn thành việc đẩy ngược dữ liệu cho Task Service.");
         }

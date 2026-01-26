@@ -7,7 +7,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import org.hibernate.Hibernate; // [BẮT BUỘC] Import này để dùng hàm unproxy
+import org.hibernate.Hibernate; 
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -82,7 +82,7 @@ public class RequestService {
                 evictManagerListCache(dept.getManager().getId());
             }
 
-            // 4. [QUAN TRỌNG] Xóa cache của TOÀN BỘ team HR (Manager + Staff)
+            // 4.  Xóa cache của TOÀN BỘ team HR (Manager + Staff)
             // Để đảm bảo HR luôn thấy trạng thái mới nhất (dù họ không nhận thông báo)
             Department hrDept = departmentRepository.findByCompanyIdAndIsHrTrue(companyId).orElse(null);
             if (hrDept != null) {
@@ -271,7 +271,7 @@ public class RequestService {
     }
 
     // =========================================================================
-    // 3. GET LIST (ĐÃ FIX LỖI HIỂN THỊ "UNKNOWN" BẰNG UNPROXY)
+    // 3. GET LIST 
     // =========================================================================
 
     @Transactional(readOnly = true)
@@ -308,7 +308,7 @@ public class RequestService {
             }
         }
 
-        // [FIXED] UNPROXY
+        // UNPROXY
         if (!results.isEmpty()) {
             for (Request req : results) {
                 if (req.getRequester() != null) {
@@ -341,7 +341,7 @@ public class RequestService {
         String searchKey = (keyword != null && !keyword.trim().isEmpty()) ? keyword.trim() : null;
         List<Request> results = requestRepository.searchRequestsForEmployee(userId, searchKey, day, month, year);
         
-        // [FIXED] UNPROXY
+        // UNPROXY
         if (!results.isEmpty()) {
             for (Request req : results) {
                 if (req.getRequester() != null) {
@@ -401,7 +401,7 @@ public class RequestService {
         }
     }
 
-   // [ĐÃ CHỈNH SỬA] Hàm này đã bỏ logic gửi tin cho HR
+   // Hàm này đã bỏ logic gửi tin cho HR
     private void sendApprovalNotification(Request request, Employee approver, RequestStatus status) {
         Employee requester = request.getRequester();
         
@@ -415,7 +415,7 @@ public class RequestService {
             employeeProducer.sendNotification(event);
         }
         
-        // [REMOVED] Logic gửi cho HR khi đơn Manager được duyệt đã bị xóa tại đây.
+       
     }
 
     private void sendSocketUpdate(Request request) {
@@ -507,7 +507,7 @@ public class RequestService {
         Request request = requestRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy đơn với ID: " + id));
 
-        // [QUAN TRỌNG] Unproxy các object quan hệ để tránh lỗi Lazy Loading khi trả về JSON
+        //  Unproxy các object quan hệ để tránh lỗi Lazy Loading khi trả về JSON
         // (Nếu bạn dùng Hibernate Proxy)
         if (request.getRequester() != null) {
             request.setRequester((Employee) Hibernate.unproxy(request.getRequester()));

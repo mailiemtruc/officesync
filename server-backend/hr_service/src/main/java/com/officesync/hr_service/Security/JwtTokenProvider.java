@@ -9,7 +9,7 @@ import java.security.Key;
 
 @Component
 public class JwtTokenProvider {
-    // Phải khớp 100% với các service khác
+  
     private final String JWT_SECRET = "OfficeSync_Super_Secure_Secret_Key_For_Enterprise_Level_Security_Version_2025_Longer_Is_Better";
 
     private Key getSigningKey() {

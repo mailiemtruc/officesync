@@ -13,7 +13,7 @@ import com.officesync.hr_service.Model.RequestStatus;
 @Repository
 public interface RequestRepository extends JpaRepository<Request, Long> {
     
-    // ... (Giữ nguyên các hàm findBy khác) ...
+   
 
     List<Request> findByRequesterId(Long requesterId);
     List<Request> findByApproverId(Long approverId);
@@ -22,7 +22,7 @@ public interface RequestRepository extends JpaRepository<Request, Long> {
     List<Request> findByDepartmentIdOrderByCreatedAtDesc(Long departmentId);
     List<Request> findByCompanyIdOrderByCreatedAtDesc(Long companyId);
 
-    // 1. ADMIN (Giữ nguyên Fix Fetch)
+  
     @Query("SELECT DISTINCT r FROM Request r " +
             "JOIN FETCH r.requester e " +
             "LEFT JOIN FETCH e.department ed " +
@@ -50,11 +50,11 @@ public interface RequestRepository extends JpaRepository<Request, Long> {
             @Param("year") Integer year
     );
 
-    // 2. HR: [ĐÂY LÀ PHẦN SỬA ĐỔI QUAN TRỌNG]
+  
     @Query("SELECT DISTINCT r FROM Request r " +
             "JOIN FETCH r.requester e " +
             "LEFT JOIN FETCH e.department ed " +
-            "LEFT JOIN FETCH ed.manager " +       // [FIX] Fetch Manager để hiển thị tên
+            "LEFT JOIN FETCH ed.manager " +       //Fetch Manager để hiển thị tên
             "LEFT JOIN FETCH r.department d " +
             "LEFT JOIN FETCH d.manager " +        
             "LEFT JOIN FETCH r.approver a " +
@@ -86,14 +86,14 @@ public interface RequestRepository extends JpaRepository<Request, Long> {
             "ORDER BY r.createdAt DESC")
     List<Request> searchRequestsForHR(
             @Param("companyId") Long companyId,
-            @Param("hrId") Long hrId, // ID của người đang xem danh sách
+            @Param("hrId") Long hrId, 
             @Param("keyword") String keyword,
             @Param("day") Integer day,
             @Param("month") Integer month,
             @Param("year") Integer year
     );
 
-    // 3. MANAGER (Giữ nguyên)
+    
     @Query("SELECT r FROM Request r " +
             "JOIN FETCH r.requester e " +
             "LEFT JOIN FETCH e.department ed " +
@@ -123,7 +123,7 @@ public interface RequestRepository extends JpaRepository<Request, Long> {
             @Param("year") Integer year
     );
 
-    // 4. EMPLOYEE (Giữ nguyên)
+
     @Query("SELECT r FROM Request r " +
             "JOIN FETCH r.requester e " +
             "LEFT JOIN FETCH e.department ed " +
