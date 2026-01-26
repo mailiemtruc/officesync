@@ -1,7 +1,7 @@
 # OFFICESYNC
 
 <p align="center">
-  <img src="images/1.png" width="250"/>
+  <img src="images/logo2-01.png" width="250"/>
 </p>
 
 ## TỔNG QUANG
