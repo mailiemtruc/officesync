@@ -26,11 +26,9 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
   final _storage = const FlutterSecureStorage();
   final _dataSource = RequestRemoteDataSource();
 
-  // Biến lưu hàm hủy đăng ký
   dynamic _unsubscribeFn;
   String? _currentCompanyId;
 
-  // Biến lưu Role người dùng hiện tại
   String _currentUserRole = '';
 
   List<Map<String, dynamic>> _requestList = [];
@@ -39,7 +37,6 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
   final TextEditingController _searchController = TextEditingController();
   Timer? _debounce;
 
-  // Biến lọc thời gian
   DateTime? _selectedDate;
   FilterType _filterType = FilterType.none;
 
@@ -82,7 +79,6 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
     if (_currentCompanyId != null) {
       final topic = '/topic/company/$_currentCompanyId/requests';
 
-      // Thêm từ khóa 'await' vào trước WebSocketService().subscribe
       _unsubscribeFn = await WebSocketService().subscribe(topic, (data) {
         if (!mounted) return;
         print("--> Socket received update. Reloading list...");
@@ -616,7 +612,6 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
       }
     }).toList();
 
-    // --- [ĐÃ SỬA] LOGIC SẮP XẾP TẠI ĐÂY ---
     displayList.sort((a, b) {
       final reqA = a['request'] as RequestModel;
       final reqB = b['request'] as RequestModel;
@@ -811,7 +806,6 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // [ĐÃ SỬA] Dùng Container thay vì SizedBox
           Container(
             width: 40,
             alignment: Alignment.centerLeft,
@@ -827,7 +821,6 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
             ),
           ),
 
-          // Tiêu đề
           const Expanded(
             child: Text(
               'REQUEST MANAGEMENT',
@@ -841,7 +834,6 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
             ),
           ),
 
-          // Widget rỗng để cân bằng layout
           const SizedBox(width: 40),
         ],
       ),
@@ -1206,7 +1198,6 @@ class _ManagerRequestCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      // [SỬA LOGIC LAYOUT TẠI ĐÂY]
                       Row(
                         children: [
                           // Tên + Badge Manager (Gom nhóm và dùng Flexible)

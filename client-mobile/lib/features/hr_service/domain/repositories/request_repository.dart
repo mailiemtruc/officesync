@@ -6,18 +6,17 @@ abstract class RequestRepository {
   Future<bool> createRequest({
     required String userId,
     required RequestModel request,
-    String? evidenceUrl, // [MỚI]
+    String? evidenceUrl,
   });
 
   Future<List<RequestModel>> getMyRequests(
     String userId, {
     String? search,
-    int? day, // <-- Thêm dòng này
+    int? day,
     int? month,
     int? year,
   });
 
-  // [MỚI] Hàm upload file
   Future<String> uploadFile(File file);
 
   Future<bool> cancelRequest(String requestId, String userId);

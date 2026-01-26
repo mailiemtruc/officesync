@@ -14,8 +14,8 @@ import '../../domain/repositories/request_repository.dart';
 import '../../data/models/request_model.dart';
 import '../../domain/repositories/department_repository_impl.dart';
 import '../../domain/repositories/department_repository.dart';
-import 'package:path_provider/path_provider.dart'; // Import mới
-import 'package:path/path.dart' as path; // Import mới
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as path;
 
 class CreateRequestPage extends StatefulWidget {
   const CreateRequestPage({super.key});
@@ -39,7 +39,7 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
   // --- LOGIC UPLOAD & EVIDENCE ---
   final ImagePicker _picker = ImagePicker();
 
-  // [ĐÃ SỬA] Danh sách file đã chọn (chưa upload)
+  // Danh sách file đã chọn (chưa upload)
   List<File> _selectedFiles = [];
 
   int _imageCount = 0; // Max 5
@@ -65,7 +65,7 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
       remoteDataSource: DepartmentRemoteDataSource(),
     );
 
-    // [CẬP NHẬT] Mặc định chọn ngày hiện tại (Hôm nay)
+    // Mặc định chọn ngày hiện tại (Hôm nay)
     final now = DateTime.now();
     _fromDate = now;
     _toDate = now; // Set luôn ngày kết thúc mặc định để tránh lỗi logic
@@ -97,8 +97,7 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
           : await _picker.pickImage(source: source, imageQuality: 70);
 
       if (xfile != null) {
-        // [FIX - ENTERPRISE SOLUTION]
-        // Thay vì dùng file cache (dễ bị xóa), ta copy sang thư mục Documents của App
+        // Thay vì dùng file cache (dễ bị xóa),  copy sang thư mục Documents của App
 
         // 1. Lấy đường dẫn thư mục Documents
         final directory = await getApplicationDocumentsDirectory();
@@ -241,7 +240,7 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
                 color: Colors.transparent,
                 child: InkWell(
                   onTap: () => Navigator.pop(context),
-                  // [MỚI] Thêm hiệu ứng lan tỏa màu đỏ
+
                   splashColor: const Color(0xFFEF4444).withOpacity(0.1),
                   highlightColor: const Color(0xFFEF4444).withOpacity(0.05),
                   child: Container(
@@ -278,7 +277,6 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        // [CẬP NHẬT] Đổi hiệu ứng nhấn sang màu xám
         splashColor: Colors.grey.withOpacity(0.2),
         highlightColor: Colors.grey.withOpacity(0.1),
         child: Padding(
@@ -288,14 +286,10 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.1), // Nền icon vẫn giữ màu gốc
+                  color: color.withOpacity(0.1),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(
-                  icon,
-                  color: color,
-                  size: 24,
-                ), // Icon vẫn giữ màu gốc
+                child: Icon(icon, color: color, size: 24),
               ),
               const SizedBox(width: 16),
               Text(
@@ -320,12 +314,8 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
     );
   }
 
-  // --- LOGIC XÓA FILE LOCAL ---
-  // --- LOGIC XÓA FILE LOCAL ---
   void _removeFile(int index) {
     File file = _selectedFiles[index];
-
-    // [THÊM] Xóa file vật lý trong thư mục Documents để dọn rác
     try {
       if (file.existsSync()) {
         file.delete();
@@ -362,7 +352,6 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
 
   void _showErrorSnackBar(String message) {
     if (mounted) {
-      // [ĐÃ SỬA] Dùng CustomSnackBar
       CustomSnackBar.show(
         context,
         title: 'Error',
@@ -496,7 +485,6 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
           // Gọi API upload
           String url = await _repository.uploadFile(file);
 
-          // [FIX QUAN TRỌNG] Kiểm tra kỹ URL trả về
           // Nếu URL rỗng hoặc null, tức là upload thất bại -> Dừng ngay lập tức!
           if (url.isEmpty || url.toLowerCase() == 'null') {
             throw Exception("Upload thất bại. Vui lòng thử lại.");
@@ -548,19 +536,10 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
         Navigator.pop(context, true);
       }
     } catch (e) {
-      // ============================================================
-      // [XỬ LÝ LỖI TRANSACTION]
-      // Nếu Bước 3 (Tạo Request) lỗi, nhưng Bước 2 (Upload) đã xong
-      // -> File bị treo trên server (Orphaned Files).
-      // ============================================================
       if (uploadedUrls.isNotEmpty) {
         print(
           "⚠️ CẢNH BÁO: Request lỗi nhưng đã upload ${uploadedUrls.length} files.",
         );
-        // TODO: Nếu backend có API xóa file, hãy gọi vòng lặp xóa file tại đây để dọn rác
-        // for (var url in uploadedUrls) {
-        //    _repository.deleteFile(url);
-        // }
       }
 
       _showErrorSnackBar(e.toString().replaceAll("Exception: ", ""));
@@ -569,14 +548,13 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
     }
   }
 
-  // [CẬP NHẬT] Hàm chọn ngày với giao diện đồng bộ màu & Logic Initial Date
   Future<void> _selectDate(BuildContext context, bool isFrom) async {
     // Xác định ngày đang chọn để focus lịch vào đó
     final DateTime initial = (isFrom ? _fromDate : _toDate) ?? DateTime.now();
 
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: initial, // [SỬA] Focus vào ngày hiện tại của ô nhập
+      initialDate: initial,
       firstDate: DateTime(2020),
       lastDate: DateTime(2030),
       builder: (context, child) {
@@ -609,12 +587,10 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
     }
   }
 
-  // [CẬP NHẬT] Hàm chọn giờ với giao diện đồng bộ màu
   Future<void> _selectTime(BuildContext context, bool isStart) async {
     final TimeOfDay? picked = await showTimePicker(
       context: context,
       initialTime: TimeOfDay.now(),
-      // [QUAN TRỌNG] Thêm Theme builder cho TimePicker
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
@@ -827,7 +803,6 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                // --- [START] UI GIỐNG HÌNH ẢNH YÊU CẦU ---
                                 Container(
                                   padding: const EdgeInsets.all(
                                     12,
@@ -850,13 +825,12 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
                                     PhosphorIcons.uploadSimple(
                                       PhosphorIconsStyle.bold,
                                     ),
-                                    // Dùng màu xanh giống trong ảnh (hoặc dùng AppColors.primary nếu trùng)
+
                                     color: const Color(0xFF2563EB),
                                     size: 24,
                                   ),
                                 ),
 
-                                // --- [END] ---
                                 const SizedBox(height: 12),
                                 const Text(
                                   'Tap to upload Photo/Video',
@@ -1238,7 +1212,7 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              // [ĐÃ SỬA] Xóa const để dùng biến
+
               children: [
                 Text(
                   _hrDepartmentName,
@@ -1325,7 +1299,6 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
   }
 }
 
-// ... DottedBorder & Painter Class (GIỮ NGUYÊN) ...
 class DottedBorder extends StatelessWidget {
   final Widget child;
   final Color color;

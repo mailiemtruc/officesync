@@ -36,7 +36,7 @@ class _SelectionBottomSheetState extends State<SelectionBottomSheet> {
 
     return Container(
       width: double.infinity,
-      // 2. [SỬA] Thêm maxHeight để giới hạn chiều cao (ví dụ: 85% màn hình)
+      //  Thêm maxHeight để giới hạn chiều cao  85% màn hình
       constraints: BoxConstraints(
         maxWidth: 600,
         maxHeight: screenHeight * 0.85,
@@ -99,7 +99,7 @@ class _SelectionBottomSheetState extends State<SelectionBottomSheet> {
               const SizedBox(height: 24),
 
               // 3. Danh sách lựa chọn (List Items)
-              // [GIẢI THÍCH] Flexible kết hợp với maxHeight ở trên sẽ giúp list
+              // Flexible kết hợp với maxHeight ở trên sẽ giúp list
               // tự động cuộn (scroll) khi danh sách dài quá 85% màn hình
               Flexible(
                 child: ListView.separated(

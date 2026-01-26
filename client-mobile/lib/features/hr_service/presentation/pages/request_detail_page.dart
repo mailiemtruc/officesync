@@ -30,11 +30,10 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
   final _storage = const FlutterSecureStorage();
   bool _isCancelling = false;
 
-  // [LOGIC REALTIME]
   late RequestModel _currentRequest;
   dynamic _unsubscribeFn;
 
-  // [SỬA] Định nghĩa URL HR Service chuẩn (Raw WebSocket)
+  // Định nghĩa URL HR Service chuẩn (Raw WebSocket)
   final String _hrSocketUrl =
       'wss://productional-wendell-nonexotic.ngrok-free.dev/ws-hr';
 
@@ -80,7 +79,7 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
         context,
         title: "Request Cancelled",
         message: "This request has been cancelled.",
-        isError: true, // Hủy đơn thì để màu đỏ là hợp lý
+        isError: true,
       );
       Navigator.pop(context, true);
     } else {
@@ -95,7 +94,7 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
 
   @override
   void dispose() {
-    // [QUAN TRỌNG] Hủy đăng ký khi thoát màn hình
+    //  Hủy đăng ký khi thoát màn hình
     if (_unsubscribeFn != null) {
       // Gọi hàm unsubscribe trả về từ service
       _unsubscribeFn(unsubscribeHeaders: const <String, String>{});
@@ -125,7 +124,7 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
       }
     } catch (e) {
       if (mounted) {
-        // [SỬA] Báo lỗi khi hủy đơn
+        //  Báo lỗi khi hủy đơn
         CustomSnackBar.show(
           context,
           title: "Error",
@@ -223,7 +222,7 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
   }
 
   Future<void> _launchExternalUrl(String url) async {
-    // [FIX QUAN TRỌNG] Encode URL để xử lý khoảng trắng (ví dụ: "file name.pdf")
+    // Encode URL để xử lý khoảng trắng (ví dụ: "file name.pdf")
     final encodedUrl = Uri.encodeFull(url);
     final uri = Uri.parse(encodedUrl);
 
@@ -260,7 +259,7 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
 
     final status = _currentRequest.status;
 
-    // --- HÀM HỖ TRỢ FIX GIỜ UTC (Đã chuẩn) ---
+    // --- HÀM HỖ TRỢ FIX GIỜ UTC---
     DateTime fixToLocal(DateTime date) {
       return date.toLocal();
     }
@@ -281,7 +280,6 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
       ).format(fixToLocal(_currentRequest.updatedAt!));
     }
 
-    // Tên người duyệt
     String actorName = _currentRequest.approverName ?? 'Manager';
 
     final steps = [
@@ -299,7 +297,7 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
         'time': status == RequestStatus.PENDING
             ? 'Processing...'
             : processedTime,
-        // [ĐÃ SỬA] Hiển thị "Reviewed by Tên" thay vì chỉ "Reviewed"
+        //  Hiển thị "Reviewed by Tên" thay vì chỉ "Reviewed"
         'actor': status == RequestStatus.PENDING
             ? 'Waiting for Manager'
             : 'Reviewed by $actorName',
@@ -365,7 +363,7 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
     if (_currentRequest.updatedAt != null) {
       approvedTime = DateFormat(
         'MMM dd, HH:mm',
-      ).format(fixToLocal(_currentRequest.updatedAt!)); // <--- Đã sửa ở đây
+      ).format(fixToLocal(_currentRequest.updatedAt!));
     }
 
     // Tên người duyệt (hoặc mặc định Manager)
@@ -517,7 +515,7 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    // [QUAN TRỌNG] Sử dụng _currentRequest thay vì widget.request để UI tự update
+    //  Sử dụng _currentRequest thay vì widget.request để UI tự update
     final req = _currentRequest;
     final isPending = req.status == RequestStatus.PENDING;
     final isRejected = req.status == RequestStatus.REJECTED;
@@ -578,7 +576,6 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
                         const SizedBox(height: 24),
                         _buildSectionTitle('APPROVAL WORKFLOW'),
                         const SizedBox(height: 16),
-                        // [ĐÂY LÀ HÀM BẠN BỊ THIẾU Ở CÂU TRẢ LỜI TRƯỚC]
                         _buildWorkflowList(context),
                         const SizedBox(height: 80),
                       ],
@@ -684,7 +681,7 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
             child: Column(
               children: [
                 Text(
-                  req.type.name, // Dùng req.type.name
+                  req.type.name,
                   style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w700,
@@ -954,7 +951,6 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
     );
   }
 
-  // Widget hiển thị dòng chi tiết cho giao diện MỚI
   Widget _buildDetailRow(String label, String value, {bool isBlue = false}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -984,7 +980,7 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
     );
   }
 
-  // Widget vẽ đường kẻ nét đứt cho giao diện MỚI
+  // Widget vẽ đường kẻ nét đứt cho giao diện
   Widget _buildDottedLine() {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -1012,34 +1008,6 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
     );
   }
 
-  // Widget hiển thị dòng chi tiết cho giao diện CŨ
-  Widget _buildSimpleInfoRow(String label, String value) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            color: Color(0xFF64748B),
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            fontFamily: 'Inter',
-          ),
-        ),
-        Text(
-          value,
-          style: const TextStyle(
-            color: Colors.black,
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            fontFamily: 'Inter',
-          ),
-        ),
-      ],
-    );
-  }
-
-  // [HÀM BỊ THIẾU ĐÃ ĐƯỢC BỔ SUNG]
   Widget _buildWorkflowList(BuildContext context) {
     final steps = _getWorkflowSteps();
     return ListView.builder(
@@ -1227,15 +1195,13 @@ class _FullScreenImageViewer extends StatelessWidget {
         backgroundColor: Colors.black.withOpacity(0.5),
         iconTheme: const IconThemeData(color: Colors.white),
         elevation: 0,
-        automaticallyImplyLeading:
-            false, // [QUAN TRỌNG] Tắt nút back mặc định bên trái
-        // [MỚI] Dùng actions để nút nằm bên phải
+        automaticallyImplyLeading: false,
         actions: [
           IconButton(
             icon: const Icon(Icons.close),
             onPressed: () => Navigator.pop(context),
           ),
-          const SizedBox(width: 8), // Căn lề phải một chút
+          const SizedBox(width: 8),
         ],
       ),
       body: PageView.builder(

@@ -9,9 +9,9 @@ class SkeletonEmployeeCard extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
       child: Shimmer.fromColors(
-        baseColor: Colors.grey[200]!, // [MÀU MỚI] Nhạt hơn
-        highlightColor: Colors.grey[50]!, // [MÀU MỚI] Gần như trắng
-        period: const Duration(milliseconds: 2000), // [TỐC ĐỘ MỚI] Chậm hơn
+        baseColor: Colors.grey[200]!,
+        highlightColor: Colors.grey[50]!,
+        period: const Duration(milliseconds: 2000),
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(

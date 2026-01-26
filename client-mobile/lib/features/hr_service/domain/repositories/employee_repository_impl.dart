@@ -2,7 +2,7 @@ import '../../domain/repositories/employee_repository.dart';
 import '../../data/datasources/employee_remote_data_source.dart';
 import '../../data/models/employee_model.dart';
 import '../../data/models/department_model.dart';
-import 'dart:io'; // Import File
+import 'dart:io';
 
 class EmployeeRepositoryImpl implements EmployeeRepository {
   final EmployeeRemoteDataSource remoteDataSource;
@@ -29,7 +29,6 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
       status: "ACTIVE",
     );
 
-    // Truyền tiếp password xuống remote data source và nhận về ID
     return await remoteDataSource.createEmployee(
       employee,
       departmentId,
@@ -45,13 +44,12 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
 
   @override
   Future<List<DepartmentModel>> getDepartments(String currentUserId) async {
-    // Truyền ID xuống DataSource
     return await remoteDataSource.getDepartments(currentUserId);
   }
 
   @override
   Future<bool> updateEmployee(
-    String updaterId, // [MỚI]
+    String updaterId,
     String id,
     String fullName,
     String phone,
@@ -63,7 +61,7 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
     int? departmentId,
   }) async {
     return await remoteDataSource.updateEmployee(
-      updaterId, // [MỚI] Truyền xuống data source
+      updaterId,
       id,
       fullName,
       phone,
@@ -76,13 +74,11 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
     );
   }
 
-  // [SỬA] Implement hàm xóa có deleterId
   @override
   Future<bool> deleteEmployee(String deleterId, String targetId) async {
     return await remoteDataSource.deleteEmployee(deleterId, targetId);
   }
 
-  // [MỚI] Thêm hàm này vào đây để sửa lỗi thiếu implementation
   @override
   Future<List<EmployeeModel>> searchEmployees(
     String currentUserId,
@@ -91,7 +87,6 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
     return await remoteDataSource.searchEmployees(currentUserId, keyword);
   }
 
-  // [MỚI] Triển khai hàm suggestions
   @override
   Future<List<EmployeeModel>> getEmployeeSuggestions(
     String currentUserId,
@@ -108,7 +103,6 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
     return await remoteDataSource.getEmployeesByDepartment(departmentId);
   }
 
-  // [MỚI] Implement hàm upload
   @override
   Future<String> uploadFile(File file) async {
     return await remoteDataSource.uploadFile(file);

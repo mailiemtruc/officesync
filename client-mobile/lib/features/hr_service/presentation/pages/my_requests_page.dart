@@ -83,8 +83,6 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
     final String hrSocketUrl =
         'wss://productional-wendell-nonexotic.ngrok-free.dev/ws-hr';
 
-    // 2. Thêm từ khóa 'await' vào trước WebSocketService().subscribe
-    // Để đợi lấy hàm hủy đăng ký thực sự (Function) thay vì Future
     _unsubscribeFn = await WebSocketService().subscribe(topic, (data) {
       if (!mounted) return;
 
@@ -115,7 +113,7 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
     });
   }
 
-  // [CẬP NHẬT] Hàm gọi API với logic lọc Ngày/Tháng/Năm
+  //  Hàm gọi API với logic lọc Ngày/Tháng/Năm
   Future<void> _fetchRequests() async {
     if (!mounted) return;
 
@@ -128,7 +126,7 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
           _isSocketInitialized = true;
         }
 
-        // [LOGIC MỚI] Tính toán tham số day/month/year
+        //  Tính toán tham số day/month/year
         int? d, m, y;
         if (_selectedDate != null) {
           if (_filterType == FilterType.date) {
@@ -147,8 +145,6 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
         final data = await _repository.getMyRequests(
           userId,
           search: _searchController.text,
-          // Lưu ý: Đảm bảo RequestRepository đã update để nhận tham số 'day'
-          // Nếu chưa, bạn cần thêm tham số 'day' vào Repository và DataSource như đã làm với Manager
           day: d,
           month: m,
           year: y,
@@ -169,9 +165,7 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
     }
   }
 
-  // --- CÁC HÀM XỬ LÝ UI LỌC (GIỐNG MANAGER PAGE) ---
-
-  // 1. Menu chọn loại lọc (Bottom Sheet Mượt mà)
+  // 1. Menu chọn loại lọc
   void _onFilterTap() {
     showModalBottomSheet(
       context: context,
@@ -390,7 +384,6 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
     );
   }
 
-  // [CẬP NHẬT] 1. Chọn Ngày (Đồng bộ Theme)
   Future<void> _pickDate() async {
     final now = DateTime.now();
     final picked = await showDatePicker(
@@ -403,7 +396,7 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: const ColorScheme.light(
-              primary: AppColors.primary, // Màu header & nút chọn
+              primary: AppColors.primary,
               onPrimary: Colors.white,
               onSurface: Colors.black,
             ),
@@ -426,7 +419,6 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
     }
   }
 
-  // [CẬP NHẬT] 2. Chọn Năm (Đồng bộ Theme cho YearPicker)
   Future<void> _pickYear() async {
     showDialog(
       context: context,
@@ -434,7 +426,7 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: const ColorScheme.light(
-              primary: AppColors.primary, // Màu năm được chọn
+              primary: AppColors.primary,
               onSurface: Colors.black,
             ),
           ),
@@ -469,7 +461,6 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
     );
   }
 
-  // [CẬP NHẬT] 3. Chọn Tháng - Bước 1: Chọn Năm (Đồng bộ Theme)
   Future<void> _pickMonth() async {
     int tempYear = _selectedDate?.year ?? DateTime.now().year;
     await showDialog(
@@ -478,7 +469,7 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: const ColorScheme.light(
-              primary: AppColors.primary, // Màu năm được chọn
+              primary: AppColors.primary,
               onSurface: Colors.black,
             ),
           ),
@@ -509,7 +500,6 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
     );
   }
 
-  // [CẬP NHẬT] 4. Chọn Tháng - Bước 2: Chọn Tháng cụ thể (Đồng bộ Theme)
   Future<void> _pickMonthStep2(int year) async {
     await showDialog(
       context: context,
@@ -595,7 +585,7 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
       ),
       child: TextField(
         controller: _searchController,
-        // [UX FIX] Không gọi setState ở đây để tránh rebuild toàn bộ màn hình
+        //  Không gọi setState ở đây để tránh rebuild toàn bộ màn hình
         onChanged: (val) => _onSearchChanged(val),
         decoration: InputDecoration(
           hintText: 'Search requests...',
@@ -609,7 +599,7 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
             color: const Color(0xFF757575),
             size: 20,
           ),
-          // [UX FIX] Dùng ValueListenableBuilder chỉ để rebuild nút X
+
           suffixIcon: ValueListenableBuilder<TextEditingValue>(
             valueListenable: _searchController,
             builder: (context, value, child) {
@@ -654,11 +644,10 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // [ĐÃ SỬA] Dùng Icon Clipboard có dấu tick để giống ảnh mẫu
           Icon(
             PhosphorIcons.clipboardText(PhosphorIconsStyle.regular),
-            size: 64, // Kích thước lớn hơn chút cho rõ
-            color: const Color(0xFFE5E7EB), // Màu xám rất nhạt (giống ảnh)
+            size: 64,
+            color: const Color(0xFFE5E7EB),
           ),
           const SizedBox(height: 16),
           Text(
@@ -676,7 +665,6 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
     );
   }
 
-  // [CẬP NHẬT] Nút Filter có hiệu ứng nhấn (Ripple Effect)
   Widget _buildFilterButton() {
     final bool hasFilter =
         _filterType != FilterType.none && _selectedDate != null;
@@ -711,7 +699,7 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
       child: InkWell(
         onTap: _onFilterTap,
         borderRadius: BorderRadius.circular(12),
-        // Mới (Màu xám)
+
         splashColor: Colors.grey.withOpacity(0.2),
         highlightColor: Colors.grey.withOpacity(0.1),
         child: Container(
@@ -1049,7 +1037,7 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
                         );
                       }
                     } catch (e) {
-                      // 4. [UX FIX] Nếu lỗi -> Khôi phục lại item vào danh sách
+                      // 4.  Nếu lỗi -> Khôi phục lại item vào danh sách
                       if (mounted) {
                         setState(() {
                           _requests.insert(deletedIndex, deletedItem);
@@ -1075,7 +1063,7 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
 
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 300),
-      reverseDuration: const Duration(milliseconds: 50), // Fix dính hình
+      reverseDuration: const Duration(milliseconds: 50),
       switchInCurve: Curves.easeIn,
       switchOutCurve: Curves.easeOut,
       transitionBuilder: (child, animation) =>

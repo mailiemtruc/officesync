@@ -42,9 +42,7 @@ class DepartmentCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(
-              0.06,
-            ), // [UPDATE] Shadow nhẹ hơn cho hiện đại
+            color: Colors.black.withOpacity(0.06),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -77,7 +75,6 @@ class DepartmentCard extends StatelessWidget {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    // [UPDATE] Row chứa Tên + Badge HR
                                     Row(
                                       children: [
                                         Flexible(
@@ -93,7 +90,7 @@ class DepartmentCard extends StatelessWidget {
                                             overflow: TextOverflow.ellipsis,
                                           ),
                                         ),
-                                        // [NEW] Hiển thị Badge nếu là HR
+                                        // Hiển thị Badge nếu là HR
                                         if (department.isHr) ...[
                                           const SizedBox(width: 8),
                                           _buildHrBadge(),
@@ -118,7 +115,6 @@ class DepartmentCard extends StatelessWidget {
                                 GestureDetector(
                                   onTap: onMenuTap,
                                   child: Container(
-                                    // Tăng vùng bấm
                                     color: Colors.transparent,
                                     padding: const EdgeInsets.all(4),
                                     child: Icon(

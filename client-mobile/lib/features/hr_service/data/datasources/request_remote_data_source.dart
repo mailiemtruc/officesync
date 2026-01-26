@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import '../models/request_model.dart';
-// [MỚI] Import Storage
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class RequestRemoteDataSource {
@@ -11,16 +10,14 @@ class RequestRemoteDataSource {
   static const String storageUrl =
       'https://productional-wendell-nonexotic.ngrok-free.dev/api/files/upload';
 
-  // [MỚI] Khai báo Storage
   final _storage = const FlutterSecureStorage();
 
-  // [MỚI] Hàm Helper lấy Header
   Future<Map<String, String>> _getHeaders(String userId) async {
     String? token = await _storage.read(key: 'auth_token');
     return {
       "Content-Type": "application/json",
       "X-User-Id": userId,
-      "Authorization": "Bearer $token", // QUAN TRỌNG
+      "Authorization": "Bearer $token",
     };
   }
 
@@ -49,7 +46,6 @@ class RequestRemoteDataSource {
 
       print("--> Sending Request Payload: $body");
 
-      // [SỬA]
       final headers = await _getHeaders(userId);
 
       final response = await http.post(
@@ -75,7 +71,6 @@ class RequestRemoteDataSource {
 
       var request = http.MultipartRequest('POST', Uri.parse(storageUrl));
 
-      // [FIX] Thêm token vào header của MultipartRequest
       String? token = await _storage.read(key: 'auth_token');
       if (token != null) {
         request.headers['Authorization'] = 'Bearer $token';
@@ -117,7 +112,6 @@ class RequestRemoteDataSource {
 
       final uri = Uri.parse(baseUrl).replace(queryParameters: queryParams);
 
-      // [SỬA]
       final headers = await _getHeaders(userId);
 
       final response = await http.get(uri, headers: headers);
@@ -139,7 +133,6 @@ class RequestRemoteDataSource {
     try {
       final url = Uri.parse('$baseUrl/$requestId');
 
-      // [SỬA]
       final headers = await _getHeaders(userId);
 
       final response = await http.delete(url, headers: headers);
@@ -165,7 +158,6 @@ class RequestRemoteDataSource {
       final url = Uri.parse('$baseUrl/$requestId/process');
       print("--> Processing Request $requestId: $status");
 
-      // [SỬA]
       final headers = await _getHeaders(approverId);
 
       final response = await http.post(
@@ -200,7 +192,6 @@ class RequestRemoteDataSource {
       final url = Uri.parse('$baseUrl/$requestId');
       print("--> Fetching Request Detail: $url");
 
-      // [SỬA]
       final headers = await _getHeaders(userId);
 
       final response = await http.get(url, headers: headers);
@@ -218,7 +209,7 @@ class RequestRemoteDataSource {
     }
   }
 
-  // 7. LẤY DANH SÁCH DUYỆT (MANAGER) - ĐÂY LÀ CHỖ GÂY LỖI 401 TRONG LOG CỦA BẠN
+  // 7. LẤY DANH SÁCH DUYỆT (MANAGER)
   Future<List<RequestModel>> getManagerRequests(
     String managerId, {
     String? search,
@@ -241,7 +232,6 @@ class RequestRemoteDataSource {
 
       print("--> [API CALL] GET $uri with User-Id: $managerId");
 
-      // [SỬA] Dùng hàm _getHeaders (Đã bao gồm Token)
       final headers = await _getHeaders(managerId);
 
       final response = await http.get(uri, headers: headers);

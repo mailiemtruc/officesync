@@ -29,18 +29,15 @@ class EmployeeProfilePage extends StatelessWidget {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 600),
             child: SingleChildScrollView(
-              // [SỬA] 2. Cập nhật padding để khớp với UserProfilePage
+              // Cập nhật padding để khớp với UserProfilePage
               padding: const EdgeInsets.fromLTRB(24, 0, 24, 30),
               child: Column(
                 children: [
-                  // [ĐÃ SỬA HEADER]
                   const SizedBox(height: 20),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment:
-                        CrossAxisAlignment.center, // Căn giữa theo chiều dọc
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      // 1. Nút Back (Bọc trong Container 40px)
                       Container(
                         width: 40,
                         alignment: Alignment.centerLeft,
@@ -56,12 +53,10 @@ class EmployeeProfilePage extends StatelessWidget {
                         ),
                       ),
 
-                      // 2. Tiêu đề (Expanded + TextAlign.center)
                       const Expanded(
                         child: Text(
                           'EMPLOYEE PROFILE',
-                          textAlign: TextAlign
-                              .center, // [QUAN TRỌNG] Canh giữa khi xuống dòng
+                          textAlign: TextAlign.center,
                           style: TextStyle(
                             color: AppColors.primary,
                             fontSize: 24,
@@ -71,16 +66,14 @@ class EmployeeProfilePage extends StatelessWidget {
                         ),
                       ),
 
-                      // 3. Khoảng trống để cân bằng (40px bằng nút Back)
                       const SizedBox(width: 40),
                     ],
                   ),
-                  const SizedBox(height: 32), // Khoảng cách sau header
+                  const SizedBox(height: 32),
 
                   _buildHeader(employee),
                   const SizedBox(height: 32),
 
-                  // Phần Card thông tin (Giữ nguyên)
                   Container(
                     width: double.infinity,
                     decoration: BoxDecoration(
@@ -178,14 +171,13 @@ class EmployeeProfilePage extends StatelessWidget {
                 ? Image.network(
                     employee.avatarUrl!,
                     fit: BoxFit.cover,
-                    // [SỬA 1] Bỏ const, dùng PhosphorIcons
+
                     errorBuilder: (_, __, ___) => Icon(
                       PhosphorIcons.user(PhosphorIconsStyle.fill),
                       size: 60,
                       color: Colors.grey,
                     ),
                   )
-                // [SỬA 2] Bỏ const, dùng PhosphorIcons
                 : Icon(
                     PhosphorIcons.user(PhosphorIconsStyle.fill),
                     size: 60,

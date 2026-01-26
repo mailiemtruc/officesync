@@ -1,12 +1,12 @@
 import 'dart:convert';
-import 'dart:io'; // Thêm thư viện IO
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'dart:ui';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:url_launcher/url_launcher.dart'; // Thêm để mở link ngoài
-import 'package:video_player/video_player.dart'; // Thêm video player
-import 'package:chewie/chewie.dart'; // Thêm chewie
+import 'package:url_launcher/url_launcher.dart';
+import 'package:video_player/video_player.dart';
+import 'package:chewie/chewie.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/services/websocket_service.dart';
 import '../../data/models/request_model.dart';
@@ -31,7 +31,7 @@ class _ManagerRequestReviewPageState extends State<ManagerRequestReviewPage> {
   final _storage = const FlutterSecureStorage();
   bool _isProcessing = false;
   late RequestModel _currentRequest;
-  // Biến lưu hàm hủy đăng ký
+
   dynamic _unsubscribeFn;
 
   @override
@@ -51,30 +51,25 @@ class _ManagerRequestReviewPageState extends State<ManagerRequestReviewPage> {
     final String hrSocketUrl =
         'wss://productional-wendell-nonexotic.ngrok-free.dev/ws-hr';
 
-    // [ĐÃ SỬA] Thêm tham số forceUrl
-    _unsubscribeFn = await WebSocketService().subscribe(
-      topic,
-      (data) {
-        if (!mounted) return;
+    _unsubscribeFn = await WebSocketService().subscribe(topic, (data) {
+      if (!mounted) return;
 
-        if (data is Map<String, dynamic>) {
-          final updatedReq = RequestModel.fromJson(data);
-          setState(() {
-            _currentRequest = updatedReq;
-          });
+      if (data is Map<String, dynamic>) {
+        final updatedReq = RequestModel.fromJson(data);
+        setState(() {
+          _currentRequest = updatedReq;
+        });
 
-          if (updatedReq.status != RequestStatus.PENDING) {
-            CustomSnackBar.show(
-              context,
-              title: "Status Updated",
-              message: "Request status changed to ${updatedReq.status.name}",
-              isError: false,
-            );
-          }
+        if (updatedReq.status != RequestStatus.PENDING) {
+          CustomSnackBar.show(
+            context,
+            title: "Status Updated",
+            message: "Request status changed to ${updatedReq.status.name}",
+            isError: false,
+          );
         }
-      },
-      forceUrl: hrSocketUrl, // [QUAN TRỌNG]
-    );
+      }
+    }, forceUrl: hrSocketUrl);
   }
 
   @override
@@ -88,11 +83,8 @@ class _ManagerRequestReviewPageState extends State<ManagerRequestReviewPage> {
   }
 
   String _fixUrl(String url) {
-    // Địa chỉ ngrok của bạn (không có dấu / ở cuối)
     const String ngrokDomain =
         "https://productional-wendell-nonexotic.ngrok-free.dev";
-
-    // Nếu server trả về localhost hoặc 10.0.2.2, thay thế bằng ngrok
     if (url.contains('localhost:8000')) {
       return url.replaceFirst('http://localhost:8000', ngrokDomain);
     }
@@ -100,7 +92,6 @@ class _ManagerRequestReviewPageState extends State<ManagerRequestReviewPage> {
       return url.replaceFirst('http://10.0.2.2:8000', ngrokDomain);
     }
 
-    // Trường hợp server trả về relative path (ví dụ: /uploads/video.mp4)
     if (!url.startsWith('http')) {
       if (url.startsWith('/')) {
         return "$ngrokDomain$url";
@@ -165,7 +156,6 @@ class _ManagerRequestReviewPageState extends State<ManagerRequestReviewPage> {
   }
 
   Future<void> _launchExternalUrl(String url) async {
-    // [FIX QUAN TRỌNG] Encode URL để xử lý khoảng trắng (ví dụ: "file name.pdf")
     final encodedUrl = Uri.encodeFull(url);
     final uri = Uri.parse(encodedUrl);
 
@@ -208,7 +198,6 @@ class _ManagerRequestReviewPageState extends State<ManagerRequestReviewPage> {
 
       if (userId == null) {
         if (mounted) {
-          // [SỬA] Báo lỗi không tìm thấy user
           CustomSnackBar.show(
             context,
             title: "Authentication Error",
@@ -230,7 +219,6 @@ class _ManagerRequestReviewPageState extends State<ManagerRequestReviewPage> {
         // Socket sẽ tự update UI, nhưng ta pop về list cho mượt flow
         Navigator.pop(context, true);
       } else if (!success && mounted) {
-        // [SỬA] Báo lỗi xử lý thất bại
         CustomSnackBar.show(
           context,
           title: "Processing Failed",
@@ -352,7 +340,6 @@ class _ManagerRequestReviewPageState extends State<ManagerRequestReviewPage> {
                       onTap: () {
                         final reason = _rejectReasonController.text.trim();
 
-                        // [SỬA LẠI ĐOẠN NÀY]
                         if (reason.isEmpty) {
                           // 1. Đóng BottomSheet TRƯỚC để lộ màn hình chính
                           Navigator.pop(context);
@@ -434,10 +421,9 @@ class _ManagerRequestReviewPageState extends State<ManagerRequestReviewPage> {
     );
   }
 
-  // --- HÀM BUILD ---
   @override
   Widget build(BuildContext context) {
-    // [QUAN TRỌNG] Dùng _currentRequest để render toàn bộ UI
+    //Dùng _currentRequest để render toàn bộ UI
     final req = _currentRequest;
 
     return Stack(
@@ -460,7 +446,7 @@ class _ManagerRequestReviewPageState extends State<ManagerRequestReviewPage> {
                             padding: const EdgeInsets.symmetric(horizontal: 24),
                             child: Column(
                               children: [
-                                // [SỬA] Truyền 'req' vào hàm build
+                                //Truyền 'req' vào hàm build
                                 _buildEmployeeInfoCard(req),
                                 const SizedBox(height: 16),
                                 _buildRequestDetailCard(req),
@@ -643,7 +629,7 @@ class _ManagerRequestReviewPageState extends State<ManagerRequestReviewPage> {
   }
 
   Widget _buildEmployeeInfoCard(RequestModel req) {
-    // [SAU KHI SỬA] Dùng role thực tế
+    // Dùng role thực tế
     final bool isManager =
         req.requesterRole == 'MANAGER' || req.requesterRole == 'COMPANY_ADMIN';
 
@@ -698,7 +684,6 @@ class _ManagerRequestReviewPageState extends State<ManagerRequestReviewPage> {
                     ),
                   )
                 : Center(
-                    // [SỬA 2]
                     child: Icon(
                       PhosphorIcons.user(PhosphorIconsStyle.fill),
                       color: const Color(0xFF9CA3AF),
@@ -767,7 +752,7 @@ class _ManagerRequestReviewPageState extends State<ManagerRequestReviewPage> {
             ),
           ),
 
-          // [QUAN TRỌNG] Badge trạng thái động
+          //Badge trạng thái động
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             decoration: BoxDecoration(
@@ -792,7 +777,7 @@ class _ManagerRequestReviewPageState extends State<ManagerRequestReviewPage> {
   Widget _buildRequestDetailCard(RequestModel request) {
     final evidenceList = _getEvidenceUrls();
 
-    // [LOGIC ĐÃ SỬA] Ưu tiên lấy requestCode, nếu không có mới lấy ID và thêm số 0
+    //  Ưu tiên lấy requestCode, nếu không có mới lấy ID và thêm số 0
     String displayCode =
         request.requestCode != null && request.requestCode!.isNotEmpty
         ? request.requestCode!
@@ -835,7 +820,6 @@ class _ManagerRequestReviewPageState extends State<ManagerRequestReviewPage> {
           ),
           const SizedBox(height: 8),
 
-          // [HIỂN THỊ] Sử dụng displayCode đã xử lý ở trên
           Text(
             '$displayCode',
             style: const TextStyle(
@@ -908,7 +892,6 @@ class _ManagerRequestReviewPageState extends State<ManagerRequestReviewPage> {
     );
   }
 
-  // Widget thẻ đính kèm (Copy từ RequestDetail)
   Widget _buildAttachmentCard(String fileUrl) {
     final String fixedUrl = _fixUrl(fileUrl);
     final String lowerUrl = fixedUrl.toLowerCase();
@@ -1189,7 +1172,6 @@ class _ManagerRequestReviewPageState extends State<ManagerRequestReviewPage> {
   }
 }
 
-// --- Class xem Ảnh Full (Copy từ RequestDetail) ---
 class _FullScreenImageViewer extends StatelessWidget {
   final List<String> imageUrls;
   final int initialIndex;
@@ -1210,15 +1192,13 @@ class _FullScreenImageViewer extends StatelessWidget {
         backgroundColor: Colors.black.withOpacity(0.5),
         iconTheme: const IconThemeData(color: Colors.white),
         elevation: 0,
-        automaticallyImplyLeading:
-            false, // [QUAN TRỌNG] Tắt nút back mặc định bên trái
-        // [ĐÚNG] actions nằm bên phải
+        automaticallyImplyLeading: false,
         actions: [
           IconButton(
             icon: const Icon(Icons.close),
             onPressed: () => Navigator.pop(context),
           ),
-          const SizedBox(width: 8), // Căn lề phải một chút cho đẹp
+          const SizedBox(width: 8),
         ],
       ),
       body: PageView.builder(

@@ -30,9 +30,9 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
   late String _initialDeptName;
   late bool _initialActive;
   late String _initialEmail;
-  // [MỚI] Biến kiểm tra quyền hạn người đang đăng nhập
+  // Biến kiểm tra quyền hạn người đang đăng nhập
   bool _isCurrentUserManager = false;
-  String? _currentUserId; // [QUAN TRỌNG] Lưu ID người đang thao tác
+  String? _currentUserId; //  Lưu ID người đang thao tác
   final _storage = const FlutterSecureStorage();
 
   DepartmentModel? _selectedDepartmentObj;
@@ -65,7 +65,6 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
 
     _selectedDepartmentName = widget.employee.departmentName ?? "Unassigned";
 
-    // [MỚI] Lưu trạng thái ban đầu
     _initialEmail = widget.employee.email;
     _initialActive = (widget.employee.status == "ACTIVE");
     _initialRole = _selectedRole;
@@ -74,7 +73,6 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
     _initData();
   }
 
-  // Thêm hàm này vào trong class _EditProfileEmployeePageState
   void _showErrorSnackBar(String message) {
     if (!mounted) return;
     CustomSnackBar.show(
@@ -98,7 +96,7 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
       if (userInfoStr != null) {
         final data = jsonDecode(userInfoStr);
         setState(() {
-          _currentUserId = data['id'].toString(); // Lưu ID
+          _currentUserId = data['id'].toString();
         });
 
         String role = data['role'] ?? 'STAFF';
@@ -117,7 +115,7 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
     try {
       if (_currentUserId == null) return;
 
-      // [SỬA] Truyền _currentUserId vào API getDepartments
+      // Truyền _currentUserId vào API getDepartments
       final depts = await _repository.getDepartments(_currentUserId!);
 
       if (mounted) {
@@ -150,7 +148,7 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
   void _showDepartmentSelector() {
     if (_isCurrentUserManager) return;
 
-    // [SỬA] Thay vì return im lặng, hãy hiển thị thông báo
+    //ưThay vì return im lặng, hãy hiển thị thông báo
     if (_realDepartments.isEmpty) {
       CustomSnackBar.show(
         context,
@@ -249,7 +247,6 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
       return;
     }
 
-    // --- LOGIC GIÁNG CHỨC & CẬP NHẬT (Giữ nguyên phần thông minh cũ) ---
     bool shouldProceed = true;
     EmployeeModel? oldManager;
 
@@ -359,7 +356,6 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
       isScrollControlled: true,
       builder: (context) => ConfirmBottomSheet(
         title: 'Delete this account?',
-        // [SỬA NỘI DUNG] Hiển thị đúng câu cảnh báo kèm tên nhân viên
         message:
             'This action cannot be undone. All data associated with employee ${widget.employee.fullName} will be permanently deleted.',
         confirmText: 'Delete',
@@ -405,7 +401,6 @@ class _EditProfileEmployeePageState extends State<EditProfileEmployeePage> {
       isScrollControlled: true,
       builder: (context) => ConfirmBottomSheet(
         title: 'Suspend Access?',
-        // [SỬA NỘI DUNG] Thêm tên nhân viên và câu "to the system"
         message:
             'Employee ${widget.employee.fullName} will not be able to log in to the system.',
         confirmText: 'Suspend',

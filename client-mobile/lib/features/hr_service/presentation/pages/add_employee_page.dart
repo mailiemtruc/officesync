@@ -11,7 +11,7 @@ import '../../data/models/department_model.dart';
 
 import '../../../../core/config/app_colors.dart';
 import '../../widgets/selection_bottom_sheet.dart';
-import '../../widgets/confirm_bottom_sheet.dart'; // [MỚI] Import ConfirmBottomSheet
+import '../../widgets/confirm_bottom_sheet.dart';
 import '../../data/datasources/department_remote_data_source.dart';
 import '../../domain/repositories/department_repository_impl.dart';
 import '../../domain/repositories/department_repository.dart';
@@ -37,7 +37,7 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
   String? _selectedRole;
   bool _isLoading = false;
 
-  // [MỚI] Biến kiểm tra quyền hạn
+  //  Biến kiểm tra quyền hạn
   bool _isManager = false;
   String? _currentUserId;
 
@@ -62,18 +62,18 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
       remoteDataSource: DepartmentRemoteDataSource(),
     );
 
-    // [SỬA] Gọi hàm khởi tạo tích hợp kiểm tra quyền
+    // Gọi hàm khởi tạo tích hợp kiểm tra quyền
     _initDataAndCheckPermissions();
   }
 
-  // [LOGIC MỚI] Hàm khởi tạo và kiểm tra quyền
+  //  Hàm khởi tạo và kiểm tra quyền
   Future<void> _initDataAndCheckPermissions() async {
     try {
       // 1. Lấy thông tin user từ Storage
       String? userInfoStr = await _storage.read(key: 'user_info');
       if (userInfoStr != null) {
         Map<String, dynamic> userMap = jsonDecode(userInfoStr);
-        _currentUserId = userMap['id'].toString(); // Lấy ID
+        _currentUserId = userMap['id'].toString();
 
         // Xác định Role
         String role = userMap['role'] ?? "STAFF";
@@ -85,7 +85,7 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
         }
       }
 
-      // [QUAN TRỌNG] Kiểm tra null trước khi gọi API
+      // Kiểm tra null trước khi gọi API
       if (_currentUserId == null) {
         print("User ID not found, cannot fetch departments.");
         return;
@@ -160,14 +160,14 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
     });
   }
 
-  // [CẬP NHẬT] Đồng bộ màu sắc DatePicker
+  //  Đồng bộ màu sắc DatePicker
   Future<void> _selectDate() async {
     DateTime? picked = await showDatePicker(
       context: context,
       initialDate: DateTime.now().subtract(const Duration(days: 365 * 18)),
       firstDate: DateTime(1950),
       lastDate: DateTime.now(),
-      // [THÊM] Builder chỉnh màu
+      //  Builder chỉnh màu
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
@@ -327,7 +327,7 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
     setState(() => _isLoading = true);
     String? createdEmployeeId;
 
-    // --- BƯỚC 6: TẠO EMPLOYEE MỚI ---
+    // ---  TẠO EMPLOYEE MỚI ---
     try {
       String formattedDob = "";
       if (dob.isNotEmpty) {
@@ -374,7 +374,7 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
       return;
     }
 
-    // --- BƯỚC 7: CẬP NHẬT PHÒNG BAN (NẾU LÀ MANAGER) ---
+    // --- CẬP NHẬT PHÒNG BAN (NẾU LÀ MANAGER) ---
     // Tách riêng try/catch để nếu lỗi bước này thì user vẫn được tính là đã tạo
     if (isAssigningManager && createdEmployeeId != null) {
       try {
@@ -385,13 +385,11 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
         await _departmentRepository.updateDepartment(
           _currentUserId!,
           _selectedDepartment!.id!,
-          _selectedDepartment!.name, // Giữ nguyên tên
-          createdEmployeeId, // Gán ID nhân viên mới làm Manager
+          _selectedDepartment!.name,
+          createdEmployeeId,
           _selectedDepartment!.isHr, // Giữ nguyên trạng thái HR
         );
       } catch (e) {
-        // [FIX LỖI HR]: Nếu update thất bại (do quyền hạn với phòng HR),
-        // chỉ thông báo Warning chứ không báo lỗi Failed.
         print("Warning: Failed to auto-assign manager: $e");
         if (mounted) {
           CustomSnackBar.show(
@@ -399,16 +397,15 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
             title: 'Warning',
             message:
                 'User created but could not be set as Manager automatically. Please update Department manually.',
-            isError: true, // Vẫn hiện màu đỏ/cam cảnh báo
+            isError: true,
           );
-          // Vẫn thoát màn hình vì User đã được tạo
+
           Navigator.pop(context, true);
           return;
         }
       }
     }
 
-    // --- HOÀN TẤT ---
     if (mounted) {
       setState(() => _isLoading = false);
       CustomSnackBar.show(
@@ -434,7 +431,6 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
   void _showDepartmentSelector() {
     if (_isManager) return;
 
-    // [SỬA] Kiểm tra nếu danh sách rỗng thì báo lỗi rõ ràng
     if (_departments.isEmpty) {
       CustomSnackBar.show(
         context,

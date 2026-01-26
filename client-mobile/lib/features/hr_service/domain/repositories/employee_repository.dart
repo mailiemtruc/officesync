@@ -1,7 +1,7 @@
 import 'dart:io';
 
-import '../../data/models/employee_model.dart'; // Import Model
-import '../../data/models/department_model.dart'; // Import Model
+import '../../data/models/employee_model.dart';
+import '../../data/models/department_model.dart';
 
 abstract class EmployeeRepository {
   Future<String?> createEmployee({
@@ -14,16 +14,15 @@ abstract class EmployeeRepository {
     required String currentUserId,
     required String password,
   });
-  // [MỚI] Thêm hàm upload
+
   Future<String> uploadFile(File file);
-  // [Mới] Hàm lấy danh sách nhân viên
+
   Future<List<EmployeeModel>> getEmployees(String currentUserId);
 
-  // [SỬA] Thêm tham số currentUserId
   Future<List<DepartmentModel>> getDepartments(String currentUserId);
 
   Future<bool> updateEmployee(
-    String updaterId, // [MỚI]
+    String updaterId,
     String id,
     String fullName,
     String phone,
@@ -34,16 +33,14 @@ abstract class EmployeeRepository {
     String? role,
     int? departmentId,
   });
-  // [SỬA] Thêm deleterId
+
   Future<bool> deleteEmployee(String deleterId, String targetId);
 
-  // [SỬA LẠI ĐÚNG] Chỉ khai báo hàm, KHÔNG viết code xử lý (không có curly braces {})
   Future<List<EmployeeModel>> searchEmployees(
     String currentUserId,
     String keyword,
   );
 
-  // [MỚI] Hàm lấy gợi ý nhân viên (Active, Valid Role)
   Future<List<EmployeeModel>> getEmployeeSuggestions(
     String currentUserId,
     String keyword,

@@ -32,9 +32,9 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
   late String _initialName;
   late bool _initialIsHr;
   EmployeeModel? _initialManager;
-  // [QUAN TRỌNG] Biến lưu danh sách thành viên hiện tại (Đang chỉnh sửa)
+  // Biến lưu danh sách thành viên hiện tại (Đang chỉnh sửa)
   List<EmployeeModel> _departmentMembers = [];
-  // [QUAN TRỌNG] Biến lưu danh sách ban đầu để so sánh sự thay đổi khi bấm Save
+  // Biến lưu danh sách ban đầu để so sánh sự thay đổi khi bấm Save
   List<EmployeeModel> _initialMembers = [];
 
   late final DepartmentRepository _deptRepo;
@@ -49,7 +49,6 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
     _nameController = TextEditingController(text: widget.department.name);
     _selectedManager = widget.department.manager;
 
-    // [MỚI] Lưu trạng thái ban đầu
     _initialName = widget.department.name;
     _initialIsHr = widget.department.isHr;
     _initialManager = widget.department.manager;
@@ -61,7 +60,7 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
       remoteDataSource: EmployeeRemoteDataSource(),
     );
 
-    _fetchData(); // Hàm này sẽ set _initialMembers bên trong (code cũ đã có)
+    _fetchData();
   }
 
   bool _hasMemberChanges() {
@@ -111,7 +110,7 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
                 e.id != _selectedManager?.id;
           }).toList();
 
-          // [QUAN TRỌNG] Sao chép danh sách ban đầu để đối chiếu sau này
+          //  Sao chép danh sách ban đầu để đối chiếu sau này
           _initialMembers = List.from(_departmentMembers);
         });
       }
@@ -120,7 +119,7 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
     }
   }
 
-  // [LOGIC MỚI] Hàm mở trang chọn thành viên (Thay vì mở trang chi tiết)
+  //  Hàm mở trang chọn thành viên (Thay vì mở trang chi tiết)
   Future<void> _openSelectMembers() async {
     final List<EmployeeModel>? result = await Navigator.push(
       context,
@@ -363,7 +362,6 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
     }
   }
 
-  // ... (Các hàm UI khác giữ nguyên)
   void _showDeleteDialog(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -421,7 +419,6 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          // 1. Nút Back
                           Container(
                             width: 40,
                             alignment: Alignment.centerLeft,
@@ -439,12 +436,10 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
                             ),
                           ),
 
-                          // 2. Tiêu đề
                           const Expanded(
                             child: Text(
                               'UPDATE DEPARTMENT',
-                              textAlign:
-                                  TextAlign.center, // [QUAN TRỌNG] Canh giữa
+                              textAlign: TextAlign.center,
                               style: TextStyle(
                                 color: AppColors.primary,
                                 fontSize: 24,
@@ -459,7 +454,6 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
                       ),
                       const SizedBox(height: 32),
 
-                      // Icon Department
                       Container(
                         width: 120,
                         height: 120,
@@ -573,7 +567,7 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
                               ),
                             ),
 
-                            // [ĐÃ SỬA] Đổi InkWell này thành mở _openSelectMembers
+                            // Đổi InkWell này thành mở _openSelectMembers
                             InkWell(
                               onTap:
                                   _openSelectMembers, // Gọi hàm chọn thành viên nội bộ
@@ -606,7 +600,6 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
                         ),
                       ),
                       const SizedBox(height: 24),
-                      // ... (Phần Settings giữ nguyên)
                       _buildSectionTitle('DEPARTMENT SETTINGS'),
                       const SizedBox(height: 12),
                       Container(

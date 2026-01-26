@@ -142,7 +142,7 @@ class EmployeeCard extends StatelessWidget {
                         ),
                         const SizedBox(height: 8),
 
-                        // [ĐÃ SỬA] Badges (Role & Dept)
+                        //  Badges (Role & Dept)
                         // Thay Wrap bằng Row để ép nằm cùng dòng
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.center,
@@ -246,7 +246,7 @@ class EmployeeCard extends StatelessWidget {
         color: bgColor,
         borderRadius: BorderRadius.circular(6),
       ),
-      // [ĐÃ SỬA] Bỏ ConstrainedBox(maxWidth: 140)
+      //  Bỏ ConstrainedBox(maxWidth: 140)
       // Để Text tự động fill theo không gian còn lại của Flexible bên ngoài
       child: Text(
         text,

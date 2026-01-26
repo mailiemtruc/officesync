@@ -57,7 +57,7 @@ class _AddMembersPageState extends State<AddMembersPage> {
     _initUserAndFetchDefault();
   }
 
-  // [FIX LỖI QUAN TRỌNG] Thêm dispose để tránh Memory Leak
+  //Thêm dispose để tránh Memory Leak
   @override
   void dispose() {
     _searchController.dispose();
@@ -439,7 +439,6 @@ class _AddMembersPageState extends State<AddMembersPage> {
     ),
     child: TextField(
       controller: _searchController,
-      // [TỐI ƯU] Bỏ setState ở đây
       onChanged: (val) => _onSearchChanged(val),
       decoration: InputDecoration(
         hintText: 'Search name, employee ID...',
@@ -453,7 +452,6 @@ class _AddMembersPageState extends State<AddMembersPage> {
           color: const Color(0xFF757575),
           size: 20,
         ),
-        // [TỐI ƯU] Dùng ValueListenableBuilder để chỉ rebuild nút X
         suffixIcon: ValueListenableBuilder<TextEditingValue>(
           valueListenable: _searchController,
           builder: (context, value, child) {
@@ -463,8 +461,6 @@ class _AddMembersPageState extends State<AddMembersPage> {
               child: GestureDetector(
                 onTap: () {
                   _searchController.clear();
-                  // Không cần setState ở đây vì ValueListenableBuilder tự update nút X
-                  // Chỉ cần reset debounce và search
                   if (_debounce?.isActive ?? false) _debounce!.cancel();
                   _performSearch("");
                 },

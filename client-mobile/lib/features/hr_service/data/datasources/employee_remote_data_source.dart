@@ -5,7 +5,6 @@ import '../models/employee_model.dart';
 import '../models/department_model.dart';
 import '../../../../core/api/api_client.dart';
 import 'package:dio/dio.dart';
-// [MỚI] Import Storage để lấy Token
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class EmployeeRemoteDataSource {
@@ -17,16 +16,14 @@ class EmployeeRemoteDataSource {
   static const String storageUrl =
       'https://productional-wendell-nonexotic.ngrok-free.dev/api/files/upload';
 
-  // [MỚI] Khai báo Storage
   final _storage = const FlutterSecureStorage();
 
-  // [MỚI] Hàm Helper lấy Header chuẩn (kèm Token)
   Future<Map<String, String>> _getHeaders(String userId) async {
     String? token = await _storage.read(key: 'auth_token');
     return {
       "Content-Type": "application/json",
       "X-User-Id": userId,
-      "Authorization": "Bearer $token", // Quan trọng: Thêm Bearer Token
+      "Authorization": "Bearer $token",
     };
   }
 
@@ -44,7 +41,6 @@ class EmployeeRemoteDataSource {
       Map<String, dynamic> bodyData = employee.toJson();
       bodyData['password'] = password;
 
-      // [SỬA] Dùng hàm _getHeaders
       final headers = await _getHeaders(creatorId);
 
       final response = await http.post(
@@ -67,13 +63,11 @@ class EmployeeRemoteDataSource {
     }
   }
 
-  // 2. LẤY DANH SÁCH PHÒNG BAN
   Future<List<DepartmentModel>> getDepartments(String currentUserId) async {
     try {
       final url = Uri.parse('$baseUrl/departments');
       print("--> Fetching Departments from: $url");
 
-      // [SỬA] Dùng hàm _getHeaders
       final headers = await _getHeaders(currentUserId);
 
       final response = await http.get(url, headers: headers);
@@ -96,7 +90,6 @@ class EmployeeRemoteDataSource {
       final url = Uri.parse(_baseUrl);
       print("--> Fetching Employees via: $url");
 
-      // [SỬA] Dùng hàm _getHeaders
       final headers = await _getHeaders(currentUserId);
 
       final response = await http.get(url, headers: headers);
@@ -139,7 +132,6 @@ class EmployeeRemoteDataSource {
         if (departmentId != null) "departmentId": departmentId,
       };
 
-      // [SỬA] Dùng hàm _getHeaders
       final headers = await _getHeaders(updaterId);
 
       final response = await http.put(
@@ -194,7 +186,6 @@ class EmployeeRemoteDataSource {
       final url = Uri.parse('$_baseUrl/suggestion?keyword=$keyword');
       print("--> Fetching Suggestions: $url");
 
-      // [SỬA] Dùng hàm _getHeaders
       final headers = await _getHeaders(currentUserId);
 
       final response = await http.get(url, headers: headers);
@@ -218,7 +209,6 @@ class EmployeeRemoteDataSource {
       final url = Uri.parse('$_baseUrl/department/$departmentId');
       print("--> Fetching Members for Dept ID: $departmentId");
 
-      // [FIX] Cần thêm Token để bảo mật
       String? token = await _storage.read(key: 'auth_token');
       final headers = {
         "Content-Type": "application/json",
@@ -245,7 +235,6 @@ class EmployeeRemoteDataSource {
       final url = Uri.parse('$_baseUrl/$targetId');
       print("--> Deleting Employee ID: $targetId by User: $deleterId");
 
-      // [SỬA] Dùng hàm _getHeaders
       final headers = await _getHeaders(deleterId);
 
       final response = await http.delete(url, headers: headers);
@@ -270,7 +259,6 @@ class EmployeeRemoteDataSource {
 
       var request = http.MultipartRequest('POST', url);
 
-      // [MỚI] Thêm Token vào MultipartRequest
       String? token = await _storage.read(key: 'auth_token');
       if (token != null) {
         request.headers['Authorization'] = 'Bearer $token';
@@ -296,16 +284,12 @@ class EmployeeRemoteDataSource {
   // Kiểm tra quyền HR
   Future<bool> checkHrPermission(int userId) async {
     try {
-      // [FIX] Thêm token vào Dio Options
       String? token = await _storage.read(key: 'auth_token');
 
       final response = await _apiClient.get(
         '$_baseUrl/check-hr-permission',
         options: Options(
-          headers: {
-            'X-User-Id': userId,
-            'Authorization': 'Bearer $token', // Thêm token
-          },
+          headers: {'X-User-Id': userId, 'Authorization': 'Bearer $token'},
         ),
       );
 

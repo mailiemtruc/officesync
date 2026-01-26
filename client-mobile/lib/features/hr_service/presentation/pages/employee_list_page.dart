@@ -47,7 +47,6 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
   // Controller cho tìm kiếm
   final TextEditingController _searchController = TextEditingController();
 
-  // Timer để xử lý Debounce
   Timer? _debounce;
 
   late final EmployeeRepository _employeeRepository;
@@ -59,7 +58,6 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
   void initState() {
     super.initState();
 
-    // Khởi tạo Repositories
     _employeeRepository = EmployeeRepositoryImpl(
       remoteDataSource: EmployeeRemoteDataSource(),
     );
@@ -255,7 +253,7 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
   }
 
   Future<void> _handleDeleteEmployee(String targetId) async {
-    // [UX FIX] 1. Hiện Loading toàn màn hình
+    // Hiện Loading toàn màn hình
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -307,7 +305,7 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
   Future<void> _handleToggleLock(EmployeeModel emp) async {
     if (_currentUserId == null) return;
 
-    // [UX FIX] 1. Hiện Loading
+    // Hiện Loading
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -330,7 +328,7 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
         departmentId: null,
       );
 
-      // [UX FIX] 2. Tắt Loading
+      //  Tắt Loading
       if (mounted) Navigator.pop(context);
 
       if (mounted) {
@@ -393,7 +391,7 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
                 const SizedBox(height: 24),
                 _buildSearchAndFilter(),
                 const SizedBox(height: 20),
-                // [SỬA] Gọi trực tiếp hàm Body, không bọc thêm AnimatedSwitcher ở đây
+
                 Expanded(child: _buildBodyContent()),
               ],
             ),
@@ -405,7 +403,7 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
 
   Widget _buildBodyContent() {
     Widget content;
-    // [MỚI] Tạo Key duy nhất cho mỗi trạng thái để tránh dính Card cũ
+    //Tạo Key duy nhất cho mỗi trạng thái để tránh dính Card cũ
     final String stateKey =
         "${_isLoading ? 'loading' : 'content'}_${_isEmployeesTab ? 'emp' : 'dept'}";
 
@@ -489,7 +487,7 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
                   builder: (context) => EmployeeProfilePage(employee: emp),
                 ),
               ).then((_) {
-                // [QUAN TRỌNG] Dùng isSilent: true để tránh hiện lại Skeleton khi quay về
+                //  Dùng isSilent: true để tránh hiện lại Skeleton khi quay về
                 if (mounted) {
                   _fetchData(keyword: _searchController.text, isSilent: true);
                 }
@@ -509,7 +507,7 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
           ? "No departments found matching '${_searchController.text}'"
           : "No departments found.";
 
-      // [QUAN TRỌNG] Bọc EmptyState để support Pull-to-refresh
+      // Bọc EmptyState để support Pull-to-refresh
       return Stack(
         children: [
           ListView(
@@ -658,7 +656,7 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
         child: Container(
           decoration: BoxDecoration(
             color: isSelected ? Colors.white : Colors.transparent,
-            // [GIỮ NGUYÊN] Độ bo góc cũ
+
             borderRadius: BorderRadius.circular(10),
             boxShadow: isSelected
                 ? [
@@ -673,7 +671,7 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
           child: Text(
             title,
             style: TextStyle(
-              // [SỬA MÀU] Đổi sang màu xanh đậm chuẩn Manager Page
+              //  Đổi sang màu xanh đậm chuẩn Manager Page
               color: isSelected
                   ? const Color(0xE52260FF)
                   : const Color(0xFFB2AEAE),
@@ -708,7 +706,7 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
       ),
       child: TextField(
         controller: _searchController,
-        // [UX FIX] Tắt setState trong onChanged
+        //Tắt setState trong onChanged
         onChanged: (value) {
           // Chỉ cần logic debounce ở listener đã setup trong initState
         },
@@ -724,7 +722,7 @@ class _EmployeeListPageState extends State<EmployeeListPage> {
             color: const Color(0xFF757575),
             size: 20,
           ),
-          // [UX FIX] Sử dụng ValueListenableBuilder
+          // Sử dụng ValueListenableBuilder
           suffixIcon: ValueListenableBuilder<TextEditingValue>(
             valueListenable: _searchController,
             builder: (context, value, child) {

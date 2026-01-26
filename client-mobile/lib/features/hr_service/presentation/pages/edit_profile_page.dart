@@ -32,7 +32,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
   late String _initialDob;
   bool _isLoading = false;
   bool _isUploadingAvatar = false;
-  String? _currentAvatarUrl; // Lưu URL avatar hiện tại
+  String? _currentAvatarUrl;
   File? _localAvatarFile;
   bool _hasUpdates = false;
   late final EmployeeRepository _repository;
@@ -52,7 +52,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
     _emailController = TextEditingController(text: widget.user.email);
     _phoneController = TextEditingController(text: widget.user.phone);
 
-    // Logic parse ngày sinh (giữ nguyên từ code cũ)
+    // Logic parse ngày sinh
     String dobDisplay = "";
     if (widget.user.dateOfBirth.isNotEmpty &&
         widget.user.dateOfBirth != 'N/A') {
@@ -80,7 +80,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
     }
     _dobController = TextEditingController(text: dobDisplay);
 
-    // [MỚI] Lưu lại giá trị ban đầu sau khi đã format xong
+    // Lưu lại giá trị ban đầu sau khi đã format xong
     _initialFullName = widget.user.fullName;
     _initialPhone = widget.user.phone;
     _initialDob = dobDisplay;
@@ -120,7 +120,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
   }
 
   Future<void> _uploadAndAutoSaveAvatar(File file) async {
-    // Lưu ý: _isUploadingAvatar đã được set = true ở _pickImage rồi
+    // _isUploadingAvatar đã được set = true ở _pickImage rồi
     try {
       // 1. Upload ảnh lên Server chứa ảnh (MinIO/S3...)
       String newAvatarUrl = await _repository.uploadFile(file);
@@ -360,7 +360,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
     );
   }
 
-  // [CẬP NHẬT] Đồng bộ màu sắc DatePicker
+  // Đồng bộ màu sắc DatePicker
   Future<void> _selectDate(BuildContext context) async {
     DateTime initialDate = DateTime(2000);
     if (_dobController.text.isNotEmpty) {
@@ -374,7 +374,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
       initialDate: initialDate,
       firstDate: DateTime(1900),
       lastDate: DateTime.now(),
-      // [THÊM] Builder chỉnh màu
+      // Builder chỉnh màu
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
@@ -413,7 +413,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
               child: Column(
                 children: [
                   const SizedBox(height: 20),
-                  // [ĐÃ SỬA] Header
+
                   Row(
                     children: [
                       IconButton(
@@ -422,7 +422,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
                           color: AppColors.primary,
                           size: 24,
                         ),
-                        // [QUAN TRỌNG] Trả về biến _hasUpdates khi nhấn nút Back
                         onPressed: () => Navigator.of(context).pop(_hasUpdates),
                       ),
                       const Expanded(
@@ -444,7 +443,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
                   _AvatarEditSection(
                     avatarUrl: _currentAvatarUrl,
-                    localImage: _localAvatarFile, // Tham số mới
+                    localImage: _localAvatarFile,
                     isUploading: _isUploadingAvatar,
                     onCameraTap: () => _showImagePickerOptions(context),
                   ),

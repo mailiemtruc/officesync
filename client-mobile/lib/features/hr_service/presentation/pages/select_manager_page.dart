@@ -219,7 +219,7 @@ class _SelectManagerPageState extends State<SelectManagerPage> {
 
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 300),
-      reverseDuration: const Duration(milliseconds: 50), // Fix dính hình
+      reverseDuration: const Duration(milliseconds: 50),
       switchInCurve: Curves.easeIn,
       switchOutCurve: Curves.easeOut,
       transitionBuilder: (child, animation) =>
@@ -238,7 +238,7 @@ class _SelectManagerPageState extends State<SelectManagerPage> {
       ),
       child: TextField(
         controller: _searchController,
-        // [TỐI ƯU] Bỏ setState ở đây
+        // Bỏ setState ở đây
         onChanged: (val) => _onSearchChanged(val),
         decoration: InputDecoration(
           hintText: 'Search name, employee ID...',

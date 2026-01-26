@@ -7,7 +7,7 @@ enum RequestStatus { PENDING, APPROVED, REJECTED, CANCELLED }
 enum RequestType { ANNUAL_LEAVE, OVERTIME, LATE_ARRIVAL, EARLY_DEPARTURE }
 
 class RequestModel {
-  final int? id; // Backend là Long -> Dart là int
+  final int? id;
   final String? requestCode;
   final RequestType type;
   final RequestStatus status;
@@ -18,17 +18,14 @@ class RequestModel {
   final String reason;
   final String? rejectReason;
 
-  // [QUAN TRỌNG] Thêm trường này để hết lỗi đỏ bên trang Detail
   final String? evidenceUrl;
-  // [MỚI] Thêm trường này để hứng ngày tạo đơn từ Backend
   final DateTime? createdAt;
-  // [MỚI] Thêm các field thông tin người gửi đơn
   final String requesterName;
-  final String requesterId; // ID nhân viên
+  final String requesterId;
   final String requesterAvatar;
   final String requesterDept;
-  final String? requesterRole; // [MỚI] Thêm trường này
-  // [MỚI] Thêm các trường này
+  final String? requesterRole;
+
   final String? approverName;
   final DateTime? updatedAt;
 
@@ -49,7 +46,7 @@ class RequestModel {
     this.requesterId = '',
     this.requesterAvatar = '',
     this.requesterDept = '',
-    this.requesterRole, // [MỚI]
+    this.requesterRole,
     this.approverName,
     this.updatedAt,
   });
@@ -72,7 +69,7 @@ class RequestModel {
         rDept = r['department']['name'] ?? '';
       }
     }
-    // [MỚI] Bóc tách thông tin người duyệt (approver)
+    //  Bóc tách thông tin người duyệt (approver)
     String? appName;
     if (json['approver'] != null) {
       appName = json['approver']['fullName'];
@@ -102,8 +99,8 @@ class RequestModel {
       requesterId: rId,
       requesterAvatar: rAvatar,
       requesterDept: rDept,
-      requesterRole: role, // [MỚI] Map dữ liệu role
-      // [MỚI] Map dữ liệu vào
+      requesterRole: role, // Map dữ liệu role
+      //  Map dữ liệu vào
       approverName: appName,
       updatedAt: json['updatedAt'] != null
           ? DateTime.parse(json['updatedAt'])
@@ -121,7 +118,7 @@ class RequestModel {
       'reason': reason,
       'durationVal': durationVal,
       'durationUnit': durationUnit,
-      'evidenceUrl': evidenceUrl, // [MỚI]
+      'evidenceUrl': evidenceUrl,
     };
   }
 

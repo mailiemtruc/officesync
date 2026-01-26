@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
-
 import '../data/models/employee_model.dart';
-import '../presentation/pages/edit_profile_emloyee_page.dart';
 import 'confirm_bottom_sheet.dart';
 import '../presentation/pages/employee_profile_page.dart';
 
 class EmployeeBottomSheet extends StatelessWidget {
-  final EmployeeModel employee; // Sửa thành EmployeeModel
+  final EmployeeModel employee;
   final VoidCallback onToggleLock;
   final VoidCallback onDelete;
 
@@ -139,7 +137,7 @@ class EmployeeBottomSheet extends StatelessWidget {
               text: 'Edit Information',
               color: const Color(0xFF374151),
               onTap: () {
-                // [SỬA] Đóng BottomSheet ngay lập tức và gửi tín hiệu 'OPEN_EDIT' về trang List
+                // Đóng BottomSheet ngay lập tức và gửi tín hiệu 'OPEN_EDIT' về trang List
                 Navigator.pop(context, 'OPEN_EDIT');
               },
             ),
@@ -223,11 +221,10 @@ class EmployeeBottomSheet extends StatelessWidget {
       width: 46,
       height: 46,
       alignment: Alignment.center,
-      color: const Color(0xFFEFF1F5), // Màu nền xám
+      color: const Color(0xFFEFF1F5),
       child: Icon(
-        // [ĐÃ SỬA] Đổi sang Phosphor Icon
         PhosphorIcons.user(PhosphorIconsStyle.fill),
-        color: const Color(0xFF9CA3AF), // Màu icon xám đậm
+        color: const Color(0xFF9CA3AF),
         size: 24,
       ),
     );
@@ -239,12 +236,12 @@ class EmployeeBottomSheet extends StatelessWidget {
     required Color color,
     required VoidCallback onTap,
   }) {
-    // [QUAN TRỌNG] Bọc trong Material để InkWell vẽ được hiệu ứng sóng nước
+    // Bọc trong Material để InkWell vẽ được hiệu ứng sóng nước
     return Material(
       color: Colors.transparent, // Nền trong suốt để không che background trắng
       child: InkWell(
         onTap: onTap,
-        // [MỚI] Tùy chỉnh màu hiệu ứng lan tỏa dựa theo màu icon (VD: Xóa thì lan màu đỏ nhạt)
+        //  Tùy chỉnh màu hiệu ứng lan tỏa dựa theo màu icon (VD: Xóa thì lan màu đỏ nhạt)
         splashColor: color.withOpacity(0.1),
         highlightColor: color.withOpacity(0.05),
         child: Padding(

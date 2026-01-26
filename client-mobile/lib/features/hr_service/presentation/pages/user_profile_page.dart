@@ -36,7 +36,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
   bool _isLoadingProfile = false;
   bool _isUploading = false;
 
-  // [SỬA] Thêm biến lưu file ảnh local để hiển thị ngay lập tức
+  // biến lưu file ảnh local để hiển thị ngay lập tức
   File? _localAvatarFile;
 
   final ImagePicker _picker = ImagePicker();
@@ -54,9 +54,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
     _fetchEmployeeDetail();
   }
 
-  // [SỬA LỖI 1] Thêm hàm này để lắng nghe thay đổi từ Dashboard (Cha) truyền xuống
-  // Tìm hàm didUpdateWidget và sửa thành như sau:
-
+  // Hàm này để lắng nghe thay đổi từ Dashboard (Cha) truyền xuống
   @override
   void didUpdateWidget(covariant UserProfilePage oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -65,12 +63,12 @@ class _UserProfilePageState extends State<UserProfilePage> {
     if (widget.userInfo != oldWidget.userInfo) {
       print("--> [Profile] Updating UI from Parent Data (No API Call)");
 
-      // [QUAN TRỌNG] Update thẳng vào State, KHÔNG gọi API, KHÔNG hiện loading
+      //  Update thẳng vào State, KHÔNG gọi API, KHÔNG hiện loading
       _updateLocalStateFromUserInfo();
     }
   }
 
-  // [THÊM MỚI] Hàm helper để convert Map -> Model
+  // Hàm helper để convert Map -> Model
   void _updateLocalStateFromUserInfo() {
     if (widget.userInfo.isEmpty) return;
 
@@ -106,23 +104,22 @@ class _UserProfilePageState extends State<UserProfilePage> {
     });
   }
 
-  // [THÊM MỚI] Hàm chuyển đổi Role sang tên hiển thị đẹp (giống Dashboard)
+  //  Hàm chuyển đổi Role sang tên hiển thị đẹp
   String _getDisplayRole(String rawRole) {
     switch (rawRole) {
       case 'SUPER_ADMIN':
-        return 'ADMIN'; // Hoặc sửa thành 'QUẢN TRỊ VIÊN'
+        return 'ADMIN';
       case 'COMPANY_ADMIN':
-        return 'DIRECTOR'; // Hoặc sửa thành 'GIÁM ĐỐC'
+        return 'DIRECTOR';
       case 'MANAGER':
-        return 'MANAGER'; // Hoặc sửa thành 'QUẢN LÝ'
+        return 'MANAGER';
       case 'STAFF':
-        return 'STAFF'; // Hoặc sửa thành 'NHÂN VIÊN'
+        return 'STAFF';
       default:
         return rawRole;
     }
   }
 
-  // --- HÀM HỖ TRỢ ---
   String _formatDate(String? dateStr) {
     if (dateStr == null || dateStr.isEmpty || dateStr == 'N/A') return 'N/A';
     try {
@@ -217,7 +214,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
     }
   }
 
-  // --- LOGIC UPLOAD ẢNH (ĐÃ SỬA) ---
+  // --- LOGIC UPLOAD ẢNH  ---
   Future<void> _pickImage(ImageSource source) async {
     Navigator.pop(context);
     try {
@@ -228,7 +225,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
       if (image != null) {
         final file = File(image.path);
 
-        // [SỬA] Hiển thị ảnh ngay lập tức (Optimistic UI)
+        // Hiển thị ảnh ngay lập tức (Optimistic UI)
         setState(() {
           _localAvatarFile = file;
           _isUploading = true;
@@ -281,7 +278,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
         print("--> Update HR Profile success!");
         await _updateLocalUserStorage(avatarUrl);
 
-        // [QUAN TRỌNG] Cập nhật ngay lập tức vào UI (Optimistic Update)
+        //  Cập nhật ngay lập tức vào UI (Optimistic Update)
         if (mounted) {
           setState(() {
             _detailedEmployee = EmployeeModel(
@@ -293,7 +290,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
               role: _detailedEmployee!.role,
               employeeCode: _detailedEmployee!.employeeCode,
               departmentName: _detailedEmployee!.departmentName,
-              avatarUrl: avatarUrl, // <--- UI đã cập nhật ảnh mới ở đây rồi
+              avatarUrl: avatarUrl,
             );
 
             // Xóa file local và tắt loading upload
@@ -309,7 +306,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
           );
         }
 
-        // --- CÁC TÁC VỤ NGẦM (GIỮ NGUYÊN) ---
+        // --- CÁC TÁC VỤ NGẦM  ---
         _chatApi.updateChatProfile(avatarUrl: avatarUrl).catchError((e) {
           print("--> Lỗi Chat Service: $e");
         });
@@ -344,7 +341,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
   // --- UI & DIALOGS ---
   Future<void> _handleLogout() async {
     try {
-      // --- GIỮ NGUYÊN PHẦN XÓA TOKEN NOTIFICATION (Fire-and-forget) ---
+      // --- XÓA TOKEN NOTIFICATION (Fire-and-forget) ---
       String? userIdStr = await _getUserIdSafe();
       if (userIdStr != null) {
         int uid = int.tryParse(userIdStr) ?? 0;
@@ -412,7 +409,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
                 color: Colors.transparent,
                 child: InkWell(
                   onTap: () => _pickImage(ImageSource.camera),
-                  // [SỬA] Đổi sang màu xám
                   splashColor: Colors.grey.withOpacity(0.2),
                   highlightColor: Colors.grey.withOpacity(0.1),
                   child: ListTile(
@@ -439,7 +435,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
                 color: Colors.transparent,
                 child: InkWell(
                   onTap: () => _pickImage(ImageSource.gallery),
-                  // [SỬA] Đổi sang màu xám
                   splashColor: Colors.grey.withOpacity(0.2),
                   highlightColor: Colors.grey.withOpacity(0.1),
                   child: ListTile(
@@ -499,14 +494,13 @@ class _UserProfilePageState extends State<UserProfilePage> {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      isScrollControlled: true, // Để hiển thị đẹp trên các màn hình khác nhau
+      isScrollControlled: true,
       builder: (context) {
         return ConfirmBottomSheet(
           title: 'Log Out',
           message: 'Are you sure you want to log out?',
           confirmText: 'Log out',
           cancelText: 'Cancel',
-          // Bạn có thể dùng AppColors.primary hoặc Colors.red để cảnh báo hành động đăng xuất
           confirmColor: AppColors.primary,
           onConfirm: () {
             Navigator.pop(context); // Đóng BottomSheet trước
@@ -522,10 +516,10 @@ class _UserProfilePageState extends State<UserProfilePage> {
     final fullName =
         _detailedEmployee?.fullName ?? widget.userInfo['fullName'] ?? 'User';
 
-    // [MỚI] Lấy role thô trước
+    //  Lấy role thô trước
     final rawRole =
         _detailedEmployee?.role ?? widget.userInfo['role'] ?? 'Employee';
-    // [MỚI] Sau đó chuyển đổi qua hàm hiển thị
+    //  Sau đó chuyển đổi qua hàm hiển thị
     final role = _getDisplayRole(rawRole);
     final avatarUrl = _detailedEmployee?.avatarUrl;
 
@@ -556,12 +550,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
                     ),
                     const SizedBox(height: 24),
 
-                    // [TỐI ƯU ANIMATION PROFILE]
                     AnimatedSwitcher(
                       duration: const Duration(milliseconds: 500),
-                      reverseDuration: const Duration(
-                        milliseconds: 50,
-                      ), // Fix dính hình
+                      reverseDuration: const Duration(milliseconds: 50),
                       switchInCurve: Curves.easeIn,
                       switchOutCurve: Curves.easeOut,
                       transitionBuilder: (child, animation) {
@@ -659,7 +650,6 @@ class _HeaderSection extends StatelessWidget {
                         fit: BoxFit.cover,
                         width: 110,
                         height: 110,
-                        // [FIX] Thêm errorBuilder tương tự
                         errorBuilder: (context, error, stackTrace) {
                           if (avatarUrl != null && avatarUrl!.isNotEmpty) {
                             return Image.network(
@@ -763,7 +753,6 @@ class _HeaderSection extends StatelessWidget {
     );
   }
 }
-// --- CÁC WIDGET DƯỚI ĐÂY GIỮ NGUYÊN ---
 
 class _InfoSection extends StatelessWidget {
   final Map<String, dynamic> userInfo;
@@ -1049,9 +1038,9 @@ class SkeletonUserProfile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Shimmer.fromColors(
-      baseColor: Colors.grey[200]!, // [MÀU MỚI]
-      highlightColor: Colors.grey[50]!, // [MÀU MỚI]
-      period: const Duration(milliseconds: 2000), // [TỐC ĐỘ MỚI]
+      baseColor: Colors.grey[200]!,
+      highlightColor: Colors.grey[50]!,
+      period: const Duration(milliseconds: 2000),
       child: Column(
         children: [
           // Avatar

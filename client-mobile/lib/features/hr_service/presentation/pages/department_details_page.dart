@@ -29,7 +29,7 @@ class _DepartmentDetailsPageState extends State<DepartmentDetailsPage> {
   late final EmployeeRepository _employeeRepo;
 
   String? _currentUserId;
-  String? _currentUserRole; // [MỚI] Biến để lưu quyền hạn (ADMIN/MANAGER/STAFF)
+  String? _currentUserRole;
 
   final _storage = const FlutterSecureStorage();
   late DepartmentModel _currentDept;
@@ -49,7 +49,6 @@ class _DepartmentDetailsPageState extends State<DepartmentDetailsPage> {
     _fetchMembers();
   }
 
-  // [ĐÃ SỬA] Lấy thêm Role từ storage
   Future<void> _loadCurrentUser() async {
     try {
       String? userInfoStr = await _storage.read(key: 'user_info');
@@ -58,8 +57,7 @@ class _DepartmentDetailsPageState extends State<DepartmentDetailsPage> {
         if (mounted) {
           setState(() {
             _currentUserId = data['id'].toString();
-            _currentUserRole =
-                data['role']; // [QUAN TRỌNG] Lấy role để check quyền
+            _currentUserRole = data['role'];
           });
         }
       }
@@ -84,8 +82,8 @@ class _DepartmentDetailsPageState extends State<DepartmentDetailsPage> {
         setState(() {
           EmployeeModel? freshManager;
 
-          // [FIX QUAN TRỌNG] Thay vì so sánh ID cũ (có thể bị null),
-          // ta tìm người có role là MANAGER trong danh sách vừa tải về.
+          // Thay vì so sánh ID cũ (có thể bị null),
+          // tìm người có role là MANAGER trong danh sách vừa tải về.
           try {
             freshManager = deptMembers.firstWhere(
               (e) => e.role.toUpperCase() == 'MANAGER',
@@ -93,7 +91,7 @@ class _DepartmentDetailsPageState extends State<DepartmentDetailsPage> {
           } catch (e) {
             // Nếu không tìm thấy ai là Manager trong list này
             // (Có thể phòng chưa có Manager, hoặc API lỗi)
-            // Lúc này mới fallback về manager cũ (nếu có)
+            // Lúc này mới fallback về manager cũ
             freshManager = _currentDept.manager;
           }
 
@@ -148,7 +146,6 @@ class _DepartmentDetailsPageState extends State<DepartmentDetailsPage> {
     final List<EmployeeModel>? finalSelection = await Navigator.push(
       context,
       MaterialPageRoute(
-        // [SỬA LẠI THAM SỐ CHO ĐÚNG VỚI AddMembersPage]
         builder: (context) => AddMembersPage(
           alreadySelectedMembers: _members, // Truyền danh sách hiện tại
           excludeManagerId: _currentDept.manager?.id
@@ -208,7 +205,6 @@ class _DepartmentDetailsPageState extends State<DepartmentDetailsPage> {
 
     // [BẢO VỆ] Chỉ Admin mới được xóa thành viên
     if (_currentUserRole != 'COMPANY_ADMIN') {
-      // [ĐÃ SỬA] Dùng CustomSnackBar
       CustomSnackBar.show(
         context,
         title: 'Permission Denied',
@@ -251,15 +247,12 @@ class _DepartmentDetailsPageState extends State<DepartmentDetailsPage> {
             child: Column(
               children: [
                 const SizedBox(height: 20),
-                // Header
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: // [ĐÃ SỬA] Header: Tiêu đề xuống dòng, canh giữa, KHÔNG lỗi
-                  Row(
+                  child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      // 1. Nút Back (Dùng Container thay vì SizedBox để dùng được alignment)
                       Container(
                         width: 40,
                         alignment: Alignment.centerLeft,
@@ -275,11 +268,10 @@ class _DepartmentDetailsPageState extends State<DepartmentDetailsPage> {
                         ),
                       ),
 
-                      // 2. Tiêu đề (Expanded + TextAlign.center)
                       const Expanded(
                         child: Text(
                           'DEPARTMENT DETAILS',
-                          textAlign: TextAlign.center, // Canh giữa văn bản
+                          textAlign: TextAlign.center,
                           style: TextStyle(
                             color: AppColors.primary,
                             fontSize: 24,
@@ -289,7 +281,6 @@ class _DepartmentDetailsPageState extends State<DepartmentDetailsPage> {
                         ),
                       ),
 
-                      // 3. Khoảng trống cân bằng (40px)
                       const SizedBox(width: 40),
                     ],
                   ),
@@ -532,7 +523,7 @@ class _DepartmentDetailsPageState extends State<DepartmentDetailsPage> {
 
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 300),
-      reverseDuration: const Duration(milliseconds: 50), // Fix dính hình
+      reverseDuration: const Duration(milliseconds: 50),
       switchInCurve: Curves.easeIn,
       switchOutCurve: Curves.easeOut,
       transitionBuilder: (child, animation) =>

@@ -13,13 +13,8 @@ class RequestRepositoryImpl implements RequestRepository {
   Future<bool> createRequest({
     required String userId,
     required RequestModel request,
-    String? evidenceUrl, // [MỚI]
+    String? evidenceUrl,
   }) async {
-    // Gọi hàm createRequest bên DataSource
-    // Lưu ý: DataSource hiện tại đang nhận từng tham số rời rạc,
-    // ta nên update DataSource để nhận Model hoặc bóc tách ở đây.
-    // Dưới đây là cách bóc tách để khớp với DataSource cũ:
-
     return await remoteDataSource.createRequest(
       userId: userId,
       type: request.type.name,
@@ -28,30 +23,27 @@ class RequestRepositoryImpl implements RequestRepository {
       reason: request.reason,
       durationVal: request.durationVal,
       durationUnit: request.durationUnit,
-      evidenceUrl: evidenceUrl, // Truyền xuống
+      evidenceUrl: evidenceUrl,
     );
   }
 
-  // [CẬP NHẬT]
   @override
   Future<List<RequestModel>> getMyRequests(
     String userId, {
     String? search,
-    int? day, // <-- Thêm dòng này
+    int? day,
     int? month,
     int? year,
   }) async {
-    // Truyền tiếp tham số xuống Remote Data Source
     return await remoteDataSource.getMyRequests(
       userId,
       search: search,
-      day: day, // <--- BẠN ĐANG THIẾU DÒNG NÀY (Thêm vào đây)
+      day: day,
       month: month,
       year: year,
     );
   }
 
-  // [MỚI] Implement hàm upload
   @override
   Future<String> uploadFile(File file) async {
     return await remoteDataSource.uploadFile(file);

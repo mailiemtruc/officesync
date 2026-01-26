@@ -1,17 +1,14 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/department_model.dart';
-// [MỚI] Import Storage
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class DepartmentRemoteDataSource {
   static const String baseUrl =
       'https://productional-wendell-nonexotic.ngrok-free.dev/api/departments';
 
-  // [MỚI] Khai báo Storage
   final _storage = const FlutterSecureStorage();
 
-  // [MỚI] Hàm Helper lấy Header
   Future<Map<String, String>> _getHeaders(String userId) async {
     String? token = await _storage.read(key: 'auth_token');
     return {
@@ -30,7 +27,6 @@ class DepartmentRemoteDataSource {
 
       print("--> Creating Dept: ${department.name} by User: $creatorId");
 
-      // [SỬA]
       final headers = await _getHeaders(creatorId);
 
       final response = await http.post(
@@ -64,7 +60,6 @@ class DepartmentRemoteDataSource {
         "isHr": isHr,
       };
 
-      // [SỬA]
       final headers = await _getHeaders(userId);
 
       final response = await http.put(
@@ -82,7 +77,7 @@ class DepartmentRemoteDataSource {
   Future<bool> deleteDepartment(String userId, int id) async {
     try {
       final url = Uri.parse('$baseUrl/$id');
-      // [SỬA]
+
       final headers = await _getHeaders(userId);
 
       final response = await http.delete(url, headers: headers);
@@ -100,7 +95,6 @@ class DepartmentRemoteDataSource {
       final url = Uri.parse('$baseUrl/search?keyword=$keyword');
       print("--> Searching Departments: $url");
 
-      // [SỬA]
       final headers = await _getHeaders(currentUserId);
 
       final response = await http.get(url, headers: headers);
@@ -122,7 +116,6 @@ class DepartmentRemoteDataSource {
       final url = Uri.parse('$baseUrl/hr');
       print("--> Fetching HR Department info...");
 
-      // [SỬA]
       final headers = await _getHeaders(userId);
 
       final response = await http.get(url, headers: headers);

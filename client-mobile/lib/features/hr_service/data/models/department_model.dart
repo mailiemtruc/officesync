@@ -1,24 +1,23 @@
-import 'employee_model.dart'; // Import EmployeeModel
+import 'employee_model.dart';
 
 class DepartmentModel {
-  final int? id; // [Sửa] Cho phép null để dùng được cho trang Tạo mới
+  final int? id;
   final String name;
   final String? code;
-  final String? color; // [MỚI] Hứng màu sắc
-  final int memberCount; // [MỚI] Hứng số lượng thành viên
-  final EmployeeModel? manager; // [Mới] Thêm trường manager
-  final List<String>?
-  memberIds; // [MỚI] Thêm danh sách ID thành viên để gửi lên
-  final bool isHr; // [MỚI]
+  final String? color;
+  final int memberCount;
+  final EmployeeModel? manager;
+  final List<String>? memberIds;
+  final bool isHr;
   DepartmentModel({
     this.id,
     required this.name,
     this.code,
     this.manager,
     this.color,
-    this.memberCount = 0, // Mặc định là 0
+    this.memberCount = 0,
     this.memberIds,
-    this.isHr = false, // [MỚI] Mặc định false
+    this.isHr = false,
   });
 
   factory DepartmentModel.fromJson(Map<String, dynamic> json) {
@@ -26,10 +25,9 @@ class DepartmentModel {
       id: json['id'],
       name: json['name'] ?? '',
       code: json['departmentCode'],
-      color: json['color'], // Map trường color
-      memberCount:
-          json['memberCount'] ?? 0, // Map trường memberCount từ @Formula
-      isHr: json['isHr'] ?? false, // [MỚI] Parse JSON
+      color: json['color'],
+      memberCount: json['memberCount'] ?? 0,
+      isHr: json['isHr'] ?? false,
       manager: json['manager'] != null
           ? EmployeeModel.fromJson(json['manager'])
           : null,
@@ -47,7 +45,6 @@ class DepartmentModel {
       ); // Backend nhận managerId (Long)
     }
 
-    // [MỚI] Gửi danh sách memberIds
     if (memberIds != null) {
       data["memberIds"] = memberIds!.map((id) => int.tryParse(id)).toList();
     }

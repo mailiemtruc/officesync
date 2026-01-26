@@ -1,9 +1,8 @@
-import 'dart:convert'; // Để dùng jsonDecode
-import 'package:flutter_secure_storage/flutter_secure_storage.dart'; // Để đọc dữ liệu
+import 'dart:convert';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
-// Import các file core
 import '../../../../core/config/app_colors.dart';
 import '../../../../core/widgets/custom_button.dart';
 import '../../../../core/widgets/custom_text_field.dart';
@@ -138,9 +137,6 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
-        // [SỬA LỖI QUAN TRỌNG] Đổi Center -> Align(topCenter)
-        // Center sẽ căn giữa dọc làm nội dung bị trôi xuống giữa màn hình
-        // Align topCenter sẽ đẩy nội dung lên sát trên cùng -> Header sẽ đồng bộ
         child: Align(
           alignment: Alignment.topCenter,
           child: ConstrainedBox(
@@ -154,17 +150,13 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Khoảng cách chuẩn 20px từ đỉnh an toàn
                         const SizedBox(height: 20),
 
-                        // Header đồng bộ
                         Row(
-                          crossAxisAlignment: CrossAxisAlignment
-                              .center, // Canh giữa theo chiều dọc
+                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
                             // Nút Back
                             SizedBox(
-                              // Dùng SizedBox hoặc Container để cố định chiều rộng
                               width: 40,
                               child: IconButton(
                                 padding: EdgeInsets.zero,
@@ -185,11 +177,10 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
                               child: Text(
                                 'PASSWORD MANAGEMENT',
                                 textAlign: TextAlign
-                                    .center, // [QUAN TRỌNG] Canh giữa và tự xuống dòng
+                                    .center, //Canh giữa và tự xuống dòng
                                 style: TextStyle(
                                   color: AppColors.primary,
-                                  fontSize:
-                                      24, // Sẽ hiển thị đúng kích thước này
+                                  fontSize: 24,
                                   fontFamily: 'Inter',
                                   fontWeight: FontWeight.w700,
                                 ),

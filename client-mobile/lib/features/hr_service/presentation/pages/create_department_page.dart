@@ -9,7 +9,6 @@ import '../../data/models/department_model.dart';
 import '../../data/datasources/department_remote_data_source.dart';
 import '../../domain/repositories/department_repository_impl.dart';
 import '../../domain/repositories/department_repository.dart';
-// [QUAN TRỌNG] Các trang chọn
 import 'select_manager_page.dart';
 import 'add_members_page.dart';
 
@@ -28,7 +27,7 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
   EmployeeModel? _selectedManager;
   List<EmployeeModel> _selectedMembers = [];
   bool _isLoading = false;
-  bool _isHr = false; // [MỚI]
+  bool _isHr = false;
   late final DepartmentRepository _departmentRepository;
   final _storage = const FlutterSecureStorage();
 
@@ -38,7 +37,6 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
     _departmentRepository = DepartmentRepositoryImpl(
       remoteDataSource: DepartmentRemoteDataSource(),
     );
-    // [ĐÃ XÓA] Không gọi _fetchAllEmployees() nữa vì dùng Server-side search
   }
 
   Future<String?> _getCurrentUserId() async {
@@ -150,7 +148,7 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
       MaterialPageRoute(
         builder: (context) => AddMembersPage(
           alreadySelectedMembers: _selectedMembers,
-          // [MỚI] Truyền ID Manager vào để trang AddMembers lọc ra (không hiện Manager để chọn nữa)
+          //  Truyền ID Manager vào để trang AddMembers lọc ra (không hiện Manager để chọn nữa)
           excludeManagerId: _selectedManager?.id,
         ),
       ),
@@ -170,24 +168,20 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
       body: Stack(
         children: [
           SafeArea(
-            // [SỬA 1] Đổi Center -> Align(topCenter) để đẩy nội dung lên trên cùng
             child: Align(
               alignment: Alignment.topCenter,
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 600),
                 child: SingleChildScrollView(
-                  // [SỬA 2] Bỏ padding top (24 -> 0) để kiểm soát bằng SizedBox
                   padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // [SỬA 3] Thêm khoảng cách chuẩn 20px từ đỉnh an toàn
                       const SizedBox(height: 20),
 
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          // [ĐÃ SỬA] Đổi SizedBox thành Container để dùng được alignment
                           Container(
                             width: 40,
                             alignment: Alignment.centerLeft,
@@ -219,13 +213,11 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
                             ),
                           ),
 
-                          // Placeholder để cân đối layout
                           const SizedBox(width: 40),
                         ],
                       ),
                       const SizedBox(height: 32),
 
-                      // [ĐÃ SỬA] Avatar Department đồng bộ màu với AddEmployeePage
                       Center(
                         child: Container(
                           width: 110,
@@ -233,37 +225,31 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
 
-                            // [ĐỒNG BỘ 1] Viền màu xám đậm hơn (grey[300])
                             border: Border.all(
                               color: Colors.grey[300]!,
                               width: 2,
                             ),
 
-                            // [ĐỒNG BỘ 2] Nền màu xám nhạt (grey[200])
                             color: Colors.grey[200],
 
                             boxShadow: [
                               BoxShadow(
                                 color: Colors.black.withOpacity(0.1),
                                 blurRadius: 10,
-                                offset: const Offset(
-                                  0,
-                                  4,
-                                ), // Chỉnh offset 0,4 cho khớp chuẩn
+                                offset: const Offset(0, 4),
                               ),
                             ],
                           ),
                           child: Icon(
                             PhosphorIcons.buildings(PhosphorIconsStyle.fill),
                             size: 60,
-                            // [ĐỒNG BỘ 3] Màu icon xám (grey[400])
+
                             color: Colors.grey[400],
                           ),
                         ),
                       ),
                       const SizedBox(height: 32),
 
-                      // ... (Phần dưới giữ nguyên không đổi) ...
                       _buildSectionTitle('BASIC INFORMATION'),
                       const SizedBox(height: 12),
                       Container(
@@ -306,7 +292,7 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
                                     color: Colors.grey[200],
                                     shape: BoxShape.circle,
                                   ),
-                                  // [ĐÃ SỬA] Dùng Phosphor Icon
+
                                   child: Icon(
                                     PhosphorIcons.user(PhosphorIconsStyle.fill),
                                     color: Colors.grey,
@@ -340,7 +326,7 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
                                         ? Image.network(
                                             _selectedManager!.avatarUrl!,
                                             fit: BoxFit.cover,
-                                            // [ĐÃ SỬA] Icon lỗi tải ảnh
+
                                             errorBuilder: (ctx, err, stack) =>
                                                 Icon(
                                                   PhosphorIcons.user(
@@ -350,7 +336,6 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
                                                   size: 24,
                                                 ),
                                           )
-                                        // [ĐÃ SỬA] Icon mặc định khi không có ảnh
                                         : Icon(
                                             PhosphorIcons.user(
                                               PhosphorIconsStyle.fill,
@@ -403,7 +388,7 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
                         ),
                       ),
                       const SizedBox(height: 24),
-                      // [MỚI] PHẦN UI CẤU HÌNH HR
+
                       _buildSectionTitle('DEPARTMENT SETTINGS'),
                       const SizedBox(height: 12),
                       Container(
