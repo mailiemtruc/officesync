@@ -13,5 +13,8 @@ COPY --from=builder /app/target/*.jar app.jar
 # Copy file key firebase vào container (nếu build gói vào jar thì bước này optional, nhưng cứ copy cho chắc)
 COPY src/main/resources/service-account.json /app/service-account.json
 
+RUN apk add --no-cache tzdata
+ENV TZ=Asia/Ho_Chi_Minh
+
 EXPOSE 8089
 ENTRYPOINT ["java", "-jar", "app.jar"]

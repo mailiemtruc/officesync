@@ -27,7 +27,8 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
   final AttendanceApi _api = AttendanceApi();
   final _storage = const FlutterSecureStorage();
   final TextEditingController _searchController = TextEditingController();
-  final String _attendanceUrl = 'ws://10.0.2.2:8000/ws-attendance';
+  final String _attendanceUrl =
+      'wss://productional-wendell-nonexotic.ngrok-free.dev/ws-attendance';
 
   // --- PALETTE MÀU ---
   static const Color primaryColor = Color(0xFF2260FF);

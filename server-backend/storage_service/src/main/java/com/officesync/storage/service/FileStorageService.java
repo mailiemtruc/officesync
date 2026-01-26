@@ -28,21 +28,22 @@ public class FileStorageService {
     }
 
     public String storeFile(MultipartFile file) {
-    try {
-        String originalFileName = StringUtils.cleanPath(Objects.requireNonNull(file.getOriginalFilename()));
-        String uniqueFileName = UUID.randomUUID().toString() + "_" + originalFileName;
+        try {
+            String originalFileName = StringUtils.cleanPath(Objects.requireNonNull(file.getOriginalFilename()));
+            String uniqueFileName = UUID.randomUUID().toString() + "_" + originalFileName;
 
-        Path targetLocation = this.fileStorageLocation.resolve(uniqueFileName);
-        Files.copy(file.getInputStream(), targetLocation, StandardCopyOption.REPLACE_EXISTING);
+            Path targetLocation = this.fileStorageLocation.resolve(uniqueFileName);
+            Files.copy(file.getInputStream(), targetLocation, StandardCopyOption.REPLACE_EXISTING);
 
-        // [SỬA ĐOẠN NÀY] 
-        // Thay localhost bằng 10.0.2.2 để Emulator hiểu được server
-        return "http://10.0.2.2:8000/img/" + uniqueFileName;
+            // [SỬA ĐOẠN NÀY] 
+            // Thay localhost bằng 10.0.2.2 để Emulator hiểu được server
+            String ngrokUrl = "https://productional-wendell-nonexotic.ngrok-free.dev";
+            return ngrokUrl + "/img/" + uniqueFileName;
 
-    } catch (IOException ex) {
-        throw new RuntimeException("Could not upload file: " + ex.getMessage());
+        } catch (IOException ex) {
+            throw new RuntimeException("Could not upload file: " + ex.getMessage());
+        }
     }
-}
 
     public void deleteFile(String fileName) {
         try {

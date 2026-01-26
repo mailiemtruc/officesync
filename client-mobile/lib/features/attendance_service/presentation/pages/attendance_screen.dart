@@ -104,24 +104,40 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   Future<void> _loadUserInfo() async {
     try {
       String? userInfoStr = await _storage.read(key: 'user_info');
+
       if (userInfoStr != null) {
         final userData = jsonDecode(userInfoStr);
         setState(() {
-          _companyId = userData['companyId'];
-          _userId = userData['id'];
+          // Parse an toàn để tránh lỗi kiểu dữ liệu (String/Int) khi cập nhật
+          _companyId = int.tryParse(userData['companyId'].toString());
+          _userId = int.tryParse(userData['id'].toString());
         });
-        _fetchHistoryData();
+
+        // Gọi fetch data
+        await _fetchHistoryData();
+      } else {
+        // [FIX] Nếu không có dữ liệu user -> Phải tắt loading
+        debugPrint("User info is null inside AttendanceScreen");
+        if (mounted) setState(() => _isLoadingHistory = false);
       }
     } catch (e) {
       debugPrint("Error reading User Info: $e");
+      // [FIX] Nếu lỗi khi đọc/parse -> Phải tắt loading
+      if (mounted) setState(() => _isLoadingHistory = false);
     }
   }
 
   // [SỬA] Hàm lấy dữ liệu Timesheet thay vì History
   Future<void> _fetchHistoryData() async {
-    if (_userId == null) return;
+    // [FIX] Nếu không có userId -> Tắt loading và return
+    if (_userId == null) {
+      debugPrint("UserId is null, cannot fetch history");
+      if (mounted) setState(() => _isLoadingHistory = false);
+      return;
+    }
 
-    setState(() => _isLoadingHistory = true);
+    // Đảm bảo bật loading lại nếu đang tắt (phòng hờ)
+    // if (mounted) setState(() => _isLoadingHistory = true);
 
     try {
       final data = await _api.getTimesheet(
@@ -138,7 +154,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         if (item.sessions.isNotEmpty) daysWorked++;
       }
 
-      // Lọc bỏ ngày trống (để list gọn gàng giống giao diện cũ)
       final activeDays = data
           .where(
             (day) =>
@@ -148,7 +163,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           )
           .toList();
 
-      // Sắp xếp mới nhất lên đầu
       activeDays.sort((a, b) => b.date.compareTo(a.date));
 
       if (mounted) {
@@ -156,17 +170,17 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           _timesheets = activeDays;
           _monthlyTotalHours = totalHours;
           _monthlyDaysWorked = daysWorked;
-          _isLoadingHistory = false;
+          _isLoadingHistory = false; // [QUAN TRỌNG] Tắt loading khi thành công
         });
       }
     } catch (e) {
+      debugPrint("Error loading history: $e");
       if (mounted) {
         setState(() {
           _timesheets = [];
-          _isLoadingHistory = false;
+          _isLoadingHistory = false; // [QUAN TRỌNG] Tắt loading khi lỗi API
         });
       }
-      debugPrint("Error loading history: $e");
     }
   }
 

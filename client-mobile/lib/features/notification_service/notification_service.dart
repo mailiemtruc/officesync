@@ -34,8 +34,9 @@ class NotificationService {
   final _requestDataSource = RequestRemoteDataSource();
 
   final String _backendUrl =
-      "http://10.0.2.2:8000/api/notifications/register-device";
-  final String _notiBaseUrl = "http://10.0.2.2:8000/api/notifications";
+      "https://productional-wendell-nonexotic.ngrok-free.dev/api/notifications/register-device";
+  final String _notiBaseUrl =
+      "https://productional-wendell-nonexotic.ngrok-free.dev/api/notifications";
 
   Future<void> initNotifications(int userId) async {
     NotificationSettings settings = await _firebaseMessaging.requestPermission(
@@ -326,9 +327,34 @@ class NotificationService {
   Future<void> deleteNotification(int id) async {
     try {
       final url = Uri.parse("$_notiBaseUrl/$id");
-      await http.delete(url);
+
+      // 👇 BƯỚC 1: Lấy Token từ Storage
+      String? jwt = await _storage.read(key: 'auth_token');
+
+      if (jwt == null) {
+        print("❌ Không có token, không thể xóa!");
+        return;
+      }
+
+      // 👇 BƯỚC 2: Gửi request kèm Header Authorization
+      final response = await http.delete(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $jwt', // <--- QUAN TRỌNG NHẤT
+        },
+      );
+
+      // 👇 BƯỚC 3: Kiểm tra xem Server trả về gì (để debug)
+      if (response.statusCode == 200) {
+        print("✅ Đã xóa thành công trên Server ID: $id");
+      } else {
+        print(
+          "❌ Lỗi xóa trên Server: ${response.statusCode} - ${response.body}",
+        );
+      }
     } catch (e) {
-      print("⚠️ Lỗi xóa: $e");
+      print("⚠️ Lỗi Exception khi xóa: $e");
     }
   }
 }

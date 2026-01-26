@@ -80,7 +80,8 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
     final topic = '/topic/user/$userId/requests';
 
     // URL chuẩn của HR Service
-    final String hrSocketUrl = 'ws://10.0.2.2:8000/ws-hr';
+    final String hrSocketUrl =
+        'wss://productional-wendell-nonexotic.ngrok-free.dev/ws-hr';
 
     // 2. Thêm từ khóa 'await' vào trước WebSocketService().subscribe
     // Để đợi lấy hàm hủy đăng ký thực sự (Function) thay vì Future

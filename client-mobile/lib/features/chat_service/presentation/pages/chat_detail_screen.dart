@@ -13,6 +13,7 @@ import 'dart:io'; // [MỚI]
 import 'package:image_picker/image_picker.dart'; // [MỚI]
 import '../../presentation/pages/storage_service.dart'; // [MỚI] Nhớ tạo file này trước nhé
 import 'chat_info_screen.dart';
+import '../../widgets/skeleton_chat_loader.dart';
 
 class ChatDetailScreen extends StatefulWidget {
   final int roomId;
@@ -345,7 +346,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
         children: [
           Expanded(
             child: isLoadingHistory
-                ? const Center(child: CircularProgressIndicator())
+                ? const SkeletonChatLoader()
                 : messages.isEmpty
                 ? _buildEmptyState()
                 : ListView.builder(

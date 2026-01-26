@@ -1,4 +1,4 @@
-// D:\officesync\client-mobile\lib\features\task_service\presentation\pages\company_admin_page.dart
+// lib/features/task_service/presentation/pages/company_admin_page.dart
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -10,6 +10,8 @@ import '../../widgets/create_task_dialog.dart';
 import '../../widgets/task_detail_dialog.dart';
 import '../../data/task_session.dart';
 import '../../data/models/task_department.dart';
+// [MỚI] Import Skeleton
+import '../../widgets/task_card_skeleton.dart';
 
 class CompanyAdminPage extends StatefulWidget {
   const CompanyAdminPage({super.key});
@@ -30,10 +32,9 @@ class _CompanyAdminPageState extends State<CompanyAdminPage>
       GlobalKey();
 
   int? filterDeptId;
-  DateTime? filterListDate; // Dùng để lọc Tháng/Năm
+  DateTime? filterListDate;
   TaskStatus? filterStatus;
 
-  // Màu sắc chuẩn đồng bộ Manager Page
   final Color primaryColor = const Color(0xFF2260FF);
   final Color backgroundColor = const Color(0xFFF9F9F9);
   final Color tabBgColor = const Color(0x72E6E5E5);
@@ -55,6 +56,7 @@ class _CompanyAdminPageState extends State<CompanyAdminPage>
     super.dispose();
   }
 
+  // ... (Giữ nguyên các hàm _initializeSessionAndData, fetchTasks, _getFilteredTasks, build, _buildHeader, _buildTabs, _buildTabItem, _buildFilterBar, _buildStatisticsTab...) ...
   Future<void> _initializeSessionAndData() async {
     setState(() => loading = true);
     try {
@@ -122,7 +124,6 @@ class _CompanyAdminPageState extends State<CompanyAdminPage>
                   child: _buildTabs(),
                 ),
                 const SizedBox(height: 16),
-                // Chỉ hiện Filter Bar cũ ở tab List Task
                 if (_tabController.index == 0) _buildFilterBar(),
                 const SizedBox(height: 12),
                 Expanded(
@@ -279,6 +280,7 @@ class _CompanyAdminPageState extends State<CompanyAdminPage>
     );
   }
 
+  // --- [CẬP NHẬT] Thay CircularProgressIndicator bằng Skeleton ---
   Widget _buildListTaskTab() {
     final filteredList = _getFilteredTasks();
     return Column(
@@ -301,7 +303,7 @@ class _CompanyAdminPageState extends State<CompanyAdminPage>
         ),
         Expanded(
           child: loading
-              ? Center(child: CircularProgressIndicator(color: primaryColor))
+              ? _buildLoadingState() // <--- Sử dụng Skeleton
               : ListView.builder(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 24,
@@ -315,7 +317,6 @@ class _CompanyAdminPageState extends State<CompanyAdminPage>
     );
   }
 
-  // --- TAB STATISTICS CHỈ LỌC THÁNG NĂM ---
   Widget _buildStatisticsTab() {
     final statsTasks = tasks.where((t) {
       if (filterListDate == null) return true;
@@ -328,6 +329,9 @@ class _CompanyAdminPageState extends State<CompanyAdminPage>
     int ip = statsTasks.where((t) => t.status == TaskStatus.IN_PROGRESS).length;
     int done = statsTasks.where((t) => t.status == TaskStatus.DONE).length;
     double getP(int count) => total == 0 ? 0 : (count / total) * 100;
+
+    if (loading)
+      return _buildLoadingState(); // Thêm skeleton cho cả tab thống kê nếu cần
 
     return SingleChildScrollView(
       child: Column(
@@ -380,7 +384,17 @@ class _CompanyAdminPageState extends State<CompanyAdminPage>
     );
   }
 
-  // --- TASK CARD THEO MANAGER STYLE ---
+  // --- [MỚI] Hàm tạo List Skeleton ---
+  Widget _buildLoadingState() {
+    return ListView.separated(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+      itemCount: 6,
+      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      itemBuilder: (_, __) => const TaskCardSkeleton(),
+    );
+  }
+
+  // ... (Giữ nguyên các hàm card, nút bấm, biểu đồ...) ...
   Widget _buildTaskCard(TaskModel task) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -492,7 +506,6 @@ class _CompanyAdminPageState extends State<CompanyAdminPage>
     );
   }
 
-  // --- Dropdowns & Buttons ---
   Widget _buildCircularBtn(IconData icon, VoidCallback onTap) {
     return FlashBorderWrapper(
       borderRadius: BorderRadius.circular(50),
@@ -628,7 +641,6 @@ class _CompanyAdminPageState extends State<CompanyAdminPage>
       style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold),
     ),
   );
-
   Widget _buildActiveChip(String label, VoidCallback onClear) => Container(
     margin: const EdgeInsets.only(right: 6),
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -672,7 +684,6 @@ class _CompanyAdminPageState extends State<CompanyAdminPage>
     if (d != null) setState(() => filterListDate = d);
   }
 
-  // --- GIỮ NGUYÊN CODE VẼ SƠ ĐỒ GỐC ---
   Widget _buildCustomPercentChart(int todoP, int ipP, int doneP) {
     const double chartHeight = 180;
     const double axisBottom = 40.0;
@@ -779,7 +790,6 @@ class _CompanyAdminPageState extends State<CompanyAdminPage>
       textAlign: TextAlign.center,
     ),
   );
-
   Widget _bar(int p, Color c) => Container(
     width: 40,
     height: p == 0 ? 1 : (p / 100) * 180,
@@ -843,20 +853,18 @@ class _FlashBorderWrapperState extends State<FlashBorderWrapper> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: _triggerFlash,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        decoration: BoxDecoration(
-          borderRadius: widget.borderRadius,
-          border: Border.all(
-            color: _showBorder ? widget.borderColor : Colors.transparent,
-            width: 2,
-          ),
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: _triggerFlash,
+    child: AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      decoration: BoxDecoration(
+        borderRadius: widget.borderRadius,
+        border: Border.all(
+          color: _showBorder ? widget.borderColor : Colors.transparent,
+          width: 2,
         ),
-        child: widget.child,
       ),
-    );
-  }
+      child: widget.child,
+    ),
+  );
 }

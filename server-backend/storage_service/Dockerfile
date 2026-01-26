@@ -14,5 +14,8 @@ COPY --from=builder /app/target/*.jar app.jar
 # [QUAN TRỌNG] Tạo thư mục chứa ảnh bên trong container
 RUN mkdir -p /app/img
 
+RUN apk add --no-cache tzdata
+ENV TZ=Asia/Ho_Chi_Minh
+
 EXPOSE 8090
 ENTRYPOINT ["java", "-jar", "app.jar"]

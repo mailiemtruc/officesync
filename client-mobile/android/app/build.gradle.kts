@@ -3,7 +3,6 @@ plugins {
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
-    // ✅ THÊM DÒNG NÀY:
     id("com.google.gms.google-services")
 }
 
@@ -15,7 +14,6 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-        // THÊM DÒNG NÀY VÀO:
         isCoreLibraryDesugaringEnabled = true
     }
 
@@ -36,8 +34,15 @@ android {
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
+            // --- [SỬA QUAN TRỌNG] CẤU HÌNH PROGUARD ---
+            // Bật tối ưu code
+            isMinifyEnabled = true 
+            // Bật tối ưu resource
+            isShrinkResources = true 
+            // Load file quy tắc vừa tạo để KHÔNG xóa nhầm Video Player
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            
+            // Ký bằng key debug (như cũ của bạn)
             signingConfig = signingConfigs.getByName("debug")
         }
     }
@@ -46,7 +51,7 @@ android {
 flutter {
     source = "../.."
 }
-// --- DÁN ĐOẠN NÀY VÀO CUỐI CÙNG ---
+
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }

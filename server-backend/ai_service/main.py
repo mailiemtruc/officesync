@@ -51,7 +51,12 @@ class ChatRequest(BaseModel):
 async def chat_endpoint(req: ChatRequest):
     try:
         # 1. Context cơ bản
-        today = datetime.date.today()
+        now = datetime.datetime.now()
+        days_of_week = ["Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy", "Chủ Nhật"]
+        weekday = days_of_week[now.weekday()]
+        current_date_str = now.strftime('%Y-%m-%d')
+        current_time_str = now.strftime('%H:%M:%S')
+
         service_instructions = manager.get_combined_prompts()
         user_lang = lang_service.USER_PREFERENCES.get(req.userId)
         
@@ -96,9 +101,17 @@ async def chat_endpoint(req: ChatRequest):
 
         # 2. System Prompt
         full_system_instruction = f"""
-        Thời gian hiện tại: {today.strftime('%Y-%m-%d')}.
-        Bạn là trợ lý ảo OfficeSync. UserID hiện tại: {req.userId}.
-        
+        BỐI CẢNH HỆ THỐNG:
+        - Thời gian hiện tại: {current_time_str}, {weekday}, ngày {current_date_str}.
+        - Vai trò: Trợ lý ảo OfficeSync cho UserID: {req.userId}.
+
+        --- QUY TẮC TÍNH TOÁN THỜI GIAN (BẮT BUỘC) ---
+        Dựa vào ngày hiện tại ({current_date_str}), bạn PHẢI tự tính toán tham số truyền vào tool:
+        1. Nếu user nói "hôm qua": Tự tính ngày = { (now - datetime.timedelta(days=1)).day }.
+        2. Nếu user nói "tháng trước": Tự tính tháng = { (now.replace(day=1) - datetime.timedelta(days=1)).month }.
+        3. Nếu user hỏi chung chung ("Tôi chấm công chưa?", "Lịch sử"): Mặc định dùng ngày/tháng/năm hiện tại.
+        4. Tuyệt đối KHÔNG hỏi lại "Bạn muốn xem ngày nào?" nếu bối cảnh đã có thể tự suy luận.
+
         --- ĐIỀU KHIỂN NGÔN NGỮ ---
         {lang_instruction}
         

@@ -24,5 +24,8 @@ WORKDIR /app
 # Lưu ý đường dẫn copy file jar đã thay đổi
 COPY --from=builder /app/communication_service/target/*.jar app.jar
 
+RUN apk add --no-cache tzdata
+ENV TZ=Asia/Ho_Chi_Minh
+
 EXPOSE 8088
 ENTRYPOINT ["java", "-jar", "app.jar"]

@@ -1,4 +1,4 @@
-// D:\officesync\client-mobile\lib\features\task_service\presentation\pages\manager_page.dart
+// lib/features/task_service/presentation/pages/manager_page.dart
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -11,6 +11,8 @@ import '../../widgets/create_task_dialog.dart';
 import '../../widgets/task_detail_dialog.dart';
 import '../../data/task_session.dart';
 import '../../data/network/task_stomp_service.dart';
+// [MỚI] Import Skeleton
+import '../../widgets/task_card_skeleton.dart';
 
 class ManagerPage extends StatefulWidget {
   const ManagerPage({super.key});
@@ -20,6 +22,7 @@ class ManagerPage extends StatefulWidget {
 
 class _ManagerPageState extends State<ManagerPage>
     with SingleTickerProviderStateMixin {
+  // ... (Giữ nguyên các biến khai báo: _tabController, api, tasks, loading...)
   late TabController _tabController;
   final ApiClient api = ApiClient();
 
@@ -29,13 +32,11 @@ class _ManagerPageState extends State<ManagerPage>
   bool loading = true;
   bool showAllAssigned = false;
 
-  // Bộ lọc logic
   int? filterDeptId;
   int? filterStaffId;
   TaskStatus? filterStatus;
   DateTime? filterDate;
 
-  // Keys để mở Menu thủ công cho hiệu ứng Flash Border
   final GlobalKey<PopupMenuButtonState<int?>> _deptMenuKey = GlobalKey();
   final GlobalKey<PopupMenuButtonState<int?>> _staffMenuKey = GlobalKey();
   final GlobalKey<PopupMenuButtonState<TaskStatus?>> _statusMenuKey =
@@ -43,7 +44,6 @@ class _ManagerPageState extends State<ManagerPage>
 
   late TaskStompService _taskStompService;
 
-  // Màu sắc chuẩn
   final Color primaryColor = const Color(0xFF2260FF);
   final Color backgroundColor = const Color(0xFFF9F9F9);
   final Color tabBgColor = const Color(0x72E6E5E5);
@@ -64,6 +64,7 @@ class _ManagerPageState extends State<ManagerPage>
     _setupRealtime();
   }
 
+  // ... (Giữ nguyên _setupRealtime, dispose, _initializeSessionAndData, fetchTasks, _getFilteredTasks, build, _buildHeader, _buildTabs, _buildTabItem, _buildFilterBar) ...
   void _setupRealtime() {
     _taskStompService = TaskStompService(
       onTaskReceived: (data) {
@@ -80,7 +81,6 @@ class _ManagerPageState extends State<ManagerPage>
     super.dispose();
   }
 
-  // --- LOGIC DATA ---
   Future<void> _initializeSessionAndData() async {
     setState(() => loading = true);
     try {
@@ -148,10 +148,9 @@ class _ManagerPageState extends State<ManagerPage>
       bool matchDept = filterDeptId == null || t.departmentId == filterDeptId;
       bool matchStaff = filterStaffId == null || t.assigneeId == filterStaffId;
       bool matchStatus = filterStatus == null || t.status == filterStatus;
-
       bool matchDate = true;
       if (_tabController.index == 1 && !showAllAssigned) {
-        matchDate = true; // Không lọc ngày ở màn hình thống kê thu gọn
+        matchDate = true;
       } else {
         matchDate =
             filterDate == null ||
@@ -180,7 +179,7 @@ class _ManagerPageState extends State<ManagerPage>
                   child: _buildTabs(),
                 ),
                 const SizedBox(height: 16),
-                _buildFilterBar(), // Thanh nút lọc tròn
+                _buildFilterBar(),
                 const SizedBox(height: 12),
                 Expanded(
                   child: _tabController.index == 0
@@ -201,6 +200,9 @@ class _ManagerPageState extends State<ManagerPage>
       ),
     );
   }
+
+  // ... (Giữ nguyên các hàm _buildHeader, _buildTabs, _buildTabItem, _buildFilterBar, _buildAssignedTab, và các hàm chart/stats) ...
+  // Tôi ẩn bớt code lặp để tập trung vào phần thay đổi
 
   Widget _buildHeader() {
     return Padding(
@@ -296,7 +298,6 @@ class _ManagerPageState extends State<ManagerPage>
     );
   }
 
-  // --- THANH NÚT LỌC TRÒN ---
   Widget _buildFilterBar() {
     bool isAssignedTab = _tabController.index == 1;
     return Padding(
@@ -355,6 +356,7 @@ class _ManagerPageState extends State<ManagerPage>
     );
   }
 
+  // --- [CẬP NHẬT] Thay CircularProgressIndicator bằng Skeleton ---
   Widget _buildMyJobTab() {
     final filtered = _getFilteredTasks();
     return Column(
@@ -376,7 +378,7 @@ class _ManagerPageState extends State<ManagerPage>
         ),
         Expanded(
           child: loading
-              ? const Center(child: CircularProgressIndicator())
+              ? _buildLoadingState() // <--- Sử dụng Skeleton
               : ListView.builder(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 24,
@@ -408,13 +410,17 @@ class _ManagerPageState extends State<ManagerPage>
         .where((t) => t.status == TaskStatus.IN_PROGRESS)
         .length;
     int done = reportTasks.where((t) => t.status == TaskStatus.DONE).length;
-
     double getP(int v) => total == 0 ? 0 : (v / total) * 100;
 
     final allFiltered = _getFilteredTasks();
     final displayTasks = showAllAssigned
         ? allFiltered
         : allFiltered.take(5).toList();
+
+    // Tab này khá phức tạp (có chart, thống kê), nếu đang loading toàn bộ thì nên ẩn hoặc hiện skeleton riêng.
+    // Tuy nhiên với cấu trúc hiện tại, loading chỉ xảy ra lúc init.
+    // Để đơn giản, nếu đang loading, ta có thể return LoadingState luôn cho cả tab.
+    if (loading) return _buildLoadingState();
 
     return SingleChildScrollView(
       child: Column(
@@ -488,7 +494,19 @@ class _ManagerPageState extends State<ManagerPage>
     );
   }
 
-  // --- CÁC NÚT LỌC CIRCULAR ---
+  // --- [MỚI] Hàm tạo List Skeleton ---
+  Widget _buildLoadingState() {
+    return ListView.separated(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+      itemCount: 6,
+      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      itemBuilder: (_, __) => const TaskCardSkeleton(),
+    );
+  }
+
+  // ... (Giữ nguyên phần còn lại: _buildCircularBtn, _buildDeptMenu, _buildStaffMenu, _buildStatusMenu, _buildStatsBox, _statRow, _buildCustomPercentChart, _bar, _label, _buildTaskCard, _buildSmallTag, _buildActiveChip, _selectFilterDate, _openTaskDetail, _openCreateTask, FlashBorderWrapper) ...
+  // (Đã ẩn bớt để ngắn gọn)
+
   Widget _buildCircularBtn(IconData icon, VoidCallback onTap) {
     return FlashBorderWrapper(
       borderRadius: BorderRadius.circular(50),
@@ -514,14 +532,13 @@ class _ManagerPageState extends State<ManagerPage>
   }
 
   Widget _buildDeptMenu() => Theme(
-    data: Theme.of(context).copyWith(
-      // Chỉnh popupMenuTheme để đảm bảo nền trắng ở mọi phiên bản Flutter
-      popupMenuTheme: const PopupMenuThemeData(color: Colors.white),
-    ),
+    data: Theme.of(
+      context,
+    ).copyWith(popupMenuTheme: const PopupMenuThemeData(color: Colors.white)),
     child: PopupMenuButton<int?>(
       key: _deptMenuKey,
-      color: Colors.white, // Đặt màu nền dropdown trắng tinh
-      elevation: 4, // Thêm độ đổ bóng để tách biệt với nền trang
+      color: Colors.white,
+      elevation: 4,
       onSelected: (id) => setState(() => filterDeptId = id),
       itemBuilder: (context) => [
         const PopupMenuItem(
@@ -548,7 +565,7 @@ class _ManagerPageState extends State<ManagerPage>
     ).copyWith(popupMenuTheme: const PopupMenuThemeData(color: Colors.white)),
     child: PopupMenuButton<int?>(
       key: _staffMenuKey,
-      color: Colors.white, // Đặt màu nền dropdown trắng tinh
+      color: Colors.white,
       elevation: 4,
       onSelected: (id) => setState(() => filterStaffId = id),
       itemBuilder: (context) => [
@@ -579,7 +596,7 @@ class _ManagerPageState extends State<ManagerPage>
     ).copyWith(popupMenuTheme: const PopupMenuThemeData(color: Colors.white)),
     child: PopupMenuButton<TaskStatus?>(
       key: _statusMenuKey,
-      color: Colors.white, // Đặt màu nền dropdown trắng tinh
+      color: Colors.white,
       elevation: 4,
       onSelected: (s) => setState(() => filterStatus = s),
       itemBuilder: (context) => [
@@ -603,7 +620,7 @@ class _ManagerPageState extends State<ManagerPage>
       ),
     ),
   );
-  // --- CHART & STATS ---
+
   Widget _buildStatsBox(int total, int todo, int ip, int done) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 24),
@@ -648,16 +665,14 @@ class _ManagerPageState extends State<ManagerPage>
   );
 
   Widget _buildCustomPercentChart(int todoP, int ipP, int doneP) {
-    const double chartHeight = 180; // Chiều cao tối đa của cột
-    const double axisBottom = 40.0; // Khoảng cách từ đáy stack đến trục Ox
-
+    const double chartHeight = 180;
+    const double axisBottom = 40.0;
     return Container(
       height: 250,
       margin: const EdgeInsets.symmetric(horizontal: 20),
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          // Nhãn đơn vị % ở đỉnh trục Oy
           Positioned(
             left: 15,
             top: -25,
@@ -666,21 +681,17 @@ class _ManagerPageState extends State<ManagerPage>
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
             ),
           ),
-          // Mũi tên trục Oy
           Positioned(
             left: 24,
             top: -12,
             child: Icon(Icons.arrow_drop_up, size: 24, color: Colors.black),
           ),
-          // Đường kẻ trục Oy
           Positioned(
             left: 35,
             top: 0,
             bottom: axisBottom,
             child: Container(width: 2, color: Colors.black),
           ),
-
-          // Vẽ các vạch chia tỉ lệ và con số (0, 20, 40, 60, 80, 100)
           ...[100, 80, 60, 40, 20, 0]
               .map(
                 (val) => Positioned(
@@ -703,21 +714,17 @@ class _ManagerPageState extends State<ManagerPage>
                 ),
               )
               .toList(),
-
-          // Đường kẻ trục Ox
           Positioned(
             left: 35,
             right: 18,
             bottom: axisBottom,
             child: Container(height: 2, color: Colors.black),
           ),
-          // Mũi tên trục Ox
           Positioned(
             right: 5,
             bottom: axisBottom - 11,
             child: Icon(Icons.arrow_right, size: 24, color: Colors.black),
           ),
-          // Nhãn "Status" ở cuối trục Ox
           Positioned(
             right: 0,
             bottom: axisBottom - 30,
@@ -726,8 +733,6 @@ class _ManagerPageState extends State<ManagerPage>
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
             ),
           ),
-
-          // Hiển thị các cột (Bars)
           Positioned(
             left: 55,
             right: 45,
@@ -743,7 +748,6 @@ class _ManagerPageState extends State<ManagerPage>
               ],
             ),
           ),
-          // Hiển thị nhãn dưới chân cột
           Positioned(
             left: 55,
             right: 45,
@@ -759,7 +763,7 @@ class _ManagerPageState extends State<ManagerPage>
   }
 
   Widget _bar(int p, Color c) => Container(
-    width: 40, // Tăng chiều rộng cột giống Admin
+    width: 40,
     height: p == 0 ? 1 : (p / 100) * 180,
     decoration: BoxDecoration(
       color: c,
@@ -768,7 +772,7 @@ class _ManagerPageState extends State<ManagerPage>
     alignment: Alignment.center,
     child: p > 5
         ? Text(
-            "$p", // Bỏ dấu % bên trong cột để giống Admin
+            "$p",
             style: const TextStyle(
               color: Colors.white,
               fontSize: 10,
@@ -777,7 +781,6 @@ class _ManagerPageState extends State<ManagerPage>
           )
         : null,
   );
-
   Widget _label(String t) => SizedBox(
     width: 60,
     child: Text(
@@ -786,7 +789,7 @@ class _ManagerPageState extends State<ManagerPage>
       textAlign: TextAlign.center,
     ),
   );
-  // --- CARD & DIALOGS ---
+
   Widget _buildTaskCard(TaskModel task) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -897,7 +900,6 @@ class _ManagerPageState extends State<ManagerPage>
       style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold),
     ),
   );
-
   Widget _buildActiveChip(String label, VoidCallback onClear) => Container(
     margin: const EdgeInsets.only(right: 6),
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -966,7 +968,6 @@ class _ManagerPageState extends State<ManagerPage>
   }
 }
 
-// --- WIDGET HỖ TRỢ HIỆU ỨNG FLASH BORDER ---
 class FlashBorderWrapper extends StatefulWidget {
   final Widget child;
   final BorderRadius borderRadius;

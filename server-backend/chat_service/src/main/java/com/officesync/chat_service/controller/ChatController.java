@@ -60,10 +60,7 @@ public class ChatController {
             response.setSender(sender.getFullName()); // Tên người gửi
             
             // [QUAN TRỌNG] Format ngày tháng chuẩn ISO-8601 cho Flutter
-            SimpleDateFormat isoFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
-            //isoFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
-            response.setTimestamp(isoFormat.format(savedMsg.getTimestamp()));
-
+      response.setTimestamp(savedMsg.getTimestamp().toInstant().toString());
             response.setType(savedMsg.getType());
             response.setRoomId(savedMsg.getRoomId());
 

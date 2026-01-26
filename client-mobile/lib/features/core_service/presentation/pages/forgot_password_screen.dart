@@ -41,10 +41,30 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   void initState() {
     super.initState();
 
+    // Logic cũ của bạn: nhận từ Constructor (giữ nguyên)
     if (widget.email != null && widget.email!.isNotEmpty) {
       _emailController.text = widget.email!;
     }
 
+    // [THÊM MỚI] Logic nhận từ Navigator arguments (từ LoginScreen gửi sang)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final args = ModalRoute.of(context)?.settings.arguments;
+
+      // Nếu gửi dạng String (như code sửa ở LoginScreen)
+      if (args is String && args.isNotEmpty) {
+        setState(() {
+          _emailController.text = args;
+        });
+      }
+      // Nếu gửi dạng Map (đề phòng trường hợp bạn mở rộng sau này)
+      else if (args is Map && args['email'] != null) {
+        setState(() {
+          _emailController.text = args['email'];
+        });
+      }
+    });
+
+    // Các hiệu ứng animation của bạn (giữ nguyên)
     Future.delayed(const Duration(milliseconds: 100), () {
       if (mounted) setState(() => _isTitleVisible = true);
     });

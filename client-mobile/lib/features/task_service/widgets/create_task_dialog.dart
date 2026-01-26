@@ -2,6 +2,11 @@
 
 import 'package:flutter/material.dart';
 import '../../../../core/api/api_client.dart';
+import '../../../../core/config/app_colors.dart';
+import '../../../../core/utils/custom_snackbar.dart';
+import '../../../../core/widgets/custom_button.dart';
+import '../../../../core/widgets/custom_text_field.dart';
+
 import '../data/models/task_user.dart';
 import '../data/models/task_department.dart';
 import '../data/models/task_model.dart';
@@ -24,22 +29,29 @@ class CreateTaskDialog extends StatefulWidget {
 
 class _CreateTaskDialogState extends State<CreateTaskDialog> {
   final ApiClient api = ApiClient();
+
+  // Controllers
   final _titleCtl = TextEditingController();
   final _descCtl = TextEditingController();
+
+  // State Data
   DateTime? dueDate;
   TaskPriority? _selectedPriority;
+  int? selectedDeptId;
+  int? selectedAssigneeId;
 
+  // Lists
   List<TaskDepartment> departments = [];
   List<TaskUser> allUsers = [];
   List<TaskUser> filteredUsers = [];
 
-  int? selectedDeptId;
-  int? selectedAssigneeId;
+  // UI State
   bool loading = false;
+  String? _errorMessage;
 
-  final Color colorBlue = const Color(0xFF2260FF);
-  final Color colorNeon = const Color(0xFF55F306);
+  // Colors
   final Color colorRed = const Color(0xFFEF4444);
+  final Color colorBlue = const Color(0xFF2260FF);
 
   @override
   void initState() {
@@ -55,8 +67,6 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
     _loadMeta();
   }
 
-  // (Giữ nguyên logic _loadMeta, _onDepartmentChanged và _submit từ code cũ của bạn)
-  // ... [Logic nạp dữ liệu giữ nguyên] ...
   Future<void> _loadMeta() async {
     try {
       final depsResp = await api.get('${ApiClient.taskUrl}/tasks/departments');
@@ -101,7 +111,7 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
         });
       }
     } catch (e) {
-      debugPrint('Lỗi tải metadata: $e');
+      debugPrint('Error loading metadata: $e');
     }
   }
 
@@ -109,79 +119,103 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
     setState(() {
       selectedDeptId = deptId;
       selectedAssigneeId = null;
-
-      // Debug để kiểm tra trong Console xem ID soccer có phải là 4 không
-      debugPrint("Đang lọc cho phòng ban ID: $deptId");
-
       filteredUsers = allUsers.where((u) {
-        // Chuyển cả 2 về String để so sánh chính xác tuyệt đối
         final bool isInDept = u.departmentId?.toString() == deptId?.toString();
         final bool isNotMe = u.id.toString() != widget.currentUserId.toString();
-
         if (widget.role == 'COMPANY_ADMIN') {
-          // Admin: Tìm người có Role MANAGER
           return isInDept && isNotMe && u.role?.toUpperCase() == 'MANAGER';
         } else if (widget.role == 'MANAGER') {
-          // Manager: Tìm người có Role STAFF
           return isInDept && isNotMe && u.role?.toUpperCase() == 'STAFF';
         }
         return isInDept && isNotMe;
       }).toList();
-
-      debugPrint("Tìm thấy ${filteredUsers.length} nhân sự phù hợp.");
     });
   }
 
+  // --- [SỬA] LOGIC VALIDATION & SUBMIT (TIẾNG ANH) ---
   Future<void> _submit() async {
-    if (_selectedPriority == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Vui lòng chọn Độ ưu tiên')));
+    // Reset error
+    setState(() => _errorMessage = null);
+
+    // Validation messages in English
+    if (_titleCtl.text.trim().isEmpty) {
+      setState(() => _errorMessage = "Please enter the task title");
       return;
     }
+    if (_descCtl.text.trim().isEmpty) {
+      setState(() => _errorMessage = "Please enter the description");
+      return;
+    }
+    if (_selectedPriority == null) {
+      setState(() => _errorMessage = "Please select a priority level");
+      return;
+    }
+    if (dueDate == null) {
+      setState(() => _errorMessage = "Please select a due date");
+      return;
+    }
+    if (selectedDeptId == null) {
+      setState(() => _errorMessage = "Please select a department");
+      return;
+    }
+    if (selectedAssigneeId == null) {
+      setState(() => _errorMessage = "Please select an assignee");
+      return;
+    }
+
+    // Call API
     setState(() => loading = true);
     try {
       final payload = {
-        'title': _titleCtl.text,
-        'description': _descCtl.text,
+        'title': _titleCtl.text.trim(),
+        'description': _descCtl.text.trim(),
         'departmentId': selectedDeptId,
         'assigneeId': selectedAssigneeId,
         'dueDate': dueDate?.toIso8601String(),
         'priority': _selectedPriority.toString().split('.').last,
         'status': widget.task?.status.toString().split('.').last ?? 'TODO',
       };
-      if (widget.task == null)
+
+      if (widget.task == null) {
         await api.post('${ApiClient.taskUrl}/tasks', data: payload);
-      else
+        if (mounted) {
+          CustomSnackBar.show(
+            context,
+            title: 'Success',
+            message: 'Task created successfully.',
+            isError: false,
+          );
+        }
+      } else {
         await api.put(
           '${ApiClient.taskUrl}/tasks/${widget.task!.id}',
           data: payload,
         );
-      Navigator.of(context).pop(true);
+        if (mounted) {
+          CustomSnackBar.show(
+            context,
+            title: 'Updated',
+            message: 'Task information saved successfully.',
+            isError: false,
+          );
+        }
+      }
+      if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      setState(() => _errorMessage = e.toString());
     } finally {
-      setState(() => loading = false);
+      if (mounted) setState(() => loading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // Sử dụng Padding với viewInsets.bottom để modal tự đẩy lên khi hiện bàn phím
     return Padding(
       padding: EdgeInsets.only(
         bottom: MediaQuery.of(context).viewInsets.bottom,
       ),
       child: Container(
-        // Bỏ thuộc tính height cố định để modal tự co giãn theo nội dung
-        padding: const EdgeInsets.fromLTRB(
-          20,
-          12,
-          20,
-          25,
-        ), // Padding dưới 25 để thoáng nút bấm
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 25),
         decoration: const BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.only(
@@ -190,10 +224,9 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
           ),
         ),
         child: Column(
-          mainAxisSize: MainAxisSize
-              .min, // QUAN TRỌNG: Modal sẽ thu gọn lại theo nội dung
+          mainAxisSize: MainAxisSize.min,
           children: [
-            // Thanh gạch ngang trang trí trên đầu modal
+            // Decorative Handle
             Container(
               width: 40,
               height: 4,
@@ -204,23 +237,26 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
               ),
             ),
 
-            // Nội dung cuộn (Title, Desc, Settings)
             Flexible(
-              // Dùng Flexible thay vì Expanded để không chiếm hết diện tích thừa
               child: SingleChildScrollView(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildBoxedInput("Title", _titleCtl, isTitle: true),
+                    _buildLabel("Title *"),
+                    CustomTextField(
+                      controller: _titleCtl,
+                      hintText: "Enter task title",
+                    ),
                     const SizedBox(height: 15),
-                    _buildBoxedInput(
-                      "Description",
-                      _descCtl,
-                      minHeight: 120,
+
+                    _buildLabel("Description *"),
+                    CustomTextField(
+                      controller: _descCtl,
+                      hintText: "Enter description",
                       maxLines: 5,
                     ),
-                    const SizedBox(height: 20),
 
+                    const SizedBox(height: 20),
                     const Text(
                       "Task Settings:",
                       style: TextStyle(
@@ -230,36 +266,65 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
                     ),
                     const Divider(),
 
-                    _buildDropdownRow("Priority", _buildDropdownPriority()),
-                    _buildDropdownRow("Due Date", _buildDatePicker()),
-                    _buildDropdownRow("Department", _buildDeptDropdown()),
-                    _buildDropdownRow("Assignee", _buildAssigneeDropdown()),
+                    _buildDropdownRow("Priority *", _buildDropdownPriority()),
+                    _buildDropdownRow("Due Date *", _buildDatePicker()),
+                    _buildDropdownRow("Department *", _buildDeptDropdown()),
+                    _buildDropdownRow("Assignee *", _buildAssigneeDropdown()),
                   ],
                 ),
               ),
             ),
 
-            // KHOẢNG CÁCH 15PX ĐÚNG NHƯ YÊU CẦU
             const SizedBox(height: 15),
 
-            // HÀNG NÚT BẤM (Nằm sát nội dung phía trên 15px)
+            // --- ERROR MESSAGE BOX ON MODAL ---
+            if (_errorMessage != null)
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(bottom: 15),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF2F2),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: colorRed.withOpacity(0.3)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.error_outline, color: colorRed, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _errorMessage!,
+                        style: TextStyle(
+                          color: colorRed,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+            // Action Buttons
             Row(
               children: [
                 Expanded(
-                  child: _actionBtn(
-                    widget.task == null ? "Create" : "Save",
-                    Icons.check,
-                    colorBlue,
-                    _submit,
+                  child: CustomButton(
+                    text: widget.task == null ? "Create" : "Save",
+                    onPressed: loading ? () {} : _submit,
+                    backgroundColor: AppColors.primary,
                   ),
                 ),
                 const SizedBox(width: 15),
                 Expanded(
-                  child: _actionBtn(
-                    "Cancel",
-                    Icons.close,
-                    colorRed,
-                    () => Navigator.pop(context),
+                  child: CustomButton(
+                    text: "Cancel",
+                    onPressed: () => Navigator.pop(context),
+                    backgroundColor: colorRed,
                   ),
                 ),
               ],
@@ -270,45 +335,17 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
     );
   }
 
-  // --- WIDGETS HỖ TRỢ ---
-
-  Widget _buildBoxedInput(
-    String label,
-    TextEditingController ctl, {
-    bool isTitle = false,
-    double minHeight = 0,
-    int maxLines = 1,
-  }) {
-    return Container(
-      width: double.infinity,
-      constraints: BoxConstraints(minHeight: minHeight),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.black87),
-        borderRadius: BorderRadius.circular(15),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              color: isTitle ? Colors.grey : Colors.grey,
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          TextField(
-            controller: ctl,
-            maxLines: maxLines,
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-            decoration: const InputDecoration(
-              isDense: true,
-              border: InputBorder.none,
-              contentPadding: EdgeInsets.only(top: 4),
-            ),
-          ),
-        ],
+  // --- Helper Widgets ---
+  Widget _buildLabel(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8, left: 4),
+      child: Text(
+        text,
+        style: const TextStyle(
+          color: Colors.black54,
+          fontSize: 13,
+          fontWeight: FontWeight.bold,
+        ),
       ),
     );
   }
@@ -317,11 +354,10 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
-        crossAxisAlignment:
-            CrossAxisAlignment.center, // canh giữa theo trục dọc
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           SizedBox(
-            width: 110, // <--- cùng 1 width cho tất cả labels để thẳng hàng
+            width: 110,
             child: Text(
               "$label:",
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
@@ -333,37 +369,13 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
     );
   }
 
-  Widget _actionBtn(
-    String label,
-    IconData icon,
-    Color color,
-    VoidCallback onTap,
-  ) {
-    return ElevatedButton.icon(
-      onPressed: loading ? null : onTap,
-      icon: Icon(icon, size: 18, color: Colors.white),
-      label: Text(
-        label,
-        style: const TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: color,
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-    );
-  }
-
-  // -------------------- Priority --------------------
   Widget _buildDropdownPriority() {
     return Container(
       width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
-        // không cần border nếu muốn giống Date (bạn đã bỏ border)
-        borderRadius: BorderRadius.circular(15),
+        color: AppColors.inputFill,
+        borderRadius: BorderRadius.circular(13),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<TaskPriority>(
@@ -379,13 +391,12 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
               )
               .toList(),
           onChanged: (v) => setState(() => _selectedPriority = v),
-          icon: const Icon(Icons.arrow_drop_down, size: 20),
+          icon: const Icon(Icons.arrow_drop_down, size: 24),
         ),
       ),
     );
   }
 
-  // -------------------- Date Picker (giữ như bạn đã chỉnh, chỉ chỉnh text size để đồng bộ) --------------------
   Widget _buildDatePicker() {
     return InkWell(
       onTap: () async {
@@ -407,7 +418,11 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
       },
       child: Container(
         width: double.infinity,
-        decoration: BoxDecoration(borderRadius: BorderRadius.circular(15)),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+        decoration: BoxDecoration(
+          color: AppColors.inputFill,
+          borderRadius: BorderRadius.circular(13),
+        ),
         child: Row(
           children: [
             Expanded(
@@ -425,11 +440,14 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
     );
   }
 
-  // -------------------- Department --------------------
   Widget _buildDeptDropdown() {
     return Container(
       width: double.infinity,
-      decoration: BoxDecoration(borderRadius: BorderRadius.circular(15)),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: AppColors.inputFill,
+        borderRadius: BorderRadius.circular(13),
+      ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<int>(
           value: selectedDeptId,
@@ -447,18 +465,18 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
               )
               .toList(),
           onChanged: (v) => _onDepartmentChanged(v),
-          icon: const Icon(Icons.arrow_drop_down, size: 20),
+          icon: const Icon(Icons.arrow_drop_down, size: 24),
         ),
       ),
     );
   }
 
-  // -------------------- Assignee --------------------
   Widget _buildAssigneeDropdown() {
     String hintText = widget.role == 'COMPANY_ADMIN'
         ? "Select Manager"
         : "Select Staff";
 
+    // [SỬA] Thông báo danh sách trống bằng Tiếng Anh
     if (selectedDeptId != null && filteredUsers.isEmpty) {
       return Container(
         padding: const EdgeInsets.symmetric(vertical: 12),
@@ -472,8 +490,8 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
             const SizedBox(width: 6),
             Text(
               widget.role == 'COMPANY_ADMIN'
-                  ? "Phòng này chưa có Quản lý"
-                  : "Phòng trống",
+                  ? "No Manager in this Dept"
+                  : "No Staff in this Dept",
               style: const TextStyle(
                 color: Colors.orange,
                 fontSize: 12,
@@ -487,7 +505,11 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
 
     return Container(
       width: double.infinity,
-      decoration: BoxDecoration(borderRadius: BorderRadius.circular(15)),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: AppColors.inputFill,
+        borderRadius: BorderRadius.circular(13),
+      ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<int>(
           value: selectedAssigneeId,
@@ -506,7 +528,7 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
             );
           }).toList(),
           onChanged: (v) => setState(() => selectedAssigneeId = v),
-          icon: const Icon(Icons.arrow_drop_down, size: 20),
+          icon: const Icon(Icons.arrow_drop_down, size: 24),
         ),
       ),
     );

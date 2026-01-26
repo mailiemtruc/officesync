@@ -76,7 +76,8 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
       _currentCompanyId = userMap['companyId']?.toString();
     }
 
-    final String hrSocketUrl = 'ws://10.0.2.2:8000/ws-hr';
+    final String hrSocketUrl =
+        'wss://productional-wendell-nonexotic.ngrok-free.dev/ws-hr';
 
     if (_currentCompanyId != null) {
       final topic = '/topic/company/$_currentCompanyId/requests';
@@ -807,10 +808,12 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
   Widget _buildHeader(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Stack(
-        alignment: Alignment.center,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Align(
+          // [ĐÃ SỬA] Dùng Container thay vì SizedBox
+          Container(
+            width: 40,
             alignment: Alignment.centerLeft,
             child: IconButton(
               padding: EdgeInsets.zero,
@@ -823,15 +826,23 @@ class _ManagerRequestListPageState extends State<ManagerRequestListPage> {
               onPressed: () => Navigator.pop(context),
             ),
           ),
-          const Text(
-            'REQUEST MANAGEMENT',
-            style: TextStyle(
-              color: Color(0xFF2260FF),
-              fontSize: 24,
-              fontFamily: 'Inter',
-              fontWeight: FontWeight.w700,
+
+          // Tiêu đề
+          const Expanded(
+            child: Text(
+              'REQUEST MANAGEMENT',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Color(0xFF2260FF),
+                fontSize: 24,
+                fontFamily: 'Inter',
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
+
+          // Widget rỗng để cân bằng layout
+          const SizedBox(width: 40),
         ],
       ),
     );
@@ -1151,6 +1162,7 @@ class _ManagerRequestCard extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
+                // Avatar
                 Container(
                   width: 46,
                   height: 46,
@@ -1187,66 +1199,65 @@ class _ManagerRequestCard extends StatelessWidget {
                         ),
                 ),
                 const SizedBox(width: 14),
+
+                // Nội dung chính
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
+                      // [SỬA LOGIC LAYOUT TẠI ĐÂY]
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          // Tên + Badge Manager (Gom nhóm và dùng Flexible)
                           Expanded(
-                            child: Text.rich(
-                              TextSpan(
-                                children: [
-                                  TextSpan(
-                                    text: data['employeeName'],
+                            child: Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    data['employeeName'],
                                     style: const TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.w600,
                                       fontFamily: 'Inter',
                                       color: Colors.black,
                                     ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                  if (isManager) ...[
-                                    const TextSpan(text: ' '),
-                                    WidgetSpan(
-                                      alignment: PlaceholderAlignment.middle,
-                                      child: Container(
-                                        margin: const EdgeInsets.only(left: 4),
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 2,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFFECF1FF),
-                                          borderRadius: BorderRadius.circular(
-                                            4,
-                                          ),
-                                        ),
-                                        child: const Text(
-                                          'Manager',
-                                          style: TextStyle(
-                                            color: Color(0xFF2260FF),
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
-                                            fontFamily: 'Inter',
-                                          ),
-                                        ),
+                                ),
+                                if (isManager) ...[
+                                  const SizedBox(width: 6),
+                                  // Badge Manager
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFECF1FF),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: const Text(
+                                      'Manager',
+                                      style: TextStyle(
+                                        color: Color(0xFF2260FF),
+                                        fontSize: 11, // Giảm font xíu cho gọn
+                                        fontWeight: FontWeight.w700,
+                                        fontFamily: 'Inter',
                                       ),
                                     ),
-                                  ],
+                                  ),
                                 ],
-                              ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
+                              ],
                             ),
                           ),
+
+                          // Badge Status (Luôn nằm bên phải)
+                          const SizedBox(width: 8),
                           Container(
-                            margin: const EdgeInsets.only(left: 8),
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
+                              horizontal: 10, // Giảm padding ngang xíu
                               vertical: 4,
                             ),
                             decoration: BoxDecoration(
@@ -1257,14 +1268,15 @@ class _ManagerRequestCard extends StatelessWidget {
                               request.status.name,
                               style: TextStyle(
                                 color: _getExactStatusColor(request.status),
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
+                                fontSize: 11, // Giảm font xíu
+                                fontWeight: FontWeight.w700, // Tăng độ đậm
                                 fontFamily: 'Inter',
                               ),
                             ),
                           ),
                         ],
                       ),
+
                       const SizedBox(height: 6),
                       Text(
                         'Employee ID: ${data['employeeId']} | ${data['dept']}',

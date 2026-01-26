@@ -159,34 +159,44 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
 
                         // Header đồng bộ
                         Row(
+                          crossAxisAlignment: CrossAxisAlignment
+                              .center, // Canh giữa theo chiều dọc
                           children: [
-                            IconButton(
-                              icon: Icon(
-                                PhosphorIcons.caretLeft(
-                                  PhosphorIconsStyle.bold,
-                                ),
-                                color: AppColors.primary,
-                                size: 24,
-                              ),
-                              onPressed: () => Navigator.of(context).pop(),
-                            ),
-                            const Expanded(
-                              child: Center(
-                                child: FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  child: Text(
-                                    'PASSWORD MANAGEMENT',
-                                    style: TextStyle(
-                                      color: AppColors.primary,
-                                      fontSize: 24,
-                                      fontFamily: 'Inter',
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                    maxLines: 1,
+                            // Nút Back
+                            SizedBox(
+                              // Dùng SizedBox hoặc Container để cố định chiều rộng
+                              width: 40,
+                              child: IconButton(
+                                padding: EdgeInsets.zero,
+                                alignment: Alignment.centerLeft,
+                                icon: Icon(
+                                  PhosphorIcons.caretLeft(
+                                    PhosphorIconsStyle.bold,
                                   ),
+                                  color: AppColors.primary,
+                                  size: 24,
+                                ),
+                                onPressed: () => Navigator.of(context).pop(),
+                              ),
+                            ),
+
+                            // Tiêu đề
+                            const Expanded(
+                              child: Text(
+                                'PASSWORD MANAGEMENT',
+                                textAlign: TextAlign
+                                    .center, // [QUAN TRỌNG] Canh giữa và tự xuống dòng
+                                style: TextStyle(
+                                  color: AppColors.primary,
+                                  fontSize:
+                                      24, // Sẽ hiển thị đúng kích thước này
+                                  fontFamily: 'Inter',
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
                             ),
+
+                            // Khoảng trống cân bằng bên phải
                             const SizedBox(width: 40),
                           ],
                         ),

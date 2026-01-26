@@ -24,8 +24,6 @@ class EmployeeProfilePage extends StatelessWidget {
     return Scaffold(
       backgroundColor: const Color(0xFFF9F9F9),
 
-      // [SỬA] 1. Bỏ hoàn toàn AppBar mặc định
-      // appBar: AppBar(...),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
@@ -35,32 +33,45 @@ class EmployeeProfilePage extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(24, 0, 24, 30),
               child: Column(
                 children: [
-                  // [SỬA] 3. Thêm Header thủ công giống UserProfilePage
+                  // [ĐÃ SỬA HEADER]
                   const SizedBox(height: 20),
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment:
+                        CrossAxisAlignment.center, // Căn giữa theo chiều dọc
                     children: [
-                      IconButton(
-                        icon: Icon(
-                          PhosphorIcons.caretLeft(PhosphorIconsStyle.bold),
-                          color: AppColors.primary,
-                          size: 24,
+                      // 1. Nút Back (Bọc trong Container 40px)
+                      Container(
+                        width: 40,
+                        alignment: Alignment.centerLeft,
+                        child: IconButton(
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          icon: Icon(
+                            PhosphorIcons.caretLeft(PhosphorIconsStyle.bold),
+                            color: AppColors.primary,
+                            size: 24,
+                          ),
+                          onPressed: () => Navigator.of(context).pop(),
                         ),
-                        onPressed: () => Navigator.of(context).pop(),
                       ),
+
+                      // 2. Tiêu đề (Expanded + TextAlign.center)
                       const Expanded(
-                        child: Center(
-                          child: Text(
-                            'EMPLOYEE PROFILE',
-                            style: TextStyle(
-                              color: AppColors.primary,
-                              fontSize: 24, // Đồng bộ size 22 với UserProfile
-                              fontFamily: 'Inter',
-                              fontWeight: FontWeight.w700,
-                            ),
+                        child: Text(
+                          'EMPLOYEE PROFILE',
+                          textAlign: TextAlign
+                              .center, // [QUAN TRỌNG] Canh giữa khi xuống dòng
+                          style: TextStyle(
+                            color: AppColors.primary,
+                            fontSize: 24,
+                            fontFamily: 'Inter',
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                       ),
-                      // SizedBox này để cân bằng khoảng cách với nút Back bên trái, giúp Title ra giữa chuẩn xác
+
+                      // 3. Khoảng trống để cân bằng (40px bằng nút Back)
                       const SizedBox(width: 40),
                     ],
                   ),

@@ -18,6 +18,7 @@ import 'features/notification_service/notification_service.dart';
 import 'features/hr_service/data/datasources/employee_remote_data_source.dart';
 import 'features/ai_service/presentation/pages/ai_chat_screen.dart';
 import '../../../../core/services/websocket_service.dart';
+import '../../../../core/services/security_service.dart';
 
 class DashboardScreen extends StatefulWidget {
   final Map<String, dynamic> userInfo;
@@ -45,7 +46,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final _storage = const FlutterSecureStorage();
   Timer? _refreshTimer;
   // Dùng IndexedStack để giữ trạng thái trang
-  late List<Widget> _pages = [];
   bool _canAccessHrAttendance = false;
   bool _isLoading = true;
 
@@ -82,6 +82,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _initDashboardData() async {
     Map<String, dynamic> info = widget.userInfo;
 
+    // 1. Nếu không có dữ liệu truyền vào, thử đọc từ Storage (Auto Login)
     if (info.isEmpty || info['role'] == null || info['id'] == null) {
       try {
         String? storedJson = await _storage.read(key: 'user_info');
@@ -96,6 +97,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _currentUserInfo = info;
     final String role = _currentUserInfo['role'] ?? 'STAFF';
 
+    // 2. Khởi tạo Notification Service
     try {
       int userId = int.tryParse(_currentUserInfo['id'].toString()) ?? 0;
       if (userId > 0) {
@@ -103,13 +105,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
     } catch (_) {}
 
-    // Dựng khung trang ngay lập tức
+    // 3. Dựng khung trang ngay lập tức để User không phải chờ
     if (mounted) {
       setState(() {
-        _updatePages(role);
         _isLoading = false;
       });
     }
+
+    // ============================================================
+    // 🔴 [MỚI - QUAN TRỌNG] KHỞI ĐỘNG SECURITY SERVICE
+    // Đoạn này giúp lắng nghe lệnh "Đá văng" ngay cả khi Auto Login
+    // ============================================================
+    try {
+      int userId = int.tryParse(_currentUserInfo['id'].toString()) ?? 0;
+      // Parse an toàn companyId (tránh lỗi null)
+      int? companyId = int.tryParse(
+        _currentUserInfo['companyId']?.toString() ?? "",
+      );
+
+      if (userId > 0) {
+        print(
+          "--> [Dashboard] Starting Security Service (Auto-Login Check) for User: $userId",
+        );
+        SecurityService().startListening(userId, companyId);
+      }
+    } catch (e) {
+      print("Error starting security service: $e");
+    }
+    // ============================================================
 
     await _checkPermission();
     _setupRealtimePermissionListener();
@@ -119,23 +142,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final String role = _currentUserInfo['role'] ?? 'STAFF';
     int userId = int.tryParse(_currentUserInfo['id'].toString()) ?? 0;
 
-    if (role == 'COMPANY_ADMIN') {
-      if (mounted) {
-        setState(() {
-          _canAccessHrAttendance = true;
-          _updatePages(role);
-        });
-      }
+    // Nếu là Admin/Director thì luôn có quyền
+    if (role == 'COMPANY_ADMIN' || role == 'SUPER_ADMIN') {
+      if (mounted) setState(() => _canAccessHrAttendance = true);
       return;
     }
 
-    if ((role == 'MANAGER' || role == 'STAFF') && userId > 0) {
+    // Kiểm tra quyền cho TẤT CẢ các role còn lại (bao gồm HR_MANAGER, MANAGER, STAFF)
+    if (userId > 0) {
       try {
         final canAccess = await _employeeDataSource.checkHrPermission(userId);
         if (mounted) {
           setState(() {
             _canAccessHrAttendance = canAccess;
-            _updatePages(role);
+            // Không cần gọi _updatePages nữa vì build sẽ tự lo
           });
         }
       } catch (e) {
@@ -148,7 +168,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _setupRealtimePermissionListener() async {
     final userId = _currentUserInfo['id'];
     if (userId == null) return;
-    final String hrSocketUrl = 'ws://10.0.2.2:8000/ws-hr';
+    final String hrSocketUrl =
+        'wss://productional-wendell-nonexotic.ngrok-free.dev/ws-hr';
 
     _unsubscribeFn = await WebSocketService().subscribe(
       '/topic/user/$userId/profile',
@@ -178,21 +199,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
         orElse: () => throw Exception("User not found"),
       );
 
-      // [FIX] Map đầy đủ trường dữ liệu để truyền xuống con
       final newInfo = {
         'id': myProfile.id,
         'email': myProfile.email,
         'fullName': myProfile.fullName,
         'role': myProfile.role,
         'phone': myProfile.phone,
-        'mobileNumber': myProfile.phone, // Giữ key cũ để tương thích
+        'mobileNumber': myProfile.phone,
         'dateOfBirth': myProfile.dateOfBirth,
         'avatarUrl': myProfile.avatarUrl,
         'token': _currentUserInfo['token'],
-        // [QUAN TRỌNG] Thêm 2 trường này để trang con hiển thị luôn
         'employeeCode': myProfile.employeeCode,
         'departmentName': myProfile.departmentName,
         'companyName': _currentUserInfo['companyName'] ?? "OfficeSync",
+        'companyId': _currentUserInfo['companyId'], // Giữ companyId
       };
 
       await _storage.write(key: 'user_info', value: jsonEncode(newInfo));
@@ -200,8 +220,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (mounted) {
         setState(() {
           _currentUserInfo = newInfo;
-          _updatePages(myProfile.role);
+          // ❌ KHÔNG gọi _updatePages(myProfile.role) ở đây nữa
         });
+
+        // Gọi check permission để cập nhật lại quyền
         _checkPermission();
       }
     } catch (e) {
@@ -209,11 +231,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  void _updatePages(String role) {
-    _pages = [
+  List<Widget> get _currentPages {
+    final role = _currentUserInfo['role'] ?? 'STAFF';
+    return [
       _buildHomeByRole(role),
-      _buildMenuPage(role),
-      // UserProfilePage sẽ nhận _currentUserInfo mới nhất khi hàm này được gọi
+
+      // Thêm Key vào đây để bắt buộc vẽ lại khi quyền thay đổi
+      KeyedSubtree(
+        key: ValueKey('Menu_$role\_$_canAccessHrAttendance'),
+        child: _buildMenuPage(role),
+      ),
+
       UserProfilePage(
         key: const PageStorageKey('UserProfilePage'),
         userInfo: _currentUserInfo,
@@ -227,7 +255,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       backgroundColor: const Color(0xFFF9F9F9),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : IndexedStack(index: _currentIndex, children: _pages),
+          : IndexedStack(index: _currentIndex, children: _currentPages),
 
       floatingActionButton: SmartAiFab(
         onPressed: () {
@@ -412,14 +440,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
       spacing: 16,
       runSpacing: 16,
       children: [
-        _buildMenuItem(
-          context,
-          title: 'My Requests',
-          icon: PhosphorIconsFill.fileText,
-          color: const Color(0xFF3B82F6),
-          route: '/my_requests',
-          width: itemWidth,
-        ),
+        if (role != 'COMPANY_ADMIN')
+          _buildMenuItem(
+            context,
+            title: 'My Requests',
+            icon: PhosphorIconsFill.fileText,
+            color: const Color(0xFF3B82F6),
+            route: '/my_requests',
+            width: itemWidth,
+          ),
         if (role == 'COMPANY_ADMIN' ||
             role == 'MANAGER' ||
             _canAccessHrAttendance)

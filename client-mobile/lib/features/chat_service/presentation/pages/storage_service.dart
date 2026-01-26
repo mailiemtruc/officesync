@@ -5,7 +5,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart'; // ✅ 1. I
 
 class StorageService {
   // Thay IP nếu cần (Máy ảo: 10.0.2.2, Máy thật: IP LAN)
-  static const String uploadUrl = 'http://10.0.2.2:8000/api/files/upload';
+  static const String uploadUrl =
+      'https://productional-wendell-nonexotic.ngrok-free.dev/api/files/upload';
 
   // ✅ 2. Khởi tạo Storage để lấy Token
   final _storage = const FlutterSecureStorage();

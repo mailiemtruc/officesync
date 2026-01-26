@@ -12,22 +12,34 @@ class TaskStompService {
   TaskStompService({required this.onTaskReceived});
 
   void connect() {
-    // Địa chỉ IP máy tính chạy backend của bạn
-    const String serverIp = '10.0.2.2';
+    // 1. Điền domain Ngrok của bạn (KHÔNG thêm https:// hay wss:// ở đây)
+    const String ngrokDomain = 'productional-wendell-nonexotic.ngrok-free.dev';
 
     client = StompClient(
       config: StompConfig(
-        // Cổng 8086 dành riêng cho Task Service
-        url: 'ws://$serverIp:8000/ws-task',
+        // 2. [QUAN TRỌNG] Dùng 'wss://' và KHÔNG cần thêm port :8000
+        url: 'wss://$ngrokDomain/ws-task',
+
         onConnect: (StompFrame frame) {
           _onConnectCallback(frame);
         },
         onWebSocketError: (e) => print("--> [WebSocket Task Error]: $e"),
         onStompError: (frame) => print("--> [Stomp Task Error]: ${frame.body}"),
         onDisconnect: (f) => print("--> [Task Stomp] Disconnected"),
+
         stompConnectHeaders: {'accept-version': '1.1,1.2'},
+
         heartbeatIncoming: const Duration(milliseconds: 5000),
         heartbeatOutgoing: const Duration(milliseconds: 5000),
+
+        // 3. [BẮT BUỘC THÊM] Header để Ngrok và Gateway cho phép kết nối
+        webSocketConnectHeaders: {
+          // Vượt qua màn hình cảnh báo của Ngrok
+          'ngrok-skip-browser-warning': 'true',
+
+          // Giả lập Origin để Gateway không chặn (tránh lỗi 403)
+          'Origin': 'https://$ngrokDomain',
+        },
       ),
     );
     client!.activate();

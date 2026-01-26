@@ -6,8 +6,10 @@ import '../models/request_model.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class RequestRemoteDataSource {
-  static const String baseUrl = 'http://10.0.2.2:8000/api/requests';
-  static const String storageUrl = 'http://10.0.2.2:8000/api/files/upload';
+  static const String baseUrl =
+      'https://productional-wendell-nonexotic.ngrok-free.dev/api/requests';
+  static const String storageUrl =
+      'https://productional-wendell-nonexotic.ngrok-free.dev/api/files/upload';
 
   // [MỚI] Khai báo Storage
   final _storage = const FlutterSecureStorage();

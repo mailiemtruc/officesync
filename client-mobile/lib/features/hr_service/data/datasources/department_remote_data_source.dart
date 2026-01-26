@@ -5,7 +5,8 @@ import '../models/department_model.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class DepartmentRemoteDataSource {
-  static const String baseUrl = 'http://10.0.2.2:8000/api/departments';
+  static const String baseUrl =
+      'https://productional-wendell-nonexotic.ngrok-free.dev/api/departments';
 
   // [MỚI] Khai báo Storage
   final _storage = const FlutterSecureStorage();

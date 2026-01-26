@@ -1,5 +1,4 @@
 # [FILE: services/attendance.py]
-
 import datetime
 import httpx
 import logging
@@ -7,45 +6,30 @@ from typing import Dict, Any, List, Optional
 
 logger = logging.getLogger(__name__)
 
-# --- 1. ĐỊNH NGHĨA SCHEMA (PHIÊN BẢN ĐÃ FIX LỖI HỎI LẠI) ---
+# --- 1. ĐỊNH NGHĨA SCHEMA (GIỮ NGUYÊN) ---
 TOOL_DEF = {
     "function_declarations": [
         {
             "name": "get_attendance_history",
-            "description": "Lấy lịch sử chấm công. Hỗ trợ xem 'tất cả', 'hôm nay', 'tháng này'.",
+            "description": "Lấy lịch sử chấm công. Hỗ trợ xem cụ thể ngày hoặc cả tháng.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "day": {
-                        "type": "integer", 
-                        "description": "Ngày (1-31). BỎ TRỐNG nếu muốn xem toàn bộ tháng."
-                    },
-                    "month": {
-                        "type": "integer", 
-                        "description": "Tháng (1-12). QUAN TRỌNG: Nếu user không nói tháng nào, MẶC ĐỊNH lấy tháng hiện tại."
-                    },
-                    "year": {
-                        "type": "integer", 
-                        "description": "Năm. Mặc định năm hiện tại."
-                    }
+                    "day": {"type": "integer", "description": "Ngày cụ thể (1-31)."},
+                    "month": {"type": "integer", "description": "Tháng (1-12)."},
+                    "year": {"type": "integer", "description": "Năm (YYYY)."}
                 },
-                "required": [] # Bot tự tin điền default nhờ description ở trên
+                "required": [] 
             }
         },
         {
             "name": "get_monthly_timesheet",
-            "description": "Xem bảng công tổng hợp (Tổng giờ, số phút trễ).",
+            "description": "Xem bảng công tổng hợp (Tổng giờ, số phút trễ) theo tháng.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "month": {
-                        "type": "integer", 
-                        "description": "Tháng (1-12). Mặc định tháng hiện tại."
-                    },
-                    "year": {
-                        "type": "integer", 
-                        "description": "Năm. Mặc định năm hiện tại."
-                    }
+                    "month": {"type": "integer", "description": "Tháng cần xem."},
+                    "year": {"type": "integer", "description": "Năm cần xem."}
                 },
                 "required": []
             }
@@ -53,19 +37,18 @@ TOOL_DEF = {
     ]
 }
 
-# --- 2. SYSTEM PROMPT (BỔ SUNG QUY TẮC 'XEM TẤT CẢ') ---
+# --- 2. SYSTEM PROMPT (TỐI ƯU HÓA CHO LOGIC THỜI GIAN THỰC) ---
 SYSTEM_PROMPT = """
---- HƯỚNG DẪN ATTENDANCE SERVICE ---
+--- HƯỚNG DẪN DỊCH VỤ CHẤM CÔNG ---
+1. **XỬ LÝ THỜI GIAN**: 
+   - Bạn PHẢI sử dụng 'Thời gian hệ thống' được cung cấp để tính toán ngày/tháng trước khi gọi tool.
+   - Nếu User hỏi về "Hôm nay", "Sáng nay", "Vừa nãy": Điền chính xác ngày, tháng, năm hiện tại vào tham số.
+   - Nếu User hỏi "Tháng trước": Tự thực hiện phép trừ tháng và điền vào tool.
 
-1. **QUY TẮC XỬ LÝ THỜI GIAN (BẮT BUỘC):**
-   - User nói: "Xem tất cả", "Xem lịch sử", "Full history" -> **GỌI NGAY** tool với `month` và `year` hiện tại. KHÔNG ĐƯỢC HỎI LẠI "Ngày nào?".
-   - User nói: "Tháng trước" -> Tự lùi 1 tháng.
-   - User nói: "Hôm qua" -> Tự tính ngày hôm qua.
-
-2. **Quy tắc hiển thị:**
-   - Nếu `late_minutes` > 0: Thêm icon 🟠.
-   - Nếu `status` == "MISSING_CHECKOUT": Cảnh báo 🔴.
-   - Trả lời ngắn gọn, đi thẳng vào dữ liệu.
+2. **QUY TẮC HIỂN THỊ**:
+   - Luôn sử dụng icon 🟠 cho trường hợp đi trễ (`late_minutes` > 0).
+   - Sử dụng cảnh báo 🔴 nếu trạng thái là `MISSING_CHECKOUT`.
+   - Trả lời bằng ngôn ngữ người dùng đã thiết lập (Vietnamese/English).
 """
 
 # --- 3. CÁC HÀM GỌI API (GIỮ NGUYÊN) ---
@@ -93,8 +76,7 @@ async def fetch_timesheet(user_id: int, month: int, year: int, settings: Any, cl
 
 # --- 4. FORMATTERS (GIỮ NGUYÊN) ---
 def format_history_response(data: List[Dict], day_filter: Optional[int] = None) -> Any:
-    if not data: return "Không tìm thấy dữ liệu (API trả về rỗng)."
-    
+    if not data: return "Không tìm thấy dữ liệu chấm công."
     result = []
     for item in data:
         raw = item.get("checkInTime")
@@ -102,58 +84,58 @@ def format_history_response(data: List[Dict], day_filter: Optional[int] = None) 
         try:
             dt = datetime.datetime.fromisoformat(raw)
             if day_filter and dt.day != day_filter: continue
-            
             result.append({
                 "date": dt.strftime('%d/%m/%Y'),
                 "time": dt.strftime('%H:%M:%S'),
-                "type": item.get("type"),     
                 "status": item.get("status"), 
                 "late_minutes": item.get("lateMinutes", 0),
                 "location": item.get("locationName")
             })
         except: continue
-        
-    if day_filter and not result: return "NO_RECORD_TODAY" 
-    return result if result else "Không có dữ liệu."
+    if day_filter and not result: return "Không có bản ghi nào cho ngày này." 
+    return result if result else "Không có dữ liệu trong khoảng thời gian này."
 
 def format_timesheet_response(data: List[Dict]) -> Any:
-    if not data: return "Chưa có bảng công."
+    if not data: return "Chưa có dữ liệu bảng công cho tháng này."
     summary = []
     for day in data:
         if day.get("totalWorkingHours", 0) == 0 and day.get("status") == "ABSENT": continue
-        
-        total_late = 0
-        sessions = day.get("sessions", [])
-        if sessions:
-            first_session = sessions[0] 
-            total_late = first_session.get("lateMinutes", 0)
-
         summary.append({
             "date": day.get("date"),
             "total_hours": day.get("totalWorkingHours"),
             "status": day.get("status"),
-            "sessions_count": len(sessions),
-            "late_minutes_total": total_late 
+            "late_minutes": day.get("sessions", [{}])[0].get("lateMinutes", 0) if day.get("sessions") else 0
         })
     return summary
 
-# --- 5. EXECUTE HANDLER ---
+# --- 5. EXECUTE HANDLER (CẢI TIẾN VIỆC ÉP KIỂU) ---
 async def execute(user_id: int, args: Dict[str, Any], client: httpx.AsyncClient, settings: Any, tool_name: str = None) -> Any:
     today = datetime.date.today()
     
-    # Logic fallback: Nếu Bot gửi None (do prompt bảo mặc định) -> code tự lấy today
-    month = int(args.get("month") or today.month)
-    year = int(args.get("year") or today.year)
-    day = args.get("day")
+    # Ép kiểu an toàn từ AI gửi về (AI thường gửi dạng số hoặc chuỗi số)
+    try:
+        month = int(args.get("month")) if args.get("month") else today.month
+        year = int(args.get("year")) if args.get("year") else today.year
+        day = int(args.get("day")) if args.get("day") else None
+        
+        # Sửa lỗi nếu AI tính toán tháng bị tràn (ví dụ tháng 0 hoặc 13)
+        if month < 1:
+            month = 12
+            year -= 1
+        elif month > 12:
+            month = 1
+            year += 1
+    except (ValueError, TypeError):
+        month, year, day = today.month, today.year, None
 
-    logger.info(f"🤖 Attendance Tool: {tool_name} | Params: day={day}, month={month}, year={year}")
+    logger.info(f"🚀 [Attendance Tool] {tool_name} | Target: {day}/{month}/{year}")
 
     if tool_name == "get_attendance_history":
         raw_data = await fetch_history(user_id, month, year, settings, client)
-        return format_history_response(raw_data, day_filter=int(day) if day else None)
+        return format_history_response(raw_data, day_filter=day)
 
     elif tool_name == "get_monthly_timesheet":
         raw_data = await fetch_timesheet(user_id, month, year, settings, client)
         return format_timesheet_response(raw_data)
 
-    return "Function not supported."
+    return "Yêu cầu không được hỗ trợ."

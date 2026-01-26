@@ -9,6 +9,7 @@ import '../../data/models/chat_socket_service.dart'; // [MỚI] Import Socket Se
 import 'chat_detail_screen.dart';
 import 'create_group_screen.dart';
 import 'contact_screen.dart';
+import '../../widgets/skeleton_loader.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({Key? key}) : super(key: key);
@@ -271,7 +272,7 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
           Expanded(
             child: isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? const SkeletonListLoader()
                 : _filteredRooms.isEmpty
                 ? _buildEmptyView()
                 : RefreshIndicator(
@@ -455,8 +456,22 @@ class _ChatScreenState extends State<ChatScreen> {
   String _formatDate(String timestamp) {
     if (timestamp.isEmpty) return "";
     try {
-      DateTime dt = DateTime.parse(timestamp).toLocal();
+      DateTime dt;
+
+      // Trường hợp 1: Backend gửi chuẩn có chữ 'Z' (Vừa sửa ở trên)
+      if (timestamp.endsWith('Z')) {
+        dt = DateTime.parse(timestamp).toLocal(); // Tự động cộng 7 tiếng
+      }
+      // Trường hợp 2: API cũ gửi thiếu 'Z'
+      else {
+        dt = DateTime.parse(
+          timestamp + "Z",
+        ).toLocal(); // Ép thêm Z rồi cộng 7 tiếng
+      }
+
       DateTime now = DateTime.now();
+
+      // Logic hiển thị: Nếu là hôm nay thì hiện Giờ, khác thì hiện Ngày
       if (dt.year == now.year && dt.month == now.month && dt.day == now.day) {
         return DateFormat('HH:mm').format(dt);
       }

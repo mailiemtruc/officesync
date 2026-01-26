@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:officesync/core/utils/custom_snackbar.dart';
 
 // Service & Model
 import 'package:officesync/features/notification_service/notification_service.dart';
@@ -16,6 +17,7 @@ import 'package:officesync/features/communication_service/presentation/pages/pos
 import 'package:officesync/features/hr_service/presentation/pages/request_detail_page.dart';
 import 'package:officesync/features/hr_service/presentation/pages/manager_request_review_page.dart';
 import 'package:officesync/dashboard_screen.dart';
+import 'package:shimmer/shimmer.dart';
 
 class NotificationListScreen extends StatefulWidget {
   final int userId;
@@ -212,7 +214,7 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
         ),
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const NotificationSkeleton()
           : _notifications.isEmpty
           ? _buildEmptyState()
           : RefreshIndicator(
@@ -264,15 +266,18 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
         ),
       ),
       onDismissed: (direction) {
+        // 1. Gọi API xóa & Cập nhật danh sách
         NotificationService().deleteNotification(noti.id);
         setState(() {
           _notifications.removeWhere((item) => item.id == noti.id);
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Đã xóa thông báo"),
-            duration: Duration(seconds: 1),
-          ),
+
+        // 2. Hiển thị thông báo đẹp bằng CustomSnackBar
+        CustomSnackBar.show(
+          context,
+          title: "Success",
+          message: "Notification deleted successfully!",
+          isError: false, // false = Màu xanh (Success), true = Màu đỏ (Error)
         );
       },
       child: Container(
@@ -465,5 +470,70 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
       default:
         return Colors.red;
     }
+  }
+}
+
+class NotificationSkeleton extends StatelessWidget {
+  const NotificationSkeleton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Shimmer.fromColors(
+      baseColor: Colors.grey.shade300,
+      highlightColor: Colors.grey.shade100,
+      child: ListView.builder(
+        itemCount: 8, // Giả lập 8 dòng đang load
+        padding: const EdgeInsets.only(top: 10),
+        itemBuilder: (_, __) => Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Row(
+            children: [
+              // 1. Hình tròn giả lập Icon/Avatar
+              Container(
+                width: 48,
+                height: 48,
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 16),
+              // 2. Các dòng chữ giả lập
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Dòng tiêu đề dài
+                    Container(
+                      width: double.infinity,
+                      height: 16,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    // Dòng nội dung ngắn hơn
+                    Container(
+                      width: 150,
+                      height: 14,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

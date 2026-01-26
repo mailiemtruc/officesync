@@ -10,9 +10,12 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class EmployeeRemoteDataSource {
   final ApiClient _apiClient = ApiClient();
-  static const String baseUrl = 'http://10.0.2.2:8000/api';
-  static const String _baseUrl = 'http://10.0.2.2:8000/api/employees';
-  static const String storageUrl = 'http://10.0.2.2:8000/api/files/upload';
+  static const String baseUrl =
+      'https://productional-wendell-nonexotic.ngrok-free.dev/api';
+  static const String _baseUrl =
+      'https://productional-wendell-nonexotic.ngrok-free.dev/api/employees';
+  static const String storageUrl =
+      'https://productional-wendell-nonexotic.ngrok-free.dev/api/files/upload';
 
   // [MỚI] Khai báo Storage
   final _storage = const FlutterSecureStorage();

@@ -200,15 +200,91 @@ class _DirectorCompanyProfileScreenState
       context: context,
       initialTime: TimeOfDay.now(),
       builder: (context, child) {
-        return MediaQuery(
-          data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
-          child: child!,
+        // Màu chủ đạo
+        const primaryColor = Color(0xFF2260FF);
+
+        return Theme(
+          data: Theme.of(context).copyWith(
+            // Ghi đè ColorScheme để các thành phần mặc định nhận màu xanh
+            colorScheme: const ColorScheme.light(
+              primary: primaryColor, // Màu kim đồng hồ, vòng tròn chọn
+              onPrimary: Colors.white, // Màu chữ trên nền xanh
+              onSurface: primaryColor, // Màu chữ tiêu đề và nút bấm (OK/Cancel)
+              surface: Colors.white, // Màu nền dialog
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(
+                foregroundColor: primaryColor, // Màu nút OK/Cancel
+                textStyle: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+            timePickerTheme: TimePickerThemeData(
+              backgroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24), // Bo góc mềm mại hơn
+              ),
+
+              // 1. Phần hiển thị giờ/phút (Header)
+              hourMinuteShape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.all(Radius.circular(12)),
+              ),
+              hourMinuteColor: MaterialStateColor.resolveWith((states) {
+                return states.contains(MaterialState.selected)
+                    ? primaryColor.withOpacity(0.1) // Nền nhạt khi được chọn
+                    : Colors.grey.shade50; // Nền khi không chọn
+              }),
+              hourMinuteTextColor: MaterialStateColor.resolveWith((states) {
+                return states.contains(MaterialState.selected)
+                    ? primaryColor // Chữ màu xanh khi chọn
+                    : Colors.black45; // Chữ màu xám khi không chọn
+              }),
+              hourMinuteTextStyle: const TextStyle(
+                fontSize: 50, // Số to hơn, rõ ràng hơn
+                fontWeight: FontWeight.bold,
+              ),
+
+              // 2. Mặt đồng hồ (Dial)
+              dialHandColor: primaryColor,
+              dialBackgroundColor: primaryColor.withOpacity(
+                0.05,
+              ), // Nền mặt đồng hồ xanh rất nhạt
+              dialTextColor: MaterialStateColor.resolveWith((states) {
+                return states.contains(MaterialState.selected)
+                    ? Colors
+                          .white // Số màu trắng khi kim chỉ vào
+                    : Colors.black87; // Số màu đen bình thường
+              }),
+
+              // 3. Input Mode (Khi bấm vào icon bàn phím)
+              entryModeIconColor: primaryColor, // Màu icon chuyển chế độ nhập
+              inputDecorationTheme: InputDecorationTheme(
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 0,
+                ),
+                filled: true,
+                fillColor: Colors.white,
+                enabledBorder: OutlineInputBorder(
+                  borderSide: BorderSide(color: Colors.grey.shade300),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderSide: const BorderSide(color: primaryColor, width: 2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ),
+          child: MediaQuery(
+            // Ép buộc sử dụng định dạng 24h
+            data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+            child: child!,
+          ),
         );
       },
     );
 
     if (picked != null) {
-      // Format giờ thành dạng HH:mm (ví dụ 08:30)
       final String formattedTime =
           '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
       controller.text = formattedTime;

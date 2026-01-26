@@ -416,30 +416,44 @@ class _EditDepartmentPageState extends State<EditDepartmentPage> {
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       const SizedBox(height: 20),
-                      // Header
+
                       Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          IconButton(
-                            icon: Icon(
-                              PhosphorIcons.caretLeft(PhosphorIconsStyle.bold),
-                              color: AppColors.primary,
-                              size: 24,
-                            ),
-                            onPressed: () => Navigator.pop(context),
-                          ),
-                          const Expanded(
-                            child: Center(
-                              child: Text(
-                                'UPDATE DEPARTMENT',
-                                style: TextStyle(
-                                  color: AppColors.primary,
-                                  fontSize: 24,
-                                  fontFamily: 'Inter',
-                                  fontWeight: FontWeight.w700,
+                          // 1. Nút Back
+                          Container(
+                            width: 40,
+                            alignment: Alignment.centerLeft,
+                            child: IconButton(
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              icon: Icon(
+                                PhosphorIcons.caretLeft(
+                                  PhosphorIconsStyle.bold,
                                 ),
+                                color: AppColors.primary,
+                                size: 24,
+                              ),
+                              onPressed: () => Navigator.pop(context),
+                            ),
+                          ),
+
+                          // 2. Tiêu đề
+                          const Expanded(
+                            child: Text(
+                              'UPDATE DEPARTMENT',
+                              textAlign:
+                                  TextAlign.center, // [QUAN TRỌNG] Canh giữa
+                              style: TextStyle(
+                                color: AppColors.primary,
+                                fontSize: 24,
+                                fontFamily: 'Inter',
+                                fontWeight: FontWeight.w700,
                               ),
                             ),
                           ),
+
                           const SizedBox(width: 40),
                         ],
                       ),

@@ -48,7 +48,8 @@ class _ManagerRequestReviewPageState extends State<ManagerRequestReviewPage> {
     final topic = '/topic/request/${widget.request.id}';
 
     // URL chuẩn của HR Service
-    final String hrSocketUrl = 'ws://10.0.2.2:8000/ws-hr';
+    final String hrSocketUrl =
+        'wss://productional-wendell-nonexotic.ngrok-free.dev/ws-hr';
 
     // [ĐÃ SỬA] Thêm tham số forceUrl
     _unsubscribeFn = await WebSocketService().subscribe(
@@ -67,7 +68,7 @@ class _ManagerRequestReviewPageState extends State<ManagerRequestReviewPage> {
               context,
               title: "Status Updated",
               message: "Request status changed to ${updatedReq.status.name}",
-              isError: updatedReq.status == RequestStatus.REJECTED,
+              isError: false,
             );
           }
         }
@@ -86,11 +87,27 @@ class _ManagerRequestReviewPageState extends State<ManagerRequestReviewPage> {
     super.dispose();
   }
 
-  // --- LOGIC XỬ LÝ URL & MỞ FILE (GIỐNG REQUEST DETAIL) ---
   String _fixUrl(String url) {
-    if (Platform.isAndroid && url.contains('localhost')) {
-      return url.replaceFirst('localhost', '10.0.2.2');
+    // Địa chỉ ngrok của bạn (không có dấu / ở cuối)
+    const String ngrokDomain =
+        "https://productional-wendell-nonexotic.ngrok-free.dev";
+
+    // Nếu server trả về localhost hoặc 10.0.2.2, thay thế bằng ngrok
+    if (url.contains('localhost:8000')) {
+      return url.replaceFirst('http://localhost:8000', ngrokDomain);
     }
+    if (url.contains('10.0.2.2:8000')) {
+      return url.replaceFirst('http://10.0.2.2:8000', ngrokDomain);
+    }
+
+    // Trường hợp server trả về relative path (ví dụ: /uploads/video.mp4)
+    if (!url.startsWith('http')) {
+      if (url.startsWith('/')) {
+        return "$ngrokDomain$url";
+      }
+      return "$ngrokDomain/$url";
+    }
+
     return url;
   }
 
@@ -148,14 +165,16 @@ class _ManagerRequestReviewPageState extends State<ManagerRequestReviewPage> {
   }
 
   Future<void> _launchExternalUrl(String url) async {
-    final uri = Uri.parse(url);
+    // [FIX QUAN TRỌNG] Encode URL để xử lý khoảng trắng (ví dụ: "file name.pdf")
+    final encodedUrl = Uri.encodeFull(url);
+    final uri = Uri.parse(encodedUrl);
+
     try {
       if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
         throw 'Could not launch $url';
       }
     } catch (e) {
       if (mounted) {
-        // [SỬA] Báo lỗi mở file
         CustomSnackBar.show(
           context,
           title: "File Error",
@@ -1242,7 +1261,6 @@ class _FullScreenImageViewer extends StatelessWidget {
   }
 }
 
-// --- Class xem Video Full (Copy từ RequestDetail) ---
 class _FullScreenVideoPlayer extends StatefulWidget {
   final String videoUrl;
   const _FullScreenVideoPlayer({required this.videoUrl});
@@ -1255,6 +1273,7 @@ class _FullScreenVideoPlayerState extends State<_FullScreenVideoPlayer> {
   late VideoPlayerController _videoPlayerController;
   ChewieController? _chewieController;
   bool _isError = false;
+  String _errorMessage = '';
 
   @override
   void initState() {
@@ -1264,9 +1283,12 @@ class _FullScreenVideoPlayerState extends State<_FullScreenVideoPlayer> {
 
   Future<void> _initializePlayer() async {
     try {
+      final encodedUrl = Uri.encodeFull(widget.videoUrl);
+
       _videoPlayerController = VideoPlayerController.networkUrl(
-        Uri.parse(widget.videoUrl),
+        Uri.parse(encodedUrl),
       );
+
       await _videoPlayerController.initialize();
 
       setState(() {
@@ -1276,10 +1298,11 @@ class _FullScreenVideoPlayerState extends State<_FullScreenVideoPlayer> {
           looping: false,
           aspectRatio: _videoPlayerController.value.aspectRatio,
           errorBuilder: (context, errorMessage) {
-            return const Center(
+            return Center(
               child: Text(
-                'Video loading error',
-                style: TextStyle(color: Colors.white),
+                'Playback Error: $errorMessage',
+                style: const TextStyle(color: Colors.white),
+                textAlign: TextAlign.center,
               ),
             );
           },
@@ -1287,8 +1310,11 @@ class _FullScreenVideoPlayerState extends State<_FullScreenVideoPlayer> {
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() => _isError = true);
-      debugPrint("Video Error: $e");
+      setState(() {
+        _isError = true;
+        _errorMessage = e.toString();
+      });
+      debugPrint("Video Error Details: $e");
     }
   }
 
@@ -1311,16 +1337,33 @@ class _FullScreenVideoPlayerState extends State<_FullScreenVideoPlayer> {
       body: SafeArea(
         child: Center(
           child: _isError
-              ? const Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.error_outline, color: Colors.red, size: 40),
-                    SizedBox(height: 10),
-                    Text(
-                      "This video cannot be played.",
-                      style: TextStyle(color: Colors.white),
-                    ),
-                  ],
+              ? Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.error_outline,
+                        color: Colors.red,
+                        size: 40,
+                      ),
+                      const SizedBox(height: 10),
+                      const Text(
+                        "Cannot play video.",
+                        style: TextStyle(color: Colors.white, fontSize: 16),
+                      ),
+                      const SizedBox(height: 8),
+                      // Hiển thị chi tiết lỗi để debug
+                      Text(
+                        _errorMessage,
+                        style: const TextStyle(
+                          color: Colors.grey,
+                          fontSize: 12,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
                 )
               : _chewieController != null &&
                     _chewieController!.videoPlayerController.value.isInitialized

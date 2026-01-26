@@ -254,29 +254,42 @@ class _DepartmentDetailsPageState extends State<DepartmentDetailsPage> {
                 // Header
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Row(
+                  child: // [ĐÃ SỬA] Header: Tiêu đề xuống dòng, canh giữa, KHÔNG lỗi
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      IconButton(
-                        icon: Icon(
-                          PhosphorIcons.caretLeft(PhosphorIconsStyle.bold),
-                          color: AppColors.primary,
-                          size: 24,
+                      // 1. Nút Back (Dùng Container thay vì SizedBox để dùng được alignment)
+                      Container(
+                        width: 40,
+                        alignment: Alignment.centerLeft,
+                        child: IconButton(
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          icon: Icon(
+                            PhosphorIcons.caretLeft(PhosphorIconsStyle.bold),
+                            color: AppColors.primary,
+                            size: 24,
+                          ),
+                          onPressed: () => Navigator.pop(context),
                         ),
-                        onPressed: () => Navigator.pop(context),
                       ),
+
+                      // 2. Tiêu đề (Expanded + TextAlign.center)
                       const Expanded(
-                        child: Center(
-                          child: Text(
-                            'DEPARTMENT DETAILS',
-                            style: TextStyle(
-                              color: AppColors.primary,
-                              fontSize: 24,
-                              fontFamily: 'Inter',
-                              fontWeight: FontWeight.w700,
-                            ),
+                        child: Text(
+                          'DEPARTMENT DETAILS',
+                          textAlign: TextAlign.center, // Canh giữa văn bản
+                          style: TextStyle(
+                            color: AppColors.primary,
+                            fontSize: 24,
+                            fontFamily: 'Inter',
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                       ),
+
+                      // 3. Khoảng trống cân bằng (40px)
                       const SizedBox(width: 40),
                     ],
                   ),

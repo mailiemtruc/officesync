@@ -14,6 +14,9 @@ WORKDIR /app
 # Copy file .jar từ giai đoạn builder sang giai đoạn này
 COPY --from=builder /app/target/*.jar app.jar
 
+RUN apk add --no-cache tzdata
+ENV TZ=Asia/Ho_Chi_Minh
+
 # Mở port 8761 (theo cấu hình server.port trong application.properties)
 EXPOSE 8761
 

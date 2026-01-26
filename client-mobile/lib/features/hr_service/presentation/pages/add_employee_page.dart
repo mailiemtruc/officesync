@@ -8,7 +8,7 @@ import '../../data/datasources/employee_remote_data_source.dart';
 import '../../domain/repositories/employee_repository_impl.dart';
 import '../../domain/repositories/employee_repository.dart';
 import '../../data/models/department_model.dart';
-import '../../data/models/employee_model.dart'; // [MỚI] Import để dùng model
+
 import '../../../../core/config/app_colors.dart';
 import '../../widgets/selection_bottom_sheet.dart';
 import '../../widgets/confirm_bottom_sheet.dart'; // [MỚI] Import ConfirmBottomSheet
@@ -212,7 +212,7 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
       return;
     }
 
-    // 2. Validate Email
+    // 2. Validate Regex Email
     final emailRegex = RegExp(
       r"^[a-zA-Z0-9.a-zA-Z0-9.!#$%&'*+-/=?^_`{|}~]+@[a-zA-Z0-9]+\.[a-zA-Z]+",
     );
@@ -267,62 +267,67 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
       return;
     }
 
-    // 5. Check Manager Assignment (ĐÃ SỬA LOGIC: Thay vì chặn -> Hỏi để thay thế)
-    if (_selectedRole?.toUpperCase() == 'MANAGER' &&
-        _selectedDepartment != null) {
-      if (_selectedDepartment!.manager != null) {
-        final currentManagerName =
-            _selectedDepartment!.manager?.fullName ?? "Unknown";
-        final oldManager = _selectedDepartment!.manager!;
+    // --- [LOGIC XỬ LÝ MANAGER] ---
 
-        // Hiện Dialog xác nhận thay thế
-        final bool? confirm = await showModalBottomSheet<bool>(
-          context: context,
-          backgroundColor: Colors.transparent,
-          isScrollControlled: true,
-          builder: (context) => ConfirmBottomSheet(
-            title: 'Replace Manager?',
-            message:
-                'Department "${_selectedDepartment!.name}" is currently managed by $currentManagerName.\n\nDo you want to demote $currentManagerName and assign the NEW employee as Manager?',
-            confirmText: 'Replace',
-            confirmColor: const Color(0xFFF97316),
-            onConfirm: () {
-              Navigator.pop(context, true);
-            },
-          ),
+    final bool isAssigningManager = _selectedRole?.toUpperCase() == 'MANAGER';
+
+    // Kiểm tra an toàn xem phòng ban đã có manager chưa
+    final bool hasCurrentManager =
+        _selectedDepartment!.manager != null &&
+        _selectedDepartment!.manager!.id != null;
+
+    // 5. Xử lý Manager cũ (Chỉ chạy nếu đang tạo Manager MỚI và phòng ban ĐÃ CÓ Manager cũ)
+    if (isAssigningManager && hasCurrentManager) {
+      final currentManagerName =
+          _selectedDepartment!.manager?.fullName ?? "Unknown";
+      final oldManager = _selectedDepartment!.manager!;
+
+      // Dialog xác nhận thay thế
+      final bool? confirm = await showModalBottomSheet<bool>(
+        context: context,
+        backgroundColor: Colors.transparent,
+        isScrollControlled: true,
+        builder: (context) => ConfirmBottomSheet(
+          title: 'Replace Manager?',
+          message:
+              'Department "${_selectedDepartment!.name}" is currently managed by $currentManagerName.\n\nDo you want to demote $currentManagerName and assign the NEW employee as Manager?',
+          confirmText: 'Replace',
+          confirmColor: const Color(0xFFF97316),
+          onConfirm: () {
+            Navigator.pop(context, true);
+          },
+        ),
+      );
+
+      if (confirm != true) return; // Người dùng hủy bỏ
+
+      // [GIÁNG CHỨC QUẢN LÝ CŨ]
+      setState(() => _isLoading = true);
+      try {
+        print("--> Demoting old manager: ${oldManager.fullName}");
+        await _employeeRepository.updateEmployee(
+          _currentUserId!,
+          oldManager.id!,
+          oldManager.fullName,
+          oldManager.phone,
+          oldManager.dateOfBirth,
+          email: oldManager.email,
+          avatarUrl: oldManager.avatarUrl,
+          status: oldManager.status,
+          role: 'STAFF', // Giáng xuống Staff
+          departmentId: _selectedDepartment!.id,
         );
-
-        if (confirm != true) return; // Nếu không đồng ý thì dừng lại
-
-        // [LOGIC GIÁNG CHỨC]
-        // Thực hiện giáng chức ông quản lý cũ TRƯỚC khi tạo người mới
-        setState(() => _isLoading = true);
-        try {
-          if (oldManager.id != null) {
-            print("--> Demoting old manager: ${oldManager.fullName}");
-            await _employeeRepository.updateEmployee(
-              _currentUserId!,
-              oldManager.id!,
-              oldManager.fullName,
-              oldManager.phone,
-              oldManager.dateOfBirth,
-              email: oldManager.email,
-              avatarUrl: oldManager.avatarUrl,
-              status: oldManager.status,
-              role: 'STAFF', // Giáng xuống Staff
-              departmentId: _selectedDepartment!.id,
-            );
-          }
-        } catch (e) {
-          setState(() => _isLoading = false);
-          _showErrorSnackBar("Failed to demote old manager: $e");
-          return;
-        }
+      } catch (e) {
+        setState(() => _isLoading = false);
+        _showErrorSnackBar("Failed to demote old manager: $e");
+        return;
       }
     }
 
     setState(() => _isLoading = true);
+    String? createdEmployeeId;
 
+    // --- BƯỚC 6: TẠO EMPLOYEE MỚI ---
     try {
       String formattedDob = "";
       if (dob.isNotEmpty) {
@@ -334,8 +339,8 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
         }
       }
 
-      // [CREATE NEW EMPLOYEE]
-      final String? newEmployeeId = await _employeeRepository.createEmployee(
+      // Gọi API tạo nhân viên
+      createdEmployeeId = await _employeeRepository.createEmployee(
         fullName: fullName,
         email: email,
         phone: phone,
@@ -346,80 +351,73 @@ class _AddEmployeePageState extends State<AddEmployeePage> {
         password: password,
       );
 
-      // Nếu có ID trả về => Tạo thành công
-      if (newEmployeeId != null) {
-        // [TỰ ĐỘNG GÁN MANAGER]
-        // Cập nhật lại Department để trỏ Manager về nhân viên mới tạo
-        if (_selectedRole?.toUpperCase() == 'MANAGER' &&
-            _selectedDepartment != null) {
-          print(
-            "--> Auto-assigning Manager ($newEmployeeId) to Dept ${_selectedDepartment!.name}",
-          );
-
-          await _departmentRepository.updateDepartment(
-            _currentUserId!,
-            _selectedDepartment!.id!,
-            _selectedDepartment!.name,
-            newEmployeeId, // Gán ID nhân viên mới làm Manager
-            _selectedDepartment!.isHr,
-          );
-        }
-
-        if (mounted) {
-          CustomSnackBar.show(
-            context,
-            title: 'Success',
-            message: 'Employee created successfully!',
-            isError: false,
-          );
-          Navigator.pop(context, true);
-        }
-      } else {
+      if (createdEmployeeId == null) {
         throw Exception("Employee created but failed to retrieve ID.");
       }
     } catch (e) {
+      // Nếu lỗi ngay bước tạo User thì dừng và báo lỗi đỏ
       if (mounted) {
-        // 1. Loại bỏ prefix "Exception: " mặc định của Dart
+        setState(() => _isLoading = false);
         String errorMessage = e.toString().replaceAll("Exception: ", "");
-
-        // 2. Tìm xem trong lỗi có chứa chuỗi JSON không (bắt đầu bằng { và kết thúc bằng })
-        final int jsonStartIndex = errorMessage.indexOf('{');
-        final int jsonEndIndex = errorMessage.lastIndexOf('}');
-
-        if (jsonStartIndex != -1 &&
-            jsonEndIndex != -1 &&
-            jsonEndIndex > jsonStartIndex) {
+        // Logic parse lỗi JSON
+        if (errorMessage.contains("{")) {
           try {
-            // 3. Cắt chuỗi JSON ra: {"message":"Email ... exists!"}
-            final String jsonString = errorMessage.substring(
-              jsonStartIndex,
-              jsonEndIndex + 1,
-            );
-
-            // 4. Parse JSON
-            final Map<String, dynamic> errorMap = jsonDecode(jsonString);
-
-            // 5. Nếu có key 'message', lấy nó làm thông báo lỗi chính
-            if (errorMap.containsKey('message') &&
-                errorMap['message'] != null) {
-              errorMessage = errorMap['message'];
-            }
-          } catch (_) {
-            // Nếu cắt chuỗi hoặc parse JSON lỗi, giữ nguyên message gốc (đã xóa Exception:)
-          }
+            final start = errorMessage.indexOf('{');
+            final end = errorMessage.lastIndexOf('}');
+            final jsonStr = errorMessage.substring(start, end + 1);
+            final map = jsonDecode(jsonStr);
+            if (map['message'] != null) errorMessage = map['message'];
+          } catch (_) {}
         }
-
-        if (errorMessage.contains("Failed to create employee:")) {
-          errorMessage = errorMessage
-              .replaceAll("Failed to create employee:", "")
-              .trim();
-        }
-
-        // Hiển thị message đã được làm sạch
         _showErrorSnackBar(errorMessage);
       }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
+
+    // --- BƯỚC 7: CẬP NHẬT PHÒNG BAN (NẾU LÀ MANAGER) ---
+    // Tách riêng try/catch để nếu lỗi bước này thì user vẫn được tính là đã tạo
+    if (isAssigningManager && createdEmployeeId != null) {
+      try {
+        print(
+          "--> Auto-assigning New Manager ($createdEmployeeId) to Dept ${_selectedDepartment!.name}",
+        );
+
+        await _departmentRepository.updateDepartment(
+          _currentUserId!,
+          _selectedDepartment!.id!,
+          _selectedDepartment!.name, // Giữ nguyên tên
+          createdEmployeeId, // Gán ID nhân viên mới làm Manager
+          _selectedDepartment!.isHr, // Giữ nguyên trạng thái HR
+        );
+      } catch (e) {
+        // [FIX LỖI HR]: Nếu update thất bại (do quyền hạn với phòng HR),
+        // chỉ thông báo Warning chứ không báo lỗi Failed.
+        print("Warning: Failed to auto-assign manager: $e");
+        if (mounted) {
+          CustomSnackBar.show(
+            context,
+            title: 'Warning',
+            message:
+                'User created but could not be set as Manager automatically. Please update Department manually.',
+            isError: true, // Vẫn hiện màu đỏ/cam cảnh báo
+          );
+          // Vẫn thoát màn hình vì User đã được tạo
+          Navigator.pop(context, true);
+          return;
+        }
+      }
+    }
+
+    // --- HOÀN TẤT ---
+    if (mounted) {
+      setState(() => _isLoading = false);
+      CustomSnackBar.show(
+        context,
+        title: 'Success',
+        message: 'Employee created successfully!',
+        isError: false,
+      );
+      Navigator.pop(context, true);
     }
   }
 

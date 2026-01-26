@@ -139,6 +139,7 @@ public class EmployeeService {
         }
     }
 
+
     // =================================================================
     // 1. CREATE EMPLOYEE
     // =================================================================
@@ -156,7 +157,6 @@ public class EmployeeService {
             // Logic: Manager tạo nhân viên -> Tự động thêm vào phòng của Manager
             if (creator.getDepartment() != null) {
                 Long managerDeptId = creator.getDepartment().getId();
-                // Clear cache phòng của Manager trước khi thêm
                 evictDepartmentCache(managerDeptId);
                 departmentId = managerDeptId; 
             } else {
@@ -174,61 +174,105 @@ public class EmployeeService {
 
         // 3. Setup Data
         newEmployee.setCompanyId(creator.getCompanyId());
+        // Nếu role chưa có, mặc định STAFF. Nếu có rồi (truyền từ FE là MANAGER) thì giữ nguyên.
         if (newEmployee.getRole() == null) newEmployee.setRole(EmployeeRole.STAFF);
+        
         if (newEmployee.getStatus() == null) newEmployee.setStatus(EmployeeStatus.ACTIVE);
         if (newEmployee.getId() == null) newEmployee.setId(idGenerator.nextId());
 
+        Department targetDept = null;
         if (departmentId != null) {
-            Department dept = departmentRepository.findById(departmentId)
+            targetDept = departmentRepository.findById(departmentId)
                     .orElseThrow(() -> new RuntimeException("Phòng ban không tồn tại"));
-            newEmployee.setDepartment(dept);
+            newEmployee.setDepartment(targetDept);
         }
 
-        // 4. Save
+        // 4. Save Employee
         Employee savedEmployee = saveEmployeeWithRetry(newEmployee);
         
-        // [FIX - QUAN TRỌNG] Xóa cache thủ công ngay sau khi lưu
+        // =================================================================================
+        // [FIX - START] LOGIC TỰ ĐỘNG SET MANAGER VÀ GIÁNG CHỨC CŨ
+        // =================================================================================
+        if (savedEmployee != null && savedEmployee.getRole() == EmployeeRole.MANAGER && targetDept != null) {
+            
+            // A. Kiểm tra nếu phòng ban đã có Manager cũ
+            Employee oldManager = targetDept.getManager();
+            if (oldManager != null && !oldManager.getId().equals(savedEmployee.getId())) {
+                log.info("--> [Manager Swap] Giáng chức Manager cũ ID: {} để thay thế bằng ID: {}", oldManager.getId(), savedEmployee.getId());
+                
+                // 1. Giáng chức cũ
+                oldManager.setRole(EmployeeRole.STAFF);
+                employeeRepository.save(oldManager);
+                
+                // 2. Clear cache user cũ
+                try {
+                    var detailCache = cacheManager.getCache("employee_detail");
+                    if (detailCache != null) detailCache.evict(oldManager.getId());
+                    // Xóa cache SaaS nếu có
+                    Cache managerCache = cacheManager.getCache("request_list_manager");
+                    if (managerCache != null) managerCache.evict("mgr_" + oldManager.getId());
+                } catch (Exception e) {}
+
+                // 3. Gửi thông báo cho người cũ
+                sendNotification(oldManager, "Manager Role Ended", 
+                    "You are no longer the Manager of " + targetDept.getName() + ". Current role: Staff.");
+                
+                // 4. Refresh socket profile người cũ
+                try {
+                    String dest = "/topic/user/" + oldManager.getId() + "/profile";
+                    messagingTemplate.convertAndSend(dest, "REFRESH_PROFILE");
+                } catch (Exception e) {}
+            }
+
+            // B. Cập nhật phòng ban trỏ về Manager mới (Đây là bước bạn đang thiếu)
+            targetDept.setManager(savedEmployee);
+            departmentRepository.save(targetDept); // Lưu lại Department
+            
+            log.info("--> [Department] Đã cập nhật Manager cho phòng {} là {}", targetDept.getName(), savedEmployee.getFullName());
+        }
+        // =================================================================================
+        // [FIX - END]
+        // =================================================================================
+
+        
+        // 5. Xử lý Cache & Event sau khi lưu
         if (savedEmployee != null) {
             evictCompanyCache(savedEmployee.getCompanyId());
             if (savedEmployee.getDepartment() != null) {
                 evictDepartmentCache(savedEmployee.getDepartment().getId());
+                // Xóa thêm cache metadata để cập nhật manager name ở danh sách phòng ban
+                var metaCache = cacheManager.getCache("departments_metadata");
+                if (metaCache != null) metaCache.evict(savedEmployee.getCompanyId());
             }
-            // [Chat] ---------------------------------------------------
-        // Kiểm tra: Nếu nhân viên mới được gán phòng ban luôn -> Bắn tin sang Chat
-        if (savedEmployee.getDepartment() != null) {
-            try {
-                DepartmentSyncEvent addEvent = new DepartmentSyncEvent();
-                addEvent.setEvent(DepartmentSyncEvent.ACTION_ADD_MEMBER); // "MEMBER_ADDED"
-                addEvent.setDeptId(savedEmployee.getDepartment().getId());
-                addEvent.setCompanyId(savedEmployee.getCompanyId());
-                addEvent.setMemberIds(List.of(savedEmployee.getId())); // Gửi ID nhân viên
-                
-                // Bắn sang RabbitMQ
-                employeeProducer.sendDepartmentEvent(addEvent);
-                
-                log.info("✅ [Create] Đã bắn event thêm nhân viên {} vào phòng {}", 
-                        savedEmployee.getFullName(), savedEmployee.getDepartment().getName());
-            } catch (Exception e) {
-                log.error("⚠️ Lỗi gửi event sang Chat: {}", e.getMessage());
+
+            // [Chat Sync]
+            if (savedEmployee.getDepartment() != null) {
+                try {
+                    DepartmentSyncEvent addEvent = new DepartmentSyncEvent();
+                    addEvent.setEvent(DepartmentSyncEvent.ACTION_ADD_MEMBER); 
+                    addEvent.setDeptId(savedEmployee.getDepartment().getId());
+                    addEvent.setCompanyId(savedEmployee.getCompanyId());
+                    addEvent.setMemberIds(List.of(savedEmployee.getId())); 
+                    employeeProducer.sendDepartmentEvent(addEvent);
+                } catch (Exception e) {
+                    log.error("⚠️ Lỗi gửi event sang Chat: {}", e.getMessage());
+                }
             }
-        }
-            // 5. Send Event
+            
+            // 6. Send Event to Core
             try {
                 String passwordToSend = (password != null && !password.isEmpty()) ? password : "123456";
                 String deptName = (savedEmployee.getDepartment() != null) ? savedEmployee.getDepartment().getName() : "N/A";
 
                 EmployeeSyncEvent event = new EmployeeSyncEvent(
-                    // null,
                     savedEmployee.getId(),
                     savedEmployee.getEmail(), savedEmployee.getFullName(),
                     savedEmployee.getPhone(), savedEmployee.getDateOfBirth(),
                     savedEmployee.getCompanyId(), savedEmployee.getRole().name(),
                     savedEmployee.getStatus().name(), passwordToSend, deptName,
                     savedEmployee.getDepartment() != null ? savedEmployee.getDepartment().getId() : null 
-                    //task
                 );
                 employeeProducer.sendEmployeeCreatedEvent(event);
-                log.info("--> Đã gửi yêu cầu tạo User sang Core (Email: {}).", savedEmployee.getEmail());
             } catch (Exception e) {
                 log.error("Lỗi gửi MQ sang Core: {}", e.getMessage());
             }

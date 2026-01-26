@@ -338,8 +338,15 @@ class _LoginScreenState extends State<LoginScreen> {
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton(
-                      onPressed: () =>
-                          Navigator.pushNamed(context, '/forgot_password'),
+                      onPressed: () {
+                        // [SỬA] Gửi email hiện tại qua màn hình ForgotPassword
+                        Navigator.pushNamed(
+                          context,
+                          '/forgot_password',
+                          arguments: _emailController.text
+                              .trim(), // Gửi email dưới dạng String
+                        );
+                      },
                       child: const Text(
                         'Forgot Password',
                         style: TextStyle(
@@ -523,7 +530,9 @@ class _LoginScreenState extends State<LoginScreen> {
         SecurityService().startListening(userId, companyId);
 
         // [CŨ] KẾT NỐI SOCKET HR (Cổng 8081)
-        WebSocketService().connect('ws://10.0.2.2:8000/ws-hr');
+        WebSocketService().connect(
+          'wss://productional-wendell-nonexotic.ngrok-free.dev/ws-hr',
+        );
 
         if (mounted) {
           Navigator.pushAndRemoveUntil(

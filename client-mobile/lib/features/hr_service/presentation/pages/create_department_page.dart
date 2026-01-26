@@ -184,30 +184,42 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
                       // [SỬA 3] Thêm khoảng cách chuẩn 20px từ đỉnh an toàn
                       const SizedBox(height: 20),
 
-                      // --- HEADER ---
                       Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          IconButton(
-                            icon: Icon(
-                              PhosphorIcons.caretLeft(PhosphorIconsStyle.bold),
-                              color: AppColors.primary,
-                              size: 24,
-                            ),
-                            onPressed: () => Navigator.pop(context),
-                          ),
-                          const Expanded(
-                            child: Center(
-                              child: Text(
-                                'CREATE DEPARTMENT',
-                                style: TextStyle(
-                                  color: AppColors.primary,
-                                  fontSize: 24,
-                                  fontFamily: 'Inter',
-                                  fontWeight: FontWeight.w700,
+                          // [ĐÃ SỬA] Đổi SizedBox thành Container để dùng được alignment
+                          Container(
+                            width: 40,
+                            alignment: Alignment.centerLeft,
+                            child: IconButton(
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              icon: Icon(
+                                PhosphorIcons.caretLeft(
+                                  PhosphorIconsStyle.bold,
                                 ),
+                                color: AppColors.primary,
+                                size: 24,
+                              ),
+                              onPressed: () => Navigator.pop(context),
+                            ),
+                          ),
+
+                          // Tiêu đề
+                          const Expanded(
+                            child: Text(
+                              'CREATE DEPARTMENT',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: AppColors.primary,
+                                fontSize: 24,
+                                fontFamily: 'Inter',
+                                fontWeight: FontWeight.w700,
                               ),
                             ),
                           ),
+
+                          // Placeholder để cân đối layout
                           const SizedBox(width: 40),
                         ],
                       ),
@@ -588,7 +600,9 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
   }) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.center, // Canh giữa theo chiều dọc
       children: [
+        // Label bên trái
         Text(
           label,
           style: const TextStyle(
@@ -597,12 +611,14 @@ class _CreateDepartmentPageState extends State<CreateDepartmentPage> {
             fontWeight: FontWeight.w600,
           ),
         ),
-        SizedBox(
-          width: 180,
+
+        const SizedBox(width: 16), // Khoảng cách an toàn giữa Label và Input
+        // Input bên phải (Tự động co giãn)
+        Expanded(
           child: TextField(
             controller: controller,
             enabled: enabled,
-            textAlign: TextAlign.end,
+            textAlign: TextAlign.end, // Căn lề phải cho text nhập vào
             style: TextStyle(
               color: enabled ? Colors.black : const Color(0xFFBDC6DE),
               fontSize: 16,

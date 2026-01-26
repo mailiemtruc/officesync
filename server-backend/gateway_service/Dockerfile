@@ -8,4 +8,11 @@ RUN mvn clean package -DskipTests
 FROM eclipse-temurin:21-alpine
 WORKDIR /app
 COPY --from=build /app/target/*.jar app.jar
+
+RUN apk add --no-cache tzdata
+ENV TZ=Asia/Ho_Chi_Minh
+
+# [NÊN THÊM] Để rõ ràng là Gateway chạy port 8080
+EXPOSE 8080 
+
 ENTRYPOINT ["java", "-jar", "app.jar"]

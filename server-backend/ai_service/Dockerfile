@@ -1,26 +1,27 @@
-# Sử dụng Python 3.10 slim (nhẹ và ổn định)
+# Giữ nguyên 3.10 để đảm bảo tương thích thư viện AI tốt nhất
 FROM python:3.10-slim
 
-# Thiết lập thư mục làm việc trong container
 WORKDIR /app
 
-# Đặt biến môi trường để Python không tạo file .pyc và log in ngay lập tức
+# Tối ưu cache python
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+# [QUAN TRỌNG] Thiết lập giờ Việt Nam
+ENV TZ=Asia/Ho_Chi_Minh
 
-# Copy file requirements trước để tận dụng cache của Docker
+# Cài đặt tzdata (vì image slim không có sẵn)
+RUN apt-get update && \
+    apt-get install -y tzdata && \
+    rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt .
 
-# Cài đặt các thư viện
+# Upgrade pip để tránh lỗi khi cài các thư viện AI mới
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# Copy toàn bộ code vào container (bao gồm cả folder services)
 COPY . .
 
-# Mở port 5000 (khớp với code main.py của bạn)
 EXPOSE 5000
 
-# Lệnh chạy ứng dụng
-# Lưu ý: host 0.0.0.0 là bắt buộc để truy cập được từ bên ngoài container
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "5000"]

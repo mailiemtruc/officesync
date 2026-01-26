@@ -1,3 +1,5 @@
+// lib/features/task_service/presentation/pages/staff_page.dart
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
@@ -7,6 +9,8 @@ import '../../widgets/task_detail_dialog.dart';
 import '../../data/task_session.dart';
 import '../../data/models/task_user.dart';
 import '../../data/network/task_stomp_service.dart';
+// [MỚI] Import file Skeleton
+import '../../widgets/task_card_skeleton.dart';
 
 class StaffPage extends StatefulWidget {
   const StaffPage({super.key});
@@ -24,12 +28,11 @@ class _StaffPageState extends State<StaffPage> {
   String _searchQuery = "";
 
   // Lọc
-  TaskStatus? selectedStatus; // Null tương đương với 'All'
+  TaskStatus? selectedStatus;
   bool showOverdueOnly = false;
 
   late TaskStompService _taskStompService;
 
-  // Màu sắc chuẩn theo my_requests_page
   final Color primaryColor = const Color(0xFF2260FF);
   final Color backgroundColor = const Color(0xFFF9F9F9);
   final Color textSecondary = const Color(0xFF9CA3AF);
@@ -71,6 +74,7 @@ class _StaffPageState extends State<StaffPage> {
     } catch (e) {
       debugPrint("Staff Init Error: $e");
     } finally {
+      // Delay nhẹ để hiệu ứng skeleton hiện rõ hơn nếu mạng quá nhanh (tùy chọn)
       if (mounted) setState(() => loading = false);
     }
   }
@@ -93,19 +97,13 @@ class _StaffPageState extends State<StaffPage> {
 
   List<TaskModel> _getFilteredTasks() {
     return tasks.where((t) {
-      // 1. Lọc theo Status
       bool matchStatus = selectedStatus == null || t.status == selectedStatus;
-
-      // 2. Lọc theo Overdue
       bool matchOverdue = true;
       if (showOverdueOnly) {
         final now = DateTime.now();
         matchOverdue = t.status != TaskStatus.DONE && t.dueDate.isBefore(now);
       }
-
-      // 3. Lọc theo Search Query (Title)
       bool matchSearch = t.title.toLowerCase().contains(_searchQuery);
-
       return matchStatus && matchOverdue && matchSearch;
     }).toList();
   }
@@ -132,8 +130,9 @@ class _StaffPageState extends State<StaffPage> {
                 _buildSectionLabel("LIST TASKS"),
                 const SizedBox(height: 12),
                 Expanded(
+                  // Logic hiển thị: Loading -> Skeleton, xong -> List thật
                   child: loading
-                      ? _buildLoadingState()
+                      ? _buildLoadingState() // [SỬA] Gọi hàm hiển thị Skeleton
                       : RefreshIndicator(
                           onRefresh: fetchTasks,
                           color: primaryColor,
@@ -157,6 +156,9 @@ class _StaffPageState extends State<StaffPage> {
       ),
     );
   }
+
+  // ... (Giữ nguyên _buildHeader, _buildFilterRow, _buildStatusTabs, _buildSectionLabel, _buildTaskCard, _buildStatusBadge, _showTaskDetail) ...
+  // Tôi ẩn bớt để code gọn, bạn giữ nguyên các hàm đó nhé.
 
   Widget _buildHeader() {
     return Padding(
@@ -191,7 +193,6 @@ class _StaffPageState extends State<StaffPage> {
     );
   }
 
-  // Row lọc Overdue (Thiết kế giống nút Filter của My Requests)
   Widget _buildFilterRow() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -225,7 +226,6 @@ class _StaffPageState extends State<StaffPage> {
                   ),
                   border: InputBorder.none,
                   contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                  // Nút xóa nhanh text
                   suffixIcon: _searchQuery.isNotEmpty
                       ? IconButton(
                           icon: const Icon(Icons.clear, size: 18),
@@ -489,8 +489,13 @@ class _StaffPageState extends State<StaffPage> {
     );
   }
 
+  // --- [SỬA] Thay thế CircularProgressIndicator bằng Skeleton List ---
   Widget _buildLoadingState() {
-    return const Center(child: CircularProgressIndicator());
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+      itemCount: 6, // Hiển thị 6 cái skeleton giả
+      itemBuilder: (context, index) => const TaskCardSkeleton(),
+    );
   }
 
   Widget _buildEmptyState() {

@@ -12,7 +12,8 @@ class SocketService {
 
   // ⚠️ Đổi IP theo máy của bạn (Máy thật dùng IP LAN, Máy ảo dùng 10.0.2.2)
   // Lưu ý: WebSocket dùng giao thức ws://
-  final String _socketUrl = "ws://10.0.2.2:8000/ws-comm";
+  final String _socketUrl =
+      "wss://productional-wendell-nonexotic.ngrok-free.dev/ws-comm";
 
   void connect({required Function() onConnected}) {
     if (_client != null && _client!.connected) return;

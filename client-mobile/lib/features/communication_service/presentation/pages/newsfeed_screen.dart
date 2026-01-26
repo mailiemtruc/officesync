@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:officesync/features/communication_service/widgets/newsfeed_skeleton.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../data/newsfeed_api.dart';
 import '../../data/models/post_model.dart';
@@ -329,7 +330,7 @@ class _NewsfeedScreenState extends State<NewsfeedScreen> {
           // 🔴 THAY ĐỔI 3: Dùng ListView trực tiếp, bỏ FutureBuilder
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? const NewsfeedSkeleton()
                 : _posts.isEmpty
                 ? const Center(child: Text("No news yet."))
                 : RefreshIndicator(
