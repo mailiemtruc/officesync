@@ -276,6 +276,8 @@ Quy trình chuẩn để khởi chạy hệ thống (Backend & Mobile):
 
 - Bước 4 - Cài đặt ứng dụng: Build ứng dụng lên thiết bị di động thực tế và cấu hình kết nối tới Gateway (Port 8000).
 
+(Lưu ý: Nếu không sử dụng ngrok, hãy cập nhật lại địa chỉ (host/URL) về localhost hoặc IP của máy ảo tương ứng.)
+
 **Hướng Dẫn Sử Dụng**
 
 **1. Quản trị & Truy cập**
